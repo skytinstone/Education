@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap" />
 <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
 <script src="dots.js"></script>
+<link rel="stylesheet" href="app.css" />
 <style>
   :root {
     --bg: #f7f8fb;
@@ -102,6 +103,7 @@
     box-shadow: inset 0 1px 0 #fff, inset 0 0 0 1px rgba(255,255,255,.6), 0 1px 2px rgba(15,23,42,.04), 0 4px 14px rgba(15,23,42,.05);
   }
   .nav-item [data-lucide] { color: var(--ink-2); }
+  .nav-item kbd { margin-left: auto; }
   .nav-item .label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .badge {
     font-size: 11px; font-weight: 700; color: #fff; background: var(--warn);
@@ -327,23 +329,23 @@
       <span class="brand-name">Eureka</span>
     </div>
 
-    <button class="nav-item active" data-nav><i data-lucide="square-pen"></i><span class="label">새 학습</span></button>
-    <button class="nav-item" data-nav><i data-lucide="search"></i><span class="label">검색</span></button>
-    <button class="nav-item" data-nav><i data-lucide="circle-x"></i><span class="label">오답노트</span><span class="badge">3</span></button>
-    <button class="nav-item" data-nav><i data-lucide="library"></i><span class="label">라이브러리</span></button>
+    <a class="nav-item" href="#/" data-key="home"><i data-lucide="square-pen"></i><span class="label">새 학습</span></a>
+    <button class="nav-item" id="nav-search"><i data-lucide="search"></i><span class="label">검색</span><kbd>⌘K</kbd></button>
+    <a class="nav-item" href="#/notes" data-key="notes"><i data-lucide="circle-x"></i><span class="label">오답노트</span><span class="badge" id="notes-badge" hidden></span></a>
+    <a class="nav-item" href="#/library" data-key="library"><i data-lucide="library"></i><span class="label">라이브러리</span></a>
 
     <div class="nav-scroll">
-      <div class="section-title">프로젝트 <button title="새 프로젝트"><i data-lucide="plus"></i></button></div>
+      <div class="section-title">프로젝트 <button id="new-project" title="새 프로젝트" aria-label="새 프로젝트"><i data-lucide="plus"></i></button></div>
       <div id="projects"></div>
 
       <div class="section-title">최근</div>
       <div id="chats"></div>
     </div>
 
-    <div class="profile soft">
-      <div class="avatar">민</div>
-      <div class="who">민석<small>오늘 12 / 20문제 · 🔥 7일 연속</small></div>
-      <button class="icon-btn" title="설정"><i data-lucide="settings"></i></button>
+    <div class="profile soft" id="profile" role="button" tabindex="0" aria-label="프로필 메뉴">
+      <div class="avatar" id="profile-avatar"></div>
+      <div class="who"><span id="profile-name"></span><small id="profile-sub"></small></div>
+      <span class="icon-btn" aria-hidden="true"><i data-lucide="settings"></i></span>
     </div>
   </aside>
 
@@ -362,13 +364,14 @@
 
     <div class="content">
       <div class="wrap">
+        <div id="home">
         <section class="hero">
           <h1>오늘은 무엇을 공부할까요?</h1>
           <p>문제 생성부터 오답 분석, 개념 정리까지 한 번에</p>
 
           <form class="composer glass" id="composer">
             <button type="button" class="icon-btn" title="자료 첨부"><i data-lucide="plus"></i></button>
-            <span class="chip" style="--c: var(--math)" title="프로젝트"><i data-lucide="folder"></i><span class="chip-text">2027 수능 미적분</span></span>
+            <button type="button" class="chip" id="project-chip" title="어느 프로젝트에서 공부할지 고르기"></button>
             <input id="prompt" placeholder="미적분 치환적분 3점짜리 5문제 내줘" autocomplete="off" />
             <button type="button" class="icon-btn" title="음성 입력"><i data-lucide="mic"></i></button>
             <button type="submit" class="send" id="send" disabled><i data-lucide="arrow-up"></i></button>
@@ -380,13 +383,13 @@
         <section class="banner glass">
           <canvas id="banner-dots" aria-hidden="true"></canvas>
           <div>
-            <div class="eyebrow">이번 주 약점 · 2027 수능 미적분</div>
-            <h2>정적분으로 정의된 함수</h2>
-            <p>최근 8문제 중 5문제 오답 · 주로 "미분하기 전 상수항 처리"에서 실수했어요</p>
+            <div class="eyebrow" id="banner-eyebrow">이번 주 약점</div>
+            <h2 id="banner-title">아직 분석할 기록이 없어요</h2>
+            <p id="banner-desc">문제를 풀면 가장 약한 개념을 알려드려요</p>
           </div>
           <div class="cta">
-            <button class="btn-primary">복습 시작</button>
-            <button class="btn-ghost">개념 보기</button>
+            <button class="btn-primary" id="banner-review">복습 시작</button>
+            <button class="btn-ghost" id="banner-concept">개념 보기</button>
           </div>
         </section>
 
@@ -399,182 +402,18 @@
 
         <div class="section-head">
           <h2>과목별 학습 현황</h2>
-          <a href="#">전체 보기</a>
+          <a href="#/notes">오답노트 보기</a>
         </div>
         <section class="subjects" id="subjects"></section>
+        </div>
+        <div id="view" hidden></div>
       </div>
     </div>
   </main>
 </div>
 
-<script>
-  // ---------- 목업 데이터 (추후 API 연동) ----------
-  const SUBJECT = { math: "var(--math)", physics: "var(--physics)", chemistry: "var(--chemistry)", biology: "var(--biology)", earth: "var(--earth)" };
-  const projects = [
-    { name: "2027 수능 미적분", dday: 24, subject: "math" },
-    { name: "화학I 중간고사", dday: 12, subject: "chemistry" },
-    { name: "물리 역학 기초 다지기", dday: null, subject: "physics" },
-  ];
-  const chats = [
-    "치환적분 변형 문제 5개",
-    "중화반응 왜 틀렸는지",
-    "로그 성질 개념 정리",
-    "6월 모의고사 약점 분석",
-    "H-R도 암기 카드 만들기",
-    "등가속도 운동 그래프 문제",
-  ];
-  const actions = [
-    ["pencil-line", "문제 풀기", "미적분 3점짜리 5문제 내줘"],
-    ["circle-x", "오답노트", "최근 틀린 문제로 변형 문제 만들어줘"],
-    ["chart-no-axes-column", "약점 분석", "이번 주 내 약점 분석해줘"],
-    ["book-open", "개념 정리", "정적분으로 정의된 함수 개념 정리해줘"],
-    ["layers", "암기 카드", "화학I 주기적 성질 암기 카드 만들어줘"],
-    ["scroll-text", "기출 스타일", "6월 모평 스타일로 4점짜리 3문제"],
-    ["timer", "모의고사", "미적분 30문항 모의고사 시작"],
-    ["ellipsis", "더보기", ""],
-  ];
-  const recent = [
-    { subject: "math", kind: "2027 수능 미적분", title: "치환적분 변형 문제 5개", meta: "4 / 5 정답 · 2시간 전", pct: 80 },
-    { subject: "chemistry", kind: "화학I 중간고사", title: "중화반응 오답 분석", meta: "원인: 몰 농도 계산 · 어제", pct: 45 },
-    { subject: "math", kind: "대화", title: "로그 성질 개념 정리", meta: "암기 카드 12장 생성 · 2일 전", pct: 100 },
-    { subject: "earth", kind: "대화", title: "H-R도 암기 카드", meta: "20장 중 14장 외움 · 3일 전", pct: 70 },
-  ];
-  const recommend = [
-    { subject: "math", kind: "약점 보완", title: "정적분으로 정의된 함수 집중 10문제", meta: "예상 20분 · 난이도 ★★★", pct: 0 },
-    { subject: "chemistry", kind: "복습 타이밍", title: "3일 전 틀린 문제 다시 풀기", meta: "잊기 전에 복습하면 기억이 오래가요", pct: 0 },
-    { subject: "physics", kind: "개념", title: "운동량 보존 핵심 정리", meta: "예상 8분", pct: 0 },
-  ];
-
-  const $ = (s) => document.querySelector(s);
-
-  $("#projects").innerHTML = projects.map((p) => `
-    <button class="nav-item" data-nav>
-      <i data-lucide="folder" style="color:${SUBJECT[p.subject]}"></i><span class="label">${p.name}</span>
-      ${p.dday != null ? `<span class="dday ${p.dday <= 14 ? "soon" : ""}">D-${p.dday}</span>` : ""}
-    </button>`).join("");
-
-  $("#chats").innerHTML = chats.map((c) => `
-    <button class="nav-item chat" data-nav><span class="label">${c}</span></button>`).join("");
-
-  $("#actions").innerHTML = actions.map(([icon, label, prompt]) => `
-    <button class="action" data-prompt="${prompt}">
-      <span class="tile"><i data-lucide="${icon}"></i></span>${label}
-    </button>`).join("");
-
-  const card = (c) => `
-    <button class="card" style="--c:${SUBJECT[c.subject]}">
-      <span class="kind"><span class="sw"></span>${c.kind}</span>
-      <h3>${c.title}</h3>
-      <div class="meta">${c.meta}</div>
-      ${c.pct ? `<div class="bar"><i style="width:${c.pct}%"></i></div>` : ""}
-    </button>`;
-  $("#cards-recent").innerHTML = recent.map(card).join("");
-  $("#cards-recommend").innerHTML = recommend.map(card).join("");
-
-  const subjects = [
-    { subject: "math", name: "수학 · 미적분", pct: 64, weak: "정적분으로 정의된 함수" },
-    { subject: "physics", name: "물리학I", pct: 71, weak: "운동량 보존" },
-    { subject: "chemistry", name: "화학I", pct: 49, weak: "중화 반응 양적 관계" },
-    { subject: "biology", name: "생명과학I", pct: 82, weak: "가계도 분석" },
-    { subject: "earth", name: "지구과학I", pct: 58, weak: "H-R도" },
-  ];
-  $("#subjects").innerHTML = subjects.map((s) => `
-    <button class="card subject" style="--c:${SUBJECT[s.subject]}">
-      <span class="kind"><span class="sw"></span>${s.name}</span>
-      <div class="pct">${s.pct}<small>% 정답률</small></div>
-      <div class="bar"><i style="width:${s.pct}%"></i></div>
-      <div class="weak">약점 <b>${s.weak}</b></div>
-    </button>`).join("");
-
-  lucide.createIcons();
-
-  const composerEl = $("#composer");
-  const contentEl = $(".content");
-  contentEl.addEventListener("scroll", () => $(".topbar").classList.toggle("scrolled", contentEl.scrollTop > 4), { passive: true });
-
-  // ---------- 스크롤 등장 (위로 촤라락) ----------
-  // 그룹 안의 요소는 순서대로 시간차를 두고 떠오른다.
-  const revealGroups = [
-    [".hero h1", ".hero p", ".hero .composer"],
-    [".action"],
-    [".banner"],
-    [".tabs"],
-    ["#cards-recent .card"],
-    ["#cards-recommend .card"],
-    [".section-head"],
-    [".subject"],
-  ];
-  revealGroups.forEach((group) => {
-    const els = group.flatMap((s) => [...document.querySelectorAll(s)]);
-    els.forEach((el, i) => { el.classList.add("reveal"); el.style.setProperty("--d", `${i * 70}ms`); });
-  });
-  const revealer = new IntersectionObserver((entries) => {
-    for (const e of entries) {
-      if (!e.isIntersecting) continue;
-      e.target.classList.add("in");
-      revealer.unobserve(e.target);
-    }
-  }, { root: contentEl, threshold: 0.12, rootMargin: "0px 0px -6% 0px" });
-  document.querySelectorAll(".reveal").forEach((el) => revealer.observe(el));
-  const textEls = [".hero h1", ".hero p", ...[...document.querySelectorAll(".action")].map((_, i) => `.action:nth-child(${i + 1})`)]
-    .map((s) => document.querySelector(s));
-  dotField($("#dots"), {
-    gap: 18, baseR: 1, peakR: 2.4, baseAlpha: 0.1, peakAlpha: 0.55, light: 60,
-    wavelength: 90, speed: 1.1, hueSpeed: 25, reach: 0.62, introSec: 1.3,
-    focus: () => {
-      const r = composerEl.getBoundingClientRect();
-      return [r.left + r.width / 2, r.top + r.height / 2];
-    },
-    clear: () => textEls.map((el) => el.getBoundingClientRect()),
-    scrollY: () => contentEl.scrollTop,
-  });
-  dotField($("#banner-dots"), {
-    gap: 12, baseR: 0.8, peakR: 2, baseAlpha: 0.12, peakAlpha: 0.75, light: 58,
-    wavelength: 60, speed: 1.4, hueSpeed: 40, introSec: 1.8, edges: true,
-    focus: (W, H) => [W / 2, H / 2],
-  });
-
-  // ---------- 상호작용 ----------
-  document.querySelectorAll("[data-nav]").forEach((el) =>
-    el.addEventListener("click", () => {
-      document.querySelectorAll("[data-nav]").forEach((n) => n.classList.remove("active"));
-      el.classList.add("active");
-      $("#app").classList.remove("mobile-open");
-    })
-  );
-
-  $("#toggle").addEventListener("click", () => {
-    const app = $("#app");
-    if (matchMedia("(max-width: 760px)").matches) app.classList.toggle("mobile-open");
-    else app.classList.toggle("collapsed");
-  });
-
-  const prompt = $("#prompt"), send = $("#send");
-  prompt.addEventListener("input", () => (send.disabled = !prompt.value.trim()));
-  document.querySelectorAll("[data-prompt]").forEach((el) =>
-    el.addEventListener("click", () => {
-      if (!el.dataset.prompt) return;
-      prompt.value = el.dataset.prompt;
-      send.disabled = false;
-      prompt.focus();
-    })
-  );
-  composerEl.addEventListener("submit", (e) => {
-    e.preventDefault();
-    alert(`(프로토타입) 요청: ${prompt.value}`);
-  });
-
-  document.querySelectorAll("[data-tab]").forEach((t) =>
-    t.addEventListener("click", () => {
-      document.querySelectorAll("[data-tab]").forEach((x) => x.classList.toggle("active", x === t));
-      $("#cards-recent").classList.toggle("hidden", t.dataset.tab !== "recent");
-      $("#cards-recommend").classList.toggle("hidden", t.dataset.tab !== "recommend");
-    })
-  );
-
-  document.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); document.querySelector(".search input")?.focus(); }
-  });
-</script>
+<script src="concepts.js"></script>
+<script src="store.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

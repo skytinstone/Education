@@ -172,6 +172,23 @@
   .switch { margin-top: 16px; font-size: 13px; color: var(--ink-2); }
   .switch button { font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 
+  /* 안내·오류 배너 */
+  .notice { margin-top: 14px; padding: 10px 12px; border-radius: 10px; font-size: 13px; line-height: 1.5;
+    color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, #fff); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 25%, transparent); }
+  .notice.info { color: var(--ink-2); background: rgba(255,255,255,.8); box-shadow: inset 0 0 0 1px var(--line); }
+  .social[aria-disabled="true"] { opacity: .55; }
+  .social.loading { pointer-events: none; opacity: .7; }
+
+  /* 간편 로그인 첫 가입: 소셜 버튼·이메일 영역을 숨기고 약관 동의만 */
+  .card[data-mode="social"] .socials, .card[data-mode="social"] .or, .card[data-mode="social"] #terms { display: none; }
+  .who { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-top: 18px; border-radius: 14px; background: rgba(255,255,255,.7); box-shadow: inset 0 0 0 1px var(--line); }
+  .who b { display: block; font-size: 14.5px; }
+  .who small { font-size: 12.5px; color: var(--ink-3); }
+  .who-badge { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; background: #fff; box-shadow: inset 0 0 0 1px var(--line); }
+  .who-badge svg { width: 18px; height: 18px; }
+  .who-badge.kakao { background: #fee500; box-shadow: none; }
+  #social-form .field, #social-form .agree { margin-top: 14px; }
+
   /* 등장: 아래에서 위로 촤라락 */
   .reveal {
     opacity: 0; transform: translateY(28px);
@@ -220,9 +237,10 @@
     <div class="card glass reveal" id="card" data-mode="login">
       <h2 id="title">환영합니다</h2>
       <p class="sub" id="subtitle">로그인을 통해, Eureka를 경험해보세요</p>
+      <p class="notice" id="card-notice" role="alert" hidden></p>
 
       <div class="socials">
-        <button class="social google" data-go>
+        <button class="social google" data-provider="google">
           <svg viewBox="0 0 48 48" aria-hidden="true">
             <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/>
             <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
@@ -231,7 +249,7 @@
           </svg>
           <span data-label="Google">Google로 로그인</span>
         </button>
-        <button class="social kakao" data-go>
+        <button class="social kakao" data-provider="kakao">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#000" d="M12 3C6.48 3 2 6.58 2 11c0 2.83 1.86 5.32 4.66 6.73l-.95 3.48c-.08.3.26.54.52.37l4.13-2.73c.53.06 1.08.1 1.64.1 5.52 0 10-3.58 10-8s-4.48-8-10-8z"/></svg>
           <span data-label="카카오">카카오로 로그인</span>
         </button>
@@ -296,7 +314,32 @@
           </ul>
         </div>
 
+        <p class="hint bad" id="signup-error"></p>
         <button class="primary" type="submit" id="signup-submit" disabled>가입하기 <i data-lucide="arrow-right"></i></button>
+      </form>
+
+      <!-- 간편 로그인으로 처음 온 사람: 약관 동의 한 번 -->
+      <form class="pane" id="social-form" novalidate>
+        <div class="who">
+          <span class="who-badge" id="sf-badge"></span>
+          <div><b id="sf-name"></b><small id="sf-email"></small></div>
+        </div>
+        <div class="field" id="sf-email-field" hidden>
+          <label for="sf-email-input">이메일</label>
+          <div class="control"><input id="sf-email-input" type="email" placeholder="name@example.com" autocomplete="email" /></div>
+          <p class="hint">카카오에서 이메일을 받지 못했어요. 로그인 안내에 쓸 이메일을 입력해 주세요</p>
+        </div>
+        <div class="agree">
+          <label class="check all"><input type="checkbox" id="sf-agree-all" /> 전체 동의</label>
+          <ul>
+            <li><label class="check"><input type="checkbox" data-sagree="over_14" required /> <span><em>[필수]</em> 만 14세 이상입니다</span></label></li>
+            <li><label class="check"><input type="checkbox" data-sagree="terms" required /> <span><em>[필수]</em> 이용약관 동의</span></label><a class="view" href="#">보기</a></li>
+            <li><label class="check"><input type="checkbox" data-sagree="privacy" required /> <span><em>[필수]</em> 개인정보 수집·이용 동의</span></label><a class="view" href="#">보기</a></li>
+            <li><label class="check"><input type="checkbox" data-sagree="marketing" /> <span><em class="opt">[선택]</em> 학습 알림·소식 받기</span></label></li>
+          </ul>
+        </div>
+        <p class="hint bad" id="sf-error"></p>
+        <button class="primary" type="submit" id="sf-submit" disabled>가입하고 시작하기 <i data-lucide="arrow-right"></i></button>
       </form>
 
       <p class="terms" id="terms">간편 로그인 시 Eureka의 <a href="#">이용약관</a> 및 <a href="#">개인정보처리방침</a>에 동의하게 됩니다.</p>
@@ -331,7 +374,45 @@
     clear: () => textEls.filter((el) => el.offsetParent).map((el) => el.getBoundingClientRect()),
   });
 
-  // ---------- 로그인 ↔ 회원가입 전환 ----------
+  // ---------- API 연결 ----------
+  // API 서버(http://localhost:8000/app/...)로 열면 실제 로그인, 파일로 열면(file://) 프로토타입처럼 바로 메인으로
+  const API = location.protocol.startsWith("http") ? "/api" : null;
+  const PROVIDER_NAME = { google: "Google", kakao: "카카오" };
+  const ERRORS = {
+    not_configured: (p) => `${PROVIDER_NAME[p] ?? "간편"} 로그인은 아직 준비 중이에요. 이메일로 로그인해 주세요`,
+    cancelled: () => "로그인을 취소했어요",
+    state: () => "보안 확인에 실패했어요. 다시 시도해 주세요",
+    provider: (p) => `${PROVIDER_NAME[p] ?? ""}와 연결하지 못했어요. 잠시 후 다시 시도해 주세요`,
+    email_taken: () => "이 이메일로 이미 가입된 계정이 있어요. 처음 가입한 방법(이메일)으로 로그인해 주세요",
+  };
+
+  async function api(path, body) {
+    const res = await fetch(API + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const d = data.detail;
+      throw new Error(typeof d === "string" ? d : Array.isArray(d) ? (d[0]?.msg ?? "").replace(/^Value error, /, "") || "입력을 확인해 주세요" : "잠시 후 다시 시도해 주세요");
+    }
+    return data;
+  }
+
+  function finishLogin(data) {
+    try {
+      localStorage.setItem("eureka.token", data.access_token);
+      localStorage.setItem("eureka.user", JSON.stringify(data.user));
+    } catch { /* 저장 불가 환경 — 이번 방문 동안만 로그인 */ }
+    location.href = "index.html";
+  }
+  const go = () => (location.href = "index.html");
+
+  function notice(msg, kind = "error") {
+    const n = $("#card-notice");
+    n.textContent = msg;
+    n.className = `notice ${kind === "info" ? "info" : ""}`;
+    n.hidden = !msg;
+  }
+
+  // ---------- 로그인 ↔ 회원가입 ↔ 간편 가입 전환 ----------
   const COPY = {
     login: {
       title: "환영합니다", sub: "로그인을 통해, Eureka를 경험해보세요",
@@ -343,7 +424,13 @@
       social: "시작하기", or: "또는 이메일로 가입",
       switchText: "이미 계정이 있으신가요?", switchBtn: "로그인",
     },
+    social: {
+      title: "거의 다 됐어요", sub: "처음 한 번만 약관에 동의하면 가입이 끝나요",
+      social: "로그인", or: "",
+      switchText: "다른 방법으로 할래요", switchBtn: "로그인으로 돌아가기",
+    },
   };
+  const PANES = { login: "#login-form", signup: "#signup-form", social: "#social-form" };
 
   function setMode(mode) {
     const c = COPY[mode];
@@ -352,15 +439,13 @@
     $("#subtitle").textContent = c.sub;
     $("#or").textContent = c.or;
     $$("[data-label]").forEach((s) => (s.textContent = `${s.dataset.label}로 ${c.social}`));
-    $("#login-form").classList.toggle("active", mode === "login");
-    $("#signup-form").classList.toggle("active", mode === "signup");
+    Object.entries(PANES).forEach(([m, sel]) => $(sel).classList.toggle("active", m === mode));
     $("#terms").style.display = mode === "login" ? "" : "none";
     $("#switch span").textContent = c.switchText;
     $("[data-switch]").textContent = c.switchBtn;
     history.replaceState(null, "", mode === "signup" ? "#signup" : location.pathname + location.search);
   }
-  $("[data-switch]").addEventListener("click", () => setMode(card.dataset.mode === "login" ? "signup" : "login"));
-  if (location.hash === "#signup") setMode("signup");
+  $("[data-switch]").addEventListener("click", () => { notice(""); setMode(card.dataset.mode === "login" ? "signup" : "login"); });
 
   // ---------- 비밀번호 보기 ----------
   $$(".peek").forEach((btn) => btn.addEventListener("click", () => {
@@ -372,19 +457,42 @@
     lucide.createIcons();
   }));
 
-  // ---------- 프로토타입: 로그인/가입하면 메인 화면으로 ----------
-  const go = () => (location.href = "index.html");
-  $$("[data-go]").forEach((b) => b.addEventListener("click", go));
+  // ---------- 간편 로그인 버튼 ----------
+  let available = { google: true, kakao: true };
+  if (API) {
+    fetch(`${API}/auth/providers`).then((r) => r.json()).then((p) => {
+      available = p;
+      $$("[data-provider]").forEach((b) => {
+        const off = !p[b.dataset.provider];
+        b.setAttribute("aria-disabled", off);
+        b.title = off ? "준비 중이에요" : "";
+      });
+    }).catch(() => {});
+  }
+  $$("[data-provider]").forEach((b) => b.addEventListener("click", () => {
+    const provider = b.dataset.provider;
+    if (!API) return go();
+    if (!available[provider]) return notice(ERRORS.not_configured(provider));
+    b.classList.add("loading");
+    location.href = `${API}/auth/${provider}/start`;
+  }));
 
   const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
 
-  $("#login-form").addEventListener("submit", (e) => {
+  // ---------- 이메일 로그인 ----------
+  $("#login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const email = $("#login-email"), pw = $("#login-pw");
     email.classList.toggle("invalid", !isEmail(email.value));
     pw.classList.toggle("invalid", !pw.value);
     $("#login-error").textContent = !isEmail(email.value) ? "이메일 형식을 확인해 주세요" : !pw.value ? "비밀번호를 입력해 주세요" : "";
-    if (isEmail(email.value) && pw.value) go();
+    if (!isEmail(email.value) || !pw.value) return;
+    if (!API) return go();
+    try {
+      finishLogin(await api("/auth/login", { email: email.value.trim(), password: pw.value }));
+    } catch (err) {
+      $("#login-error").textContent = err.message;
+    }
   });
 
   // ---------- 회원가입 검증 ----------
@@ -425,7 +533,77 @@
   Object.values(su).forEach((el) => el.addEventListener("input", validateSignup));
   agreeBoxes.forEach((b) => b.addEventListener("change", validateSignup));
   agreeAll.addEventListener("change", () => { agreeBoxes.forEach((b) => (b.checked = agreeAll.checked)); validateSignup(); });
-  $("#signup-form").addEventListener("submit", (e) => { e.preventDefault(); if (!$("#signup-submit").disabled) go(); });
+  $("#signup-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if ($("#signup-submit").disabled) return;
+    if (!API) return go();
+    const [over14, terms, privacy, marketing] = agreeBoxes.map((b) => b.checked);
+    try {
+      finishLogin(await api("/auth/signup", {
+        name: su.name.value.trim(), email: su.email.value.trim(), password: su.pw.value,
+        over_14: over14, agreed_terms: terms && privacy, agreed_marketing: marketing,
+      }));
+    } catch (err) {
+      $("#signup-error").textContent = err.message;
+    }
+  });
+
+  // ---------- 간편 로그인 첫 가입: 약관 동의 ----------
+  const sAgree = $$("[data-sagree]");
+  const sAll = $("#sf-agree-all");
+  const sEmail = $("#sf-email-input");
+  let signupToken = null;
+
+  function validateSocial() {
+    const emailOk = $("#sf-email-field").hidden || isEmail(sEmail.value);
+    sAll.checked = sAgree.every((b) => b.checked);
+    $("#sf-submit").disabled = !(emailOk && sAgree.filter((b) => b.required).every((b) => b.checked));
+  }
+  sAgree.forEach((b) => b.addEventListener("change", validateSocial));
+  sAll.addEventListener("change", () => { sAgree.forEach((b) => (b.checked = sAll.checked)); validateSocial(); });
+  sEmail.addEventListener("input", validateSocial);
+
+  function openSocialSignup(params) {
+    const provider = params.get("provider");
+    signupToken = params.get("social_signup");
+    $("#sf-badge").className = `who-badge ${provider}`;
+    $("#sf-badge").innerHTML = $(`.social.${provider} svg`).outerHTML;
+    $("#sf-name").textContent = params.get("name") || `${PROVIDER_NAME[provider]} 계정`;
+    $("#sf-email").textContent = params.get("email") || `${PROVIDER_NAME[provider]}로 가입`;
+    $("#sf-email-field").hidden = !!params.get("email");
+    setMode("social");
+    validateSocial();
+  }
+
+  $("#social-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if ($("#sf-submit").disabled) return;
+    const v = Object.fromEntries(sAgree.map((b) => [b.dataset.sagree, b.checked]));
+    try {
+      finishLogin(await api("/auth/social/complete", {
+        signup_token: signupToken, email: $("#sf-email-field").hidden ? null : sEmail.value.trim(),
+        over_14: v.over_14, agreed_terms: v.terms && v.privacy, agreed_marketing: v.marketing,
+      }));
+    } catch (err) {
+      $("#sf-error").textContent = err.message;
+    }
+  });
+
+  // ---------- 간편 로그인에서 돌아왔을 때 (# 뒤의 결과 읽기) ----------
+  const back = new URLSearchParams(location.hash.slice(1));
+  if (back.has("login_ticket") || back.has("social_signup") || back.has("error")) {
+    history.replaceState(null, "", location.pathname); // 티켓이 주소창·방문 기록에 남지 않게
+  }
+  if (back.has("login_ticket")) {
+    notice("로그인 중이에요…", "info");
+    api("/auth/social/exchange", { ticket: back.get("login_ticket") }).then(finishLogin).catch((err) => notice(err.message));
+  } else if (back.has("social_signup")) {
+    openSocialSignup(back);
+  } else if (back.has("error")) {
+    notice((ERRORS[back.get("error")] ?? ERRORS.provider)(back.get("provider")));
+  } else if (location.hash === "#signup") {
+    setMode("signup");
+  }
 </script>
 </body>
 </html>

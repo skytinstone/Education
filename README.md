@@ -1,6 +1,6 @@
-# Education (가칭)
+# Eureka
 
-시험 대비 교육용 AI Agent. MVP는 **고등 / 수능 수준의 수학 + 과학(물리학I, 화학I, 생명과학I, 지구과학I)** 을 대상으로 하고, 이후 CPA, 의전원, 대학 전공, 영어, 한국어 등으로 확장한다.
+Horcrux Technologies의 시험 준비 AI 학습 에이전트. MVP는 **고등 / 수능 수준의 수학 + 과학(물리학I, 화학I, 생명과학I, 지구과학I)** 을 대상으로 하고, 이후 CPA, 의전원, 대학 전공, 영어, 한국어 등으로 확장한다.
 
 ## 핵심 기능
 1. **문제 생성**: 과목, 개념, 난이도를 지정하면 문제, 정답, 해설을 만든다
@@ -12,27 +12,94 @@
 
 ## 구조
 ```
-data/concepts/*.yaml      개념 트리 (과목 > 단원 > 개념, 선수 개념 포함)
-src/education/schemas.py  공용 스키마 (Project, Session, Concept, Problem, Attempt, WrongNote, WeaknessReport)
-src/education/concepts.py 개념 트리 로더와 검증
-prototype/index.html      학습자 홈 UI 프로토타입 (Liquid Glass, ChatGPT형 사이드바)
-tests/
+data/concepts/*.yaml        개념 트리 (과목 > 단원 > 개념, 선수 개념 포함)
+data/problems/sample.yaml   샘플 문제 은행 (직접 만들고 검증한 12문제, 초기 시드)
+
+src/education/
+  schemas.py                공용 스키마 (Pydantic)
+  concepts.py               개념 트리 로더와 검증
+  config.py · security.py   설정(.env), 비밀번호 해시(Argon2), 로그인 토큰(JWT)
+  db/models.py              PostgreSQL 테이블 (SQLAlchemy 2.0)
+  api/                      FastAPI — main.py, dto.py(요청·응답), routers/
+  services/learning.py      채점, 오답노트, 약점 통계
+  services/tutor.py         대화 답변 (AI 연결 전 임시: 문제 은행에서 고르기)
+  seed.py                   개념·문제·데모 계정 적재
+migrations/                 Alembic 마이그레이션
+docker-compose.yml          개발용 PostgreSQL 17 (127.0.0.1:5433)
+scripts/export_concepts.py  개념 트리 → prototype/concepts.js
+tests/                      API·마이그레이션 테스트 (테스트 전용 DB 사용)
+
+prototype/                  UI 프로토타입 (빌드 없이 브라우저로 열기) — 아직 localStorage 사용, API 연결 예정
+  login.html · index.html   로그인 / 학습자 앱
+  app.js · app.css · store.js · dots.js · concepts.js(자동 생성)
 ```
 
-## 실행
+## 처음 실행
 ```bash
+cp .env.example .env                 # 비밀번호·JWT 키를 채운다
+docker compose up -d                 # PostgreSQL (eureka, eureka_test DB)
 uv sync
-uv run pytest
+uv run alembic upgrade head          # 테이블 만들기
+uv run python -m education.seed --demo   # 개념·문제 + 데모 계정 (demo@example.com / eureka-demo)
+uv run uvicorn education.api.main:app --reload
 ```
+- API 문서: http://127.0.0.1:8000/docs
+- 프로토타입: http://127.0.0.1:8000/app/login.html
+
+## 개발
+```bash
+uv run pytest                                      # 전체 테스트 (eureka_test DB를 비우고 마이그레이션으로 다시 만듦)
+uv run alembic revision --autogenerate -m "설명"   # 모델을 바꿨을 때 → 생성된 파일을 꼭 검토
+uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 때
+```
+모델을 바꾸고 마이그레이션을 만들지 않으면 `test_models_match_migrations` 가 실패한다.
+
+## API 요약 (`/api`)
+| 영역 | 엔드포인트 |
+|---|---|
+| 인증 | `POST /auth/signup` · `POST /auth/login` · `GET/PATCH /me` |
+| 간편 로그인 | `GET /auth/providers` · `GET /auth/{google\|kakao}/start` → `/callback` · `POST /auth/social/exchange` · `POST /auth/social/complete` |
+| 프로젝트 | `GET/POST /projects` · `GET/PATCH/DELETE /projects/{id}` (GET 은 정답률·약점 요약 포함) |
+| 대화 | `GET/POST /sessions` · `GET/PATCH/DELETE /sessions/{id}` · `POST /sessions/{id}/messages` |
+| 문제·풀이 | `GET /problems` · `GET /problems/{id}` · `POST /attempts` |
+| 오답노트 | `GET /wrong-notes` (과목·이유·안 푼 것만·프로젝트 필터) · `PATCH/DELETE /wrong-notes/{id}` |
+| 라이브러리 | `GET /concepts` · `GET /concepts/{id}` · `GET /saved` · `PUT/DELETE /saved/{problem_id}` · `GET /cards` · `PATCH /cards/{id}` · `POST /cards/reset` |
+| 통계 | `GET /stats` (오늘 푼 문제, 연속 학습일, 과목별 정답률, 약점) |
+
+- 문제의 **정답과 해설은 답을 제출한 뒤에만** 응답에 들어간다
+- 모든 사용자 데이터는 본인 것만 보이고, 남의 데이터는 존재 여부와 상관없이 404
+- '오늘'의 기준 시간대는 `Asia/Seoul` (`TIMEZONE` 으로 변경)
+
+## 간편 로그인 (Google · 카카오)
+1. 아래 콘솔에서 앱을 등록하고 키를 받아 `.env` 에 넣는다 (키는 채팅·코드에 붙여넣지 말 것)
+2. 서버를 다시 켜고 **http://localhost:8000/app/login.html** 로 연다 (`127.0.0.1` 이 아니라 `localhost` — Google 이 IP 주소를 허용하지 않음)
+
+| | Google Cloud Console | Kakao Developers |
+|---|---|---|
+| 등록 | 프로젝트 → OAuth 동의 화면(외부, 범위 `openid` `email` `profile`, 테스트 사용자 추가) → OAuth 클라이언트 ID(웹 애플리케이션) | 애플리케이션 추가 → 카카오 로그인 활성화 → 플랫폼 Web 에 `http://localhost:8000` |
+| Redirect URI | `http://localhost:8000/api/auth/google/callback` | `http://localhost:8000/api/auth/kakao/callback` |
+| `.env` | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `KAKAO_REST_API_KEY`, `KAKAO_CLIENT_SECRET`(보안 메뉴, 선택) |
+| 동의 항목 | — | 닉네임(필수), 카카오계정 이메일(비즈 앱 전환 필요할 수 있음) |
+
+동작 방식
+- 처음 온 사용자는 약관 동의 화면을 한 번 거쳐 가입되고, 다음부터는 버튼 하나로 로그인된다
+- 카카오에서 이메일을 못 받으면 동의 화면에서 이메일을 입력받는다
+- 같은 이메일의 기존 계정에는 **양쪽 모두 인증된 이메일일 때만** 자동 연결한다 (남의 이메일로 미리 가입한 계정 가로채기 방지). 이메일로 가입한 계정은 인증 메일 기능 전까지 자동 연결하지 않고 '이메일로 로그인' 안내를 한다
+- 위조 방지: 로그인 시작 시 state 쿠키를 발급해 콜백에서 확인하고, 로그인 결과는 2분짜리 일회성 티켓으로만 화면에 전달한다
+- 실제 서비스 공개 전: Google 은 앱 게시(그전엔 테스트 사용자 100명), 카카오는 실제 도메인 등록·검수, 둘 다 개인정보처리방침 URL 필요
 
 ## 로드맵
 - [x] Phase 0: 개념 트리, 데이터 스키마
-- [ ] Phase 1: ① 문제 생성 + 검증 에이전트
-- [ ] Phase 2: ② 오답노트 + 풀이 기록 저장
-- [ ] Phase 3: ③ 약점 분석 + 개념 정리 / 암기 카드
+- [x] UI 프로토타입: 로그인, 메인, 메뉴별 화면
+- [x] 백엔드: PostgreSQL + FastAPI, 인증, 풀이·오답노트·통계 API
+- [x] 로그인 화면 API 연결: 이메일 로그인·가입, Google·카카오 간편 로그인 (키 발급 후 바로 사용)
+- [ ] 메인 화면을 API에 연결 (store.js → API 호출)
+- [ ] Phase 1: ① 문제 생성 + 검증 에이전트 (AI 연결)
+- [ ] Phase 3: ③ 개념 정리 / 암기 카드 생성
 - [ ] Phase 4: ④ 기출 RAG + 난이도 조절 생성
-- [ ] Phase 5: 과목 확장, 웹 UI
+- [ ] Phase 5: 과목 확장
 
 ## 메모
 - 개념 트리는 2015 개정 교육과정 기준이다. 2028학년도 수능부터는 2022 개정 교육과정이 적용되므로, 그때 `curriculum` 필드로 버전을 나눠 추가한다.
 - 기출 원문은 저작권 때문에 내부 분석용으로만 쓰고, 학습자에게는 새로 생성한 문제만 보여준다.
+- 샘플 문제 은행은 `data/problems/sample.yaml` 과 `prototype/store.js` 에 함께 있다. 프로토타입을 API에 연결하면 store.js 쪽은 지운다.

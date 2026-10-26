@@ -1,0 +1,25 @@
+# Eureka 개발용 PostgreSQL — 로컬에 이미 있는 PostgreSQL(5432)과 겹치지 않게 5433 을 쓴다.
+#   docker compose up -d
+# 비밀번호는 .env 의 POSTGRES_PASSWORD (git 에 올리지 않음, .env.example 참고)
+services:
+  db:
+    image: postgres:17
+    container_name: eureka-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: eureka
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?.env 에 POSTGRES_PASSWORD 를 설정하세요}
+      POSTGRES_DB: eureka
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - eureka-pgdata:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eureka -d eureka"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  eureka-pgdata:

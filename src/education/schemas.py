@@ -47,6 +47,7 @@ class ProblemType(StrEnum):
 
 
 class ProblemSource(StrEnum):
+    CURATED = "curated"  # 사람이 직접 만들고 검증 (초기 시드)
     GENERATED = "generated"  # 기능 ①
     VARIANT = "variant"  # 기능 ② 오답 변형
     PAST_EXAM = "past_exam"  # 기출 원문 (내부 분석용)
@@ -93,6 +94,7 @@ class ErrorType(StrEnum):
     MISREAD = "misread"  # 조건/문제 오독
     TRAP = "trap"  # 출제자의 함정에 걸림
     TIME_PRESSURE = "time_pressure"  # 시간 부족 / 찍음
+    UNKNOWN = "unknown"  # 아직 분류 전 (학습자가 고르거나 AI 가 분석하기 전)
 
 
 class Project(BaseModel):

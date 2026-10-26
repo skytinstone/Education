@@ -46,6 +46,9 @@ class ConceptTree:
     def __contains__(self, concept_id: str) -> bool:
         return concept_id in self._by_id
 
+    def __iter__(self):
+        return iter(self._by_id.values())
+
     def get(self, concept_id: str) -> Concept:
         return self._by_id[concept_id]
 
