@@ -1,0 +1,59 @@
+# 물리학I 개념 트리 (2015 개정 교육과정 기준) — MVP 시드
+domain: physics
+curriculum: 2015-revised
+subjects:
+  - key: physics1
+    name: 물리학I
+    units:
+      - key: mechanics_energy
+        name: 역학과 에너지
+        concepts:
+          - key: kinematics
+            name: 속도·가속도와 등가속도 운동
+          - key: newton_laws
+            name: 뉴턴 운동 법칙
+            prerequisites: [physics.physics1.mechanics_energy.kinematics]
+          - key: momentum_impulse
+            name: 운동량 보존과 충격량
+            prerequisites: [physics.physics1.mechanics_energy.newton_laws]
+          - key: work_energy
+            name: 일·운동 에너지 정리와 역학적 에너지 보존
+            prerequisites: [physics.physics1.mechanics_energy.newton_laws]
+          - key: thermodynamics
+            name: 열역학 법칙과 열기관
+            prerequisites: [physics.physics1.mechanics_energy.work_energy]
+          - key: special_relativity
+            name: 특수 상대성 이론
+          - key: mass_energy
+            name: 질량-에너지 등가와 핵반응
+            prerequisites: [physics.physics1.mechanics_energy.special_relativity]
+      - key: matter_em
+        name: 물질과 전자기장
+        concepts:
+          - key: coulomb_atom
+            name: 전기력과 원자 구조, 에너지 준위
+          - key: energy_band
+            name: 에너지띠와 반도체 (다이오드)
+            prerequisites: [physics.physics1.matter_em.coulomb_atom]
+          - key: magnetic_field
+            name: 전류에 의한 자기장
+          - key: magnetic_materials
+            name: 물질의 자성
+            prerequisites: [physics.physics1.matter_em.magnetic_field]
+          - key: em_induction
+            name: 전자기 유도
+            prerequisites: [physics.physics1.matter_em.magnetic_field]
+      - key: waves_info
+        name: 파동과 정보 통신
+        concepts:
+          - key: wave_properties
+            name: 파동의 성질과 굴절
+          - key: total_reflection
+            name: 전반사와 광통신
+            prerequisites: [physics.physics1.waves_info.wave_properties]
+          - key: em_waves_interference
+            name: 전자기파와 파동의 간섭
+            prerequisites: [physics.physics1.waves_info.wave_properties]
+          - key: wave_particle_duality
+            name: 빛과 물질의 이중성
+            prerequisites: [physics.physics1.waves_info.em_waves_interference]

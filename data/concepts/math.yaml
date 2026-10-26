@@ -1,0 +1,180 @@
+# 수학 개념 트리 (고등 / 수능, 2015 개정 교육과정 기준) — MVP 시드, 계속 세분화 예정
+domain: math
+curriculum: 2015-revised
+subjects:
+  - key: math1
+    name: 수학I
+    units:
+      - key: exp_log
+        name: 지수함수와 로그함수
+        concepts:
+          - key: exponent_rules
+            name: 거듭제곱근과 지수법칙
+          - key: log_properties
+            name: 로그의 정의와 성질
+            prerequisites: [math.math1.exp_log.exponent_rules]
+          - key: exp_log_graphs
+            name: 지수함수와 로그함수의 그래프
+            prerequisites: [math.math1.exp_log.log_properties]
+          - key: exp_log_equations
+            name: 지수·로그 방정식과 부등식
+            prerequisites: [math.math1.exp_log.exp_log_graphs]
+      - key: trig
+        name: 삼각함수
+        concepts:
+          - key: radian_trig_def
+            name: 호도법과 삼각함수의 정의
+          - key: trig_graphs
+            name: 삼각함수의 그래프
+            prerequisites: [math.math1.trig.radian_trig_def]
+          - key: sine_cosine_law
+            name: 사인법칙과 코사인법칙
+            prerequisites: [math.math1.trig.radian_trig_def]
+      - key: sequence
+        name: 수열
+        concepts:
+          - key: arithmetic_geometric
+            name: 등차수열과 등비수열
+          - key: sigma
+            name: 수열의 합과 Σ
+            prerequisites: [math.math1.sequence.arithmetic_geometric]
+          - key: recurrence_induction
+            name: 귀납적 정의와 수학적 귀납법
+            prerequisites: [math.math1.sequence.sigma]
+
+  - key: math2
+    name: 수학II
+    units:
+      - key: limit_continuity
+        name: 함수의 극한과 연속
+        concepts:
+          - key: function_limit
+            name: 함수의 극한
+          - key: continuity
+            name: 함수의 연속과 사잇값 정리
+            prerequisites: [math.math2.limit_continuity.function_limit]
+      - key: differentiation
+        name: 미분
+        concepts:
+          - key: derivative_def
+            name: 미분계수와 도함수
+            prerequisites: [math.math2.limit_continuity.continuity]
+          - key: tangent_mvt
+            name: 접선과 평균값 정리
+            prerequisites: [math.math2.differentiation.derivative_def]
+          - key: graph_analysis
+            name: 증가·감소, 극대·극소와 그래프 개형
+            prerequisites: [math.math2.differentiation.derivative_def]
+          - key: diff_applications
+            name: 방정식·부등식 활용, 속도와 가속도
+            prerequisites: [math.math2.differentiation.graph_analysis]
+      - key: integration
+        name: 적분
+        concepts:
+          - key: indefinite_integral
+            name: 부정적분
+            prerequisites: [math.math2.differentiation.derivative_def]
+          - key: definite_integral
+            name: 정적분과 정적분으로 정의된 함수
+            prerequisites: [math.math2.integration.indefinite_integral]
+          - key: area_distance
+            name: 넓이와 이동 거리
+            prerequisites: [math.math2.integration.definite_integral]
+
+  - key: prob_stat
+    name: 확률과 통계
+    units:
+      - key: counting
+        name: 경우의 수
+        concepts:
+          - key: permutation_combination
+            name: 순열과 조합 (중복 포함)
+          - key: binomial_theorem
+            name: 이항정리
+            prerequisites: [math.prob_stat.counting.permutation_combination]
+      - key: probability
+        name: 확률
+        concepts:
+          - key: probability_basics
+            name: 확률의 뜻과 덧셈정리
+            prerequisites: [math.prob_stat.counting.permutation_combination]
+          - key: conditional_probability
+            name: 조건부확률과 독립시행
+            prerequisites: [math.prob_stat.probability.probability_basics]
+      - key: statistics
+        name: 통계
+        concepts:
+          - key: random_variable
+            name: 확률변수와 이항분포
+            prerequisites: [math.prob_stat.probability.conditional_probability]
+          - key: normal_distribution
+            name: 정규분포
+            prerequisites: [math.prob_stat.statistics.random_variable]
+          - key: estimation
+            name: 표본평균의 분포와 모평균 추정
+            prerequisites: [math.prob_stat.statistics.normal_distribution]
+
+  - key: calculus
+    name: 미적분
+    units:
+      - key: seq_limit
+        name: 수열의 극한
+        concepts:
+          - key: sequence_limit
+            name: 수열의 극한
+            prerequisites: [math.math1.sequence.arithmetic_geometric]
+          - key: series
+            name: 급수와 등비급수
+            prerequisites: [math.calculus.seq_limit.sequence_limit]
+      - key: diff_methods
+        name: 미분법
+        concepts:
+          - key: transcendental_derivative
+            name: 지수·로그·삼각함수의 미분
+            prerequisites: [math.math2.differentiation.derivative_def]
+          - key: diff_rules
+            name: 몫·합성함수·매개변수·음함수·역함수의 미분
+            prerequisites: [math.calculus.diff_methods.transcendental_derivative]
+          - key: diff_applications_adv
+            name: 도함수의 활용 (변곡점 포함)
+            prerequisites: [math.calculus.diff_methods.diff_rules]
+      - key: int_methods
+        name: 적분법
+        concepts:
+          - key: substitution_parts
+            name: 치환적분과 부분적분
+            prerequisites: [math.math2.integration.definite_integral]
+          - key: riemann_sum
+            name: 정적분과 급수의 합
+            prerequisites: [math.calculus.seq_limit.series]
+          - key: int_applications_adv
+            name: 넓이·부피·속도와 거리
+            prerequisites: [math.calculus.int_methods.substitution_parts]
+
+  - key: geometry
+    name: 기하
+    units:
+      - key: conic
+        name: 이차곡선
+        concepts:
+          - key: parabola_ellipse_hyperbola
+            name: 포물선·타원·쌍곡선
+          - key: conic_tangent
+            name: 이차곡선의 접선
+            prerequisites: [math.geometry.conic.parabola_ellipse_hyperbola]
+      - key: plane_vector
+        name: 평면벡터
+        concepts:
+          - key: vector_operations
+            name: 벡터의 연산과 성분
+          - key: dot_product
+            name: 내적과 직선·원의 벡터방정식
+            prerequisites: [math.geometry.plane_vector.vector_operations]
+      - key: space
+        name: 공간도형과 공간좌표
+        concepts:
+          - key: space_figures
+            name: 직선과 평면의 위치관계, 삼수선 정리, 정사영
+          - key: space_coordinates
+            name: 공간좌표와 구의 방정식
+            prerequisites: [math.geometry.space.space_figures]

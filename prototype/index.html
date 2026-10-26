@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Education</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<style>
+  :root {
+    --bg: #eef2f8;
+    --ink: #0f172a;
+    --ink-2: #475569;
+    --ink-3: #94a3b8;
+    --accent: #4f6bff;
+    --accent-soft: rgba(79, 107, 255, 0.12);
+    --warn: #f97316;
+
+    /* Liquid Glass — Clear */
+    --glass: rgba(255, 255, 255, 0.32);
+    --glass-strong: rgba(255, 255, 255, 0.55);
+    --glass-hover: rgba(255, 255, 255, 0.5);
+    --glass-border: rgba(255, 255, 255, 0.7);
+    --glass-blur: blur(28px) saturate(180%);
+    --glass-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.9),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.25),
+      0 8px 32px rgba(31, 41, 80, 0.08);
+    /* 문제/해설 등 콘텐츠는 거의 불투명하게 (가독성) */
+    --surface: rgba(255, 255, 255, 0.86);
+
+    --radius-lg: 22px;
+    --radius-md: 14px;
+    --sidebar-w: 256px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  input { font: inherit; color: inherit; }
+  [data-lucide] { width: 16px; height: 16px; stroke-width: 1.6; flex-shrink: 0; }
+
+  /* ---------- 배경: Clear 유리 뒤에 비칠 파스텔 그라디언트 ---------- */
+  .backdrop { position: fixed; inset: 0; z-index: 0; overflow: hidden; }
+  .blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.75; animation: drift 22s ease-in-out infinite alternate; }
+  .blob.b1 { width: 560px; height: 560px; background: #bcd3ff; top: -160px; left: 18%; }
+  .blob.b2 { width: 480px; height: 480px; background: #e3d4ff; top: 30%; right: -120px; animation-delay: -6s; }
+  .blob.b3 { width: 520px; height: 520px; background: #c9f2e3; bottom: -200px; left: 30%; animation-delay: -12s; }
+  .blob.b4 { width: 320px; height: 320px; background: #ffe0cc; top: 45%; left: -80px; animation-delay: -3s; }
+  @keyframes drift { to { transform: translate(40px, -30px) scale(1.08); } }
+
+  .glass {
+    background: var(--glass);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+  }
+
+  .app { position: relative; z-index: 1; display: flex; height: 100vh; padding: 12px; gap: 12px; }
+
+  /* ---------- 사이드바 ---------- */
+  .sidebar {
+    width: var(--sidebar-w); flex-shrink: 0;
+    border-radius: var(--radius-lg);
+    display: flex; flex-direction: column;
+    padding: 16px 10px 10px;
+    transition: margin-left .35s cubic-bezier(.2,.8,.2,1), opacity .25s;
+  }
+  .app.collapsed .sidebar { margin-left: calc(-1 * var(--sidebar-w) - 12px); opacity: 0; }
+
+  .brand { display: flex; align-items: center; gap: 9px; padding: 2px 8px 16px; }
+  .brand-mark {
+    width: 24px; height: 24px; border-radius: 8px;
+    background: linear-gradient(135deg, #6b8cff, #a78bfa 60%, #5eead4);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 4px 12px rgba(79,107,255,.3);
+    display: grid; place-items: center; color: #fff;
+  }
+  .brand-mark [data-lucide] { width: 13px; height: 13px; }
+  .brand-name { font-weight: 700; font-size: 17px; letter-spacing: -0.02em; }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; padding: 9px 10px; border-radius: 10px;
+    font-size: 14px; line-height: 18px; color: var(--ink); text-align: left;
+    transition: background .15s;
+  }
+  .nav-item:hover { background: var(--glass-hover); }
+  .nav-item.active {
+    background: var(--glass-strong);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 2px 8px rgba(31,41,80,.06);
+    font-weight: 600;
+  }
+  .nav-item [data-lucide] { color: var(--ink-2); }
+  .nav-item .label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge {
+    font-size: 11px; font-weight: 700; color: #fff; background: var(--warn);
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+    display: grid; place-items: center;
+  }
+  .dday { font-size: 11px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .dday.soon { color: var(--warn); }
+
+  .nav-scroll { flex: 1; overflow-y: auto; margin: 0 -4px; padding: 0 4px; scrollbar-width: thin; }
+  .section-title {
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px; font-weight: 500; color: var(--ink-3);
+    padding: 16px 10px 6px;
+  }
+  .section-title button { color: var(--ink-3); padding: 2px; border-radius: 6px; display: grid; }
+  .section-title button:hover { color: var(--ink); background: var(--glass-hover); }
+  .nav-item.chat { font-size: 13.5px; color: var(--ink-2); padding: 7px 10px; }
+  .nav-item.chat:hover { color: var(--ink); }
+
+  .profile {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 8px; padding: 8px 8px 8px 10px; border-radius: 12px;
+    background: rgba(255,255,255,.28); border: 1px solid rgba(255,255,255,.55);
+  }
+  .avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: linear-gradient(135deg, #fda4af, #fbbf24);
+    display: grid; place-items: center; font-size: 12px; font-weight: 700; color: #fff;
+  }
+  .profile .who { flex: 1; min-width: 0; font-size: 13px; line-height: 1.3; }
+  .profile .who small { display: block; color: var(--ink-3); font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* ---------- 메인 ---------- */
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; border-radius: var(--radius-lg); overflow: hidden; }
+  .topbar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius-lg); }
+  .icon-btn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; transition: background .15s; position: relative; }
+  .icon-btn:hover { background: var(--glass-hover); }
+  .crumb { font-weight: 500; font-size: 14px; margin-left: 4px; }
+  .search {
+    margin: 0 auto; width: min(260px, 30vw); height: 32px;
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 8px 0 10px; border-radius: 9px;
+    background: rgba(255,255,255,.35); border: 1px solid rgba(255,255,255,.65);
+    color: var(--ink-3); font-size: 13.5px;
+  }
+  .search input { min-width: 0; }
+  .search input { flex: 1; border: 0; outline: 0; background: transparent; }
+  .search input::placeholder { color: var(--ink-3); }
+  kbd { font-family: inherit; font-size: 10.5px; padding: 0 5px; border-radius: 5px; border: 1px solid rgba(15,23,42,.12); background: rgba(255,255,255,.5); }
+  .pill-btn { height: 32px; padding: 0 12px; border-radius: 9px; font-size: 14px; font-weight: 500; background: rgba(255,255,255,.35); border: 1px solid rgba(255,255,255,.65); }
+  .pill-btn:hover { background: var(--glass-hover); }
+  .dot { position: absolute; top: 6px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); border: 1.5px solid #fff; }
+
+  .content { flex: 1; overflow-y: auto; padding: 8px 4px 40px; }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+
+  .hero { text-align: center; padding: 11vh 0 0; }
+  .hero h1 { font-size: clamp(24px, 2.4vw, 30px); font-weight: 600; letter-spacing: -0.025em; }
+  .hero p { color: var(--ink-3); margin-top: 8px; font-size: 14px; }
+
+  .composer {
+    margin: 24px auto 0; max-width: 650px;
+    border-radius: 28px; padding: 7px 7px 7px 10px;
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,.45);
+  }
+  .composer input { flex: 1; border: 0; outline: 0; background: transparent; font-size: 15px; padding: 8px 4px; min-width: 0; }
+  .composer input::placeholder { color: var(--ink-3); }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 9px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+    background: var(--accent-soft); color: var(--accent); white-space: nowrap;
+  }
+  .chip [data-lucide] { width: 13px; height: 13px; }
+  .send {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--ink); color: #fff; display: grid; place-items: center;
+    transition: transform .15s, opacity .15s;
+  }
+  .send:disabled { opacity: .25; cursor: default; }
+  .send:not(:disabled):hover { transform: scale(1.05); }
+
+  .actions { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; max-width: 780px; margin: 120px auto 0; }
+  .action { display: flex; flex-direction: column; align-items: center; gap: 11px; padding: 6px 0; border-radius: 14px; font-size: 14px; font-weight: 500; }
+  .action .tile { width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center; transition: transform .2s, background .2s; }
+  .action .tile [data-lucide] { width: 17px; height: 17px; }
+  .action:hover .tile { transform: translateY(-3px); background: var(--glass-strong); }
+
+  .banner {
+    margin-top: 44px; border-radius: 18px; padding: 32px 28px; min-height: 190px;
+    position: relative; overflow: hidden; text-align: center;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: linear-gradient(120deg, rgba(99,130,255,.55), rgba(167,139,250,.45) 50%, rgba(94,234,212,.4));
+    border: 1px solid rgba(255,255,255,.7);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.8), 0 16px 40px rgba(79,107,255,.18);
+    color: #0b1440;
+  }
+  .banner::after {
+    content: ""; position: absolute; inset: 0;
+    background: radial-gradient(600px 200px at 85% -20%, rgba(255,255,255,.55), transparent 60%);
+    pointer-events: none;
+  }
+  .banner .eyebrow { font-size: 12.5px; font-weight: 500; opacity: .65; }
+  .banner h2 { font-size: 22px; font-weight: 500; letter-spacing: -0.02em; margin-top: 6px; }
+  .banner p { margin-top: 4px; font-size: 13.5px; opacity: .7; }
+  .banner .cta { display: flex; gap: 6px; position: relative; z-index: 1; flex-shrink: 0; }
+  .btn-white { background: #fff; height: 32px; padding: 0 13px; border-radius: 9px; font-weight: 500; font-size: 14px; box-shadow: 0 2px 8px rgba(15,23,42,.08); }
+  .btn-ghost { height: 32px; padding: 0 13px; border-radius: 9px; font-weight: 500; font-size: 14px; }
+  .btn-ghost:hover { background: rgba(255,255,255,.3); }
+
+  .tabs { display: flex; gap: 4px; margin-top: 36px; }
+  .tab { height: 30px; padding: 0 12px; border-radius: 9px; font-size: 14px; color: var(--ink-2); font-weight: 500; }
+  .tab.active { color: var(--ink); background: var(--glass-strong); box-shadow: inset 0 1px 0 rgba(255,255,255,.95), 0 2px 8px rgba(31,41,80,.06); border: 1px solid rgba(255,255,255,.7); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; margin-top: 16px; }
+  .card {
+    background: var(--surface); border: 1px solid rgba(255,255,255,.9);
+    border-radius: 14px; padding: 16px; text-align: left;
+    box-shadow: 0 4px 18px rgba(31,41,80,.06);
+    transition: transform .2s, box-shadow .2s;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(31,41,80,.1); }
+  .card .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .card .kind { font-size: 12px; color: var(--ink-3); display: flex; align-items: center; gap: 5px; }
+  .card .kind [data-lucide] { width: 13px; height: 13px; }
+  .card h3 { font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .card .meta { font-size: 12.5px; color: var(--ink-2); }
+  .bar { height: 6px; border-radius: 3px; background: rgba(15,23,42,.07); overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #6b8cff, #a78bfa); }
+
+  .hidden { display: none !important; }
+
+  /* ---------- 반응형 ---------- */
+  @media (max-width: 960px) {
+    .actions { grid-template-columns: repeat(4, 1fr); row-gap: 14px; margin-top: 64px; }
+    .search { display: none; }
+    .banner { padding: 26px 20px; }
+  }
+  @media (max-width: 760px) {
+    .app { padding: 8px; gap: 0; }
+    .sidebar { position: fixed; z-index: 10; top: 8px; bottom: 8px; left: 8px; background: rgba(255,255,255,.7); }
+    .app:not(.mobile-open) .sidebar { margin-left: calc(-1 * var(--sidebar-w) - 16px); opacity: 0; }
+    .app.mobile-open .sidebar { margin-left: 0; opacity: 1; }
+    .topbar .pill-btn { display: none; }
+    .wrap { padding: 0 12px; }
+    .chip .chip-text { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="backdrop" aria-hidden="true">
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div>
+</div>
+
+<div class="app" id="app">
+  <!-- ===================== 사이드바 ===================== -->
+  <aside class="sidebar glass">
+    <div class="brand">
+      <div class="brand-mark"><i data-lucide="sparkles"></i></div>
+      <span class="brand-name">Education</span>
+    </div>
+
+    <button class="nav-item active" data-nav><i data-lucide="square-pen"></i><span class="label">새 학습</span></button>
+    <button class="nav-item" data-nav><i data-lucide="search"></i><span class="label">검색</span></button>
+    <button class="nav-item" data-nav><i data-lucide="circle-x"></i><span class="label">오답노트</span><span class="badge">3</span></button>
+    <button class="nav-item" data-nav><i data-lucide="library"></i><span class="label">라이브러리</span></button>
+
+    <div class="nav-scroll">
+      <div class="section-title">프로젝트 <button title="새 프로젝트"><i data-lucide="plus"></i></button></div>
+      <div id="projects"></div>
+
+      <div class="section-title">최근</div>
+      <div id="chats"></div>
+    </div>
+
+    <div class="profile">
+      <div class="avatar">민</div>
+      <div class="who">민석<small>오늘 12 / 20문제 · 🔥 7일 연속</small></div>
+      <button class="icon-btn" title="설정"><i data-lucide="settings"></i></button>
+    </div>
+  </aside>
+
+  <!-- ===================== 메인 ===================== -->
+  <main class="main">
+    <header class="topbar glass">
+      <button class="icon-btn" id="toggle" title="사이드바"><i data-lucide="panel-left"></i></button>
+      <span class="crumb">홈</span>
+      <label class="search">
+        <i data-lucide="search"></i>
+        <input placeholder="대화, 문제, 개념 검색..." />
+        <kbd>⌘</kbd><kbd>K</kbd>
+      </label>
+      <button class="pill-btn">피드백</button>
+      <button class="icon-btn" title="알림"><i data-lucide="bell"></i><span class="dot"></span></button>
+    </header>
+
+    <div class="content">
+      <div class="wrap">
+        <section class="hero">
+          <h1>오늘은 무엇을 공부할까요?</h1>
+          <p>문제 생성부터 오답 분석, 개념 정리까지 한 번에</p>
+
+          <form class="composer glass" id="composer">
+            <button type="button" class="icon-btn" title="자료 첨부"><i data-lucide="plus"></i></button>
+            <span class="chip" title="프로젝트"><i data-lucide="folder"></i><span class="chip-text">2027 수능 미적분</span></span>
+            <input id="prompt" placeholder="미적분 치환적분 3점짜리 5문제 내줘" autocomplete="off" />
+            <button type="button" class="icon-btn" title="음성 입력"><i data-lucide="mic"></i></button>
+            <button type="submit" class="send" id="send" disabled><i data-lucide="arrow-up"></i></button>
+          </form>
+        </section>
+
+        <section class="actions" id="actions"></section>
+
+        <section class="banner">
+          <div style="position:relative;z-index:1">
+            <div class="eyebrow">이번 주 약점 · 2027 수능 미적분</div>
+            <h2>정적분으로 정의된 함수</h2>
+            <p>최근 8문제 중 5문제 오답 · 주로 "미분하기 전 상수항 처리"에서 실수했어요</p>
+          </div>
+          <div class="cta">
+            <button class="btn-white">복습 시작</button>
+            <button class="btn-ghost">개념 보기</button>
+          </div>
+        </section>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="recent">최근 학습</button>
+          <button class="tab" data-tab="recommend">추천 학습</button>
+        </div>
+        <section class="cards" id="cards-recent"></section>
+        <section class="cards hidden" id="cards-recommend"></section>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+  // ---------- 목업 데이터 (추후 API 연동) ----------
+  const projects = [
+    { name: "2027 수능 미적분", dday: 24 },
+    { name: "화학I 중간고사", dday: 12 },
+    { name: "물리 역학 기초 다지기", dday: null },
+  ];
+  const chats = [
+    "치환적분 변형 문제 5개",
+    "중화반응 왜 틀렸는지",
+    "로그 성질 개념 정리",
+    "6월 모의고사 약점 분석",
+    "H-R도 암기 카드 만들기",
+    "등가속도 운동 그래프 문제",
+  ];
+  const actions = [
+    ["pencil-line", "문제 풀기", "미적분 3점짜리 5문제 내줘"],
+    ["circle-x", "오답노트", "최근 틀린 문제로 변형 문제 만들어줘"],
+    ["chart-no-axes-column", "약점 분석", "이번 주 내 약점 분석해줘"],
+    ["book-open", "개념 정리", "정적분으로 정의된 함수 개념 정리해줘"],
+    ["layers", "암기 카드", "화학I 주기적 성질 암기 카드 만들어줘"],
+    ["scroll-text", "기출 스타일", "6월 모평 스타일로 4점짜리 3문제"],
+    ["timer", "모의고사", "미적분 30문항 모의고사 시작"],
+    ["ellipsis", "더보기", ""],
+  ];
+  const recent = [
+    { icon: "folder", kind: "2027 수능 미적분", title: "치환적분 변형 문제 5개", meta: "4 / 5 정답 · 2시간 전", pct: 80 },
+    { icon: "folder", kind: "화학I 중간고사", title: "중화반응 오답 분석", meta: "원인: 몰 농도 계산 · 어제", pct: 45 },
+    { icon: "message-circle", kind: "대화", title: "로그 성질 개념 정리", meta: "암기 카드 12장 생성 · 2일 전", pct: 100 },
+    { icon: "folder", kind: "2027 수능 미적분", title: "6월 모의고사 약점 분석", meta: "약점 3개 발견 · 3일 전", pct: 64 },
+  ];
+  const recommend = [
+    { icon: "target", kind: "약점 보완", title: "정적분으로 정의된 함수 집중 10문제", meta: "예상 20분 · 난이도 ★★★", pct: 0 },
+    { icon: "repeat", kind: "복습 타이밍", title: "3일 전 틀린 문제 다시 풀기", meta: "잊기 전에 복습하면 기억이 오래가요", pct: 0 },
+    { icon: "layers", kind: "암기", title: "화학I 이온화 에너지 카드 20장", meta: "예상 8분", pct: 0 },
+  ];
+
+  const $ = (s) => document.querySelector(s);
+
+  $("#projects").innerHTML = projects.map((p) => `
+    <button class="nav-item" data-nav>
+      <i data-lucide="folder"></i><span class="label">${p.name}</span>
+      ${p.dday != null ? `<span class="dday ${p.dday <= 14 ? "soon" : ""}">D-${p.dday}</span>` : ""}
+    </button>`).join("");
+
+  $("#chats").innerHTML = chats.map((c) => `
+    <button class="nav-item chat" data-nav><span class="label">${c}</span></button>`).join("");
+
+  $("#actions").innerHTML = actions.map(([icon, label, prompt]) => `
+    <button class="action" data-prompt="${prompt}">
+      <span class="tile glass"><i data-lucide="${icon}"></i></span>${label}
+    </button>`).join("");
+
+  const card = (c) => `
+    <button class="card">
+      <div class="row"><span class="kind"><i data-lucide="${c.icon}"></i>${c.kind}</span></div>
+      <h3>${c.title}</h3>
+      <div class="meta">${c.meta}</div>
+      ${c.pct ? `<div class="bar"><i style="width:${c.pct}%"></i></div>` : ""}
+    </button>`;
+  $("#cards-recent").innerHTML = recent.map(card).join("");
+  $("#cards-recommend").innerHTML = recommend.map(card).join("");
+
+  lucide.createIcons();
+
+  // ---------- 상호작용 ----------
+  document.querySelectorAll("[data-nav]").forEach((el) =>
+    el.addEventListener("click", () => {
+      document.querySelectorAll("[data-nav]").forEach((n) => n.classList.remove("active"));
+      el.classList.add("active");
+      $("#app").classList.remove("mobile-open");
+    })
+  );
+
+  $("#toggle").addEventListener("click", () => {
+    const app = $("#app");
+    if (matchMedia("(max-width: 760px)").matches) app.classList.toggle("mobile-open");
+    else app.classList.toggle("collapsed");
+  });
+
+  const prompt = $("#prompt"), send = $("#send");
+  prompt.addEventListener("input", () => (send.disabled = !prompt.value.trim()));
+  document.querySelectorAll("[data-prompt]").forEach((el) =>
+    el.addEventListener("click", () => {
+      if (!el.dataset.prompt) return;
+      prompt.value = el.dataset.prompt;
+      send.disabled = false;
+      prompt.focus();
+    })
+  );
+  $("#composer").addEventListener("submit", (e) => {
+    e.preventDefault();
+    alert(`(프로토타입) 요청: ${prompt.value}`);
+  });
+
+  document.querySelectorAll("[data-tab]").forEach((t) =>
+    t.addEventListener("click", () => {
+      document.querySelectorAll("[data-tab]").forEach((x) => x.classList.toggle("active", x === t));
+      $("#cards-recent").classList.toggle("hidden", t.dataset.tab !== "recent");
+      $("#cards-recommend").classList.toggle("hidden", t.dataset.tab !== "recommend");
+    })
+  );
+
+  document.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "k") { e.preventDefault(); document.querySelector(".search input")?.focus(); }
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,61 @@
+# 생명과학I 개념 트리 (2015 개정 교육과정 기준) — MVP 시드
+domain: biology
+curriculum: 2015-revised
+subjects:
+  - key: biology1
+    name: 생명과학I
+    units:
+      - key: intro
+        name: 생명 과학의 이해
+        concepts:
+          - key: life_characteristics
+            name: 생물의 특성과 바이러스
+          - key: scientific_method
+            name: 연역적·귀납적 탐구 방법
+      - key: metabolism
+        name: 사람의 물질대사
+        concepts:
+          - key: cell_respiration
+            name: 세포 호흡과 에너지 (ATP)
+          - key: organ_systems
+            name: 소화·순환·호흡·배설 기관계
+            prerequisites: [biology.biology1.metabolism.cell_respiration]
+          - key: metabolic_diseases
+            name: 물질대사 관련 질환
+            prerequisites: [biology.biology1.metabolism.organ_systems]
+      - key: homeostasis
+        name: 항상성과 몸의 조절
+        concepts:
+          - key: neuron_signal
+            name: 흥분의 전도와 전달
+          - key: muscle_contraction
+            name: 근수축 (활주설)
+            prerequisites: [biology.biology1.homeostasis.neuron_signal]
+          - key: nervous_system
+            name: 중추·말초 신경계
+            prerequisites: [biology.biology1.homeostasis.neuron_signal]
+          - key: hormones
+            name: 호르몬과 항상성 (혈당·체온·삼투압)
+          - key: immunity
+            name: 방어 작용과 면역 (ABO 혈액형 포함)
+      - key: genetics
+        name: 유전
+        concepts:
+          - key: chromosome_cell_division
+            name: 염색체와 세포 분열 (체세포·감수 분열)
+          - key: human_inheritance
+            name: 사람의 유전 (단일·다인자, 가계도)
+            prerequisites: [biology.biology1.genetics.chromosome_cell_division]
+          - key: mutation
+            name: 유전자 돌연변이와 염색체 이상
+            prerequisites: [biology.biology1.genetics.chromosome_cell_division]
+      - key: ecosystem
+        name: 생태계와 상호 작용
+        concepts:
+          - key: ecosystem_structure
+            name: 생태계 구성 요소와 개체군·군집
+          - key: energy_flow
+            name: 물질 순환과 에너지 흐름
+            prerequisites: [biology.biology1.ecosystem.ecosystem_structure]
+          - key: biodiversity
+            name: 생물 다양성과 보전

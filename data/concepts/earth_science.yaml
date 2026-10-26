@@ -1,0 +1,60 @@
+# 지구과학I 개념 트리 (2015 개정 교육과정 기준) — MVP 시드
+domain: earth_science
+curriculum: 2015-revised
+subjects:
+  - key: earth1
+    name: 지구과학I
+    units:
+      - key: solid_earth
+        name: 고체 지구
+        concepts:
+          - key: plate_tectonics
+            name: 판 구조론의 정립 (대륙 이동, 고지자기)
+          - key: plate_motion_driver
+            name: 판의 운동 원동력 (맨틀 대류, 플룸)
+            prerequisites: [earth_science.earth1.solid_earth.plate_tectonics]
+          - key: igneous_volcanism
+            name: 마그마 생성과 화성암
+            prerequisites: [earth_science.earth1.solid_earth.plate_tectonics]
+          - key: sedimentary_structures
+            name: 퇴적암과 지질 구조
+          - key: relative_absolute_age
+            name: 지층의 상대 연령과 절대 연령 (반감기)
+            prerequisites: [earth_science.earth1.solid_earth.sedimentary_structures]
+          - key: geologic_time
+            name: 지질 시대와 화석
+            prerequisites: [earth_science.earth1.solid_earth.relative_absolute_age]
+      - key: atmosphere_ocean
+        name: 대기와 해양
+        concepts:
+          - key: air_mass_fronts
+            name: 기단과 전선, 온대 저기압
+          - key: typhoon_severe_weather
+            name: 태풍과 악기상
+            prerequisites: [earth_science.earth1.atmosphere_ocean.air_mass_fronts]
+          - key: ocean_properties
+            name: 해수의 성질 (수온·염분·밀도)
+          - key: general_circulation
+            name: 대기 대순환과 해양의 표층 순환, 심층 순환
+            prerequisites: [earth_science.earth1.atmosphere_ocean.ocean_properties]
+          - key: enso_upwelling
+            name: 용승·침강과 엘니뇨·라니냐
+            prerequisites: [earth_science.earth1.atmosphere_ocean.general_circulation]
+          - key: climate_change
+            name: 기후 변화의 요인
+      - key: space
+        name: 우주
+        concepts:
+          - key: stellar_properties
+            name: 별의 물리량과 H-R도
+          - key: stellar_evolution
+            name: 별의 진화와 에너지원
+            prerequisites: [earth_science.earth1.space.stellar_properties]
+          - key: exoplanets
+            name: 외계 행성계 탐사와 생명 가능 지대
+            prerequisites: [earth_science.earth1.space.stellar_properties]
+          - key: galaxies_expansion
+            name: 외부 은하와 허블 법칙, 우주 팽창
+          - key: dark_matter_energy
+            name: 암흑 물질과 암흑 에너지
+            prerequisites: [earth_science.earth1.space.galaxies_expansion]

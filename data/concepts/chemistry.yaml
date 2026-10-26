@@ -1,0 +1,63 @@
+# 화학I 개념 트리 (2015 개정 교육과정 기준) — MVP 시드
+domain: chemistry
+curriculum: 2015-revised
+subjects:
+  - key: chemistry1
+    name: 화학I
+    units:
+      - key: first_steps
+        name: 화학의 첫걸음
+        concepts:
+          - key: mole
+            name: 몰과 아보가드로수, 화학식량
+          - key: chemical_equation
+            name: 화학 반응식과 양적 관계
+            prerequisites: [chemistry.chemistry1.first_steps.mole]
+          - key: concentration
+            name: 몰 농도
+            prerequisites: [chemistry.chemistry1.first_steps.mole]
+      - key: atomic_world
+        name: 원자의 세계
+        concepts:
+          - key: atomic_structure
+            name: 원자 구성 입자와 동위 원소
+          - key: electron_configuration
+            name: 오비탈과 전자 배치
+            prerequisites: [chemistry.chemistry1.atomic_world.atomic_structure]
+          - key: periodic_trends
+            name: 주기적 성질 (원자 반지름, 이온화 에너지)
+            prerequisites: [chemistry.chemistry1.atomic_world.electron_configuration]
+      - key: bonding
+        name: 화학 결합과 분자의 세계
+        concepts:
+          - key: ionic_covalent_metallic
+            name: 이온·공유·금속 결합
+            prerequisites: [chemistry.chemistry1.atomic_world.electron_configuration]
+          - key: electronegativity_polarity
+            name: 전기 음성도와 결합의 극성
+            prerequisites: [chemistry.chemistry1.bonding.ionic_covalent_metallic]
+          - key: lewis_molecular_shape
+            name: 루이스 구조와 분자 구조 (VSEPR)
+            prerequisites: [chemistry.chemistry1.bonding.ionic_covalent_metallic]
+          - key: molecular_polarity
+            name: 분자의 극성과 성질
+            prerequisites:
+              - chemistry.chemistry1.bonding.electronegativity_polarity
+              - chemistry.chemistry1.bonding.lewis_molecular_shape
+      - key: dynamic_reactions
+        name: 역동적인 화학 반응
+        concepts:
+          - key: dynamic_equilibrium
+            name: 가역 반응과 동적 평형
+          - key: acid_base
+            name: 산·염기, pH와 물의 자동 이온화
+            prerequisites: [chemistry.chemistry1.dynamic_reactions.dynamic_equilibrium]
+          - key: neutralization
+            name: 중화 반응과 양적 관계
+            prerequisites:
+              - chemistry.chemistry1.dynamic_reactions.acid_base
+              - chemistry.chemistry1.first_steps.concentration
+          - key: redox
+            name: 산화 환원 반응과 산화수
+          - key: reaction_heat
+            name: 화학 반응에서 출입하는 열
