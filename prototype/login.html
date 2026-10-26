@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Eureka — 로그인</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap" />
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<script src="dots.js"></script>
+<style>
+  :root {
+    --bg: #f7f8fb;
+    --ink: #0f172a;
+    --ink-2: #475569;
+    --ink-3: #6b7280;
+    --line: rgba(15, 23, 42, 0.08);
+    --accent: #4f6bff;
+    --accent-soft: rgba(79, 107, 255, 0.12);
+    --ok: #16a34a;
+    --bad: #e11d48;
+    --glass-blur: blur(24px) saturate(170%);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    color: var(--ink); background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  input { font: inherit; color: inherit; }
+  [data-lucide] { width: 16px; height: 16px; stroke-width: 1.6; flex-shrink: 0; }
+
+  #dots { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+
+  .glass {
+    position: relative;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: 0 24px 64px rgba(31, 41, 80, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  }
+  .glass::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+    background: linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.35) 40%, rgba(15,23,42,.06));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+  }
+
+  .login {
+    position: relative; z-index: 1; min-height: 100vh;
+    display: grid; grid-template-columns: 1.15fr 1fr;
+  }
+
+  /* ---------- 왼쪽: 소개 ---------- */
+  .intro { display: flex; flex-direction: column; padding: 32px 56px; }
+  .brand { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+  .brand-company { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 15px; letter-spacing: -0.025em; }
+
+  /* 가운데: Eureka 워드마크 + 슬로건 */
+  .pitch { margin: auto; max-width: 520px; padding: 48px 0; text-align: center; display: flex; flex-direction: column; align-items: center; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 12px 5px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 600; color: var(--ink-2);
+    background: rgba(255,255,255,.7); box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .eyebrow i {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: conic-gradient(#ff5f6d, #ffb347, #ffe259, #5ee7a0, #4fc3ff, #6b7cff, #c06bff, #ff5f6d);
+  }
+  .wordmark { margin-top: 18px; font-size: clamp(64px, 7.4vw, 104px); line-height: 1; font-weight: 800; letter-spacing: -0.05em; color: var(--ink); }
+  .slogan { margin-top: 14px; font-size: clamp(22px, 2.2vw, 30px); font-weight: 700; letter-spacing: -0.03em; }
+  .slogan em {
+    font-style: normal; padding: 0 0.04em;
+    background: linear-gradient(90deg, #ff5f6d, #ffb347, #5ee7a0, #4fc3ff, #6b7cff, #c06bff, #ff5f6d) 0 0 / 200% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: flow 6s linear infinite;
+  }
+  @keyframes flow { to { background-position: -200% 0; } }
+  .desc { margin-top: 16px; font-size: 15px; line-height: 1.65; color: var(--ink-2); }
+
+  .intro footer { font-size: 12px; color: var(--ink-3); }
+
+  /* ---------- 오른쪽: 로그인 / 회원가입 카드 ---------- */
+  .panel { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; }
+  .card { width: 100%; max-width: 420px; border-radius: 24px; padding: 28px 30px 24px; }
+
+  .card h2 { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
+  .card .sub { margin-top: 4px; font-size: 13.5px; color: var(--ink-2); }
+
+  .socials { display: grid; gap: 10px; margin-top: 20px; }
+  .social {
+    height: 46px; border-radius: 12px; width: 100%;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    font-size: 14.5px; font-weight: 600;
+    transition: transform .15s, box-shadow .2s;
+  }
+  .social:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(15,23,42,.08); }
+  .social:active { transform: none; }
+  .social svg { width: 18px; height: 18px; }
+  .social.kakao { background: #fee500; color: rgba(0, 0, 0, 0.85); }
+  .social.google { background: #fff; box-shadow: inset 0 0 0 1px rgba(15,23,42,.12); }
+  .social.google:hover { box-shadow: inset 0 0 0 1px rgba(15,23,42,.12), 0 6px 18px rgba(15,23,42,.08); }
+
+  .or { display: flex; align-items: center; gap: 12px; margin: 20px 0 16px; font-size: 12.5px; color: var(--ink-3); }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+
+  /* 폼 전환: 살짝 떠오르며 바뀜 */
+  .pane { display: none; }
+  .pane.active { display: block; animation: paneIn .45s cubic-bezier(.16,1,.3,1); }
+  @keyframes paneIn { from { opacity: 0; transform: translateY(8px); } }
+
+  .field { margin-top: 12px; }
+  .field:first-child { margin-top: 0; }
+  .field label { display: block; font-size: 13px; font-weight: 500; color: var(--ink-2); margin-bottom: 6px; }
+  .control { position: relative; }
+  .control input {
+    width: 100%; height: 44px; padding: 0 14px; border-radius: 12px; border: 0; outline: 0;
+    font-size: 14.5px; background: rgba(255,255,255,.85);
+    box-shadow: inset 0 0 0 1px rgba(15,23,42,.1);
+    transition: box-shadow .2s, background .2s;
+  }
+  .control input::placeholder { color: var(--ink-3); }
+  .control input:focus { background: #fff; box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-soft); }
+  .control input.invalid { box-shadow: inset 0 0 0 1px var(--bad); }
+  .control .peek {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; color: var(--ink-3);
+  }
+  .control .peek:hover { color: var(--ink); background: rgba(15,23,42,.05); }
+  .control:has(.peek) input { padding-right: 44px; }
+
+  .hint { margin-top: 6px; font-size: 12px; color: var(--ink-3); min-height: 16px; }
+  .hint.ok { color: var(--ok); }
+  .hint.bad { color: var(--bad); }
+  .strength { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 8px; }
+  .strength i { height: 4px; border-radius: 2px; background: rgba(15,23,42,.08); transition: background .25s; }
+
+  .row { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; font-size: 13px; }
+  .row a { color: var(--ink-2); text-decoration: none; }
+  .row a:hover { color: var(--ink); text-decoration: underline; }
+
+  .check { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--ink-2); user-select: none; }
+  .check input { appearance: none; width: 18px; height: 18px; border-radius: 6px; margin: 0; flex-shrink: 0; cursor: pointer;
+    background: #fff; box-shadow: inset 0 0 0 1px rgba(15,23,42,.2); display: grid; place-items: center; transition: background .15s, box-shadow .15s; }
+  .check input:checked { background: var(--ink); box-shadow: none; }
+  .check input:checked::after { content: ""; width: 9px; height: 5px; border: 2px solid #fff; border-top: 0; border-right: 0; transform: translateY(-1px) rotate(-45deg); }
+  .check input:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft), inset 0 0 0 1px var(--accent); }
+
+  .agree { margin-top: 16px; border-radius: 14px; background: rgba(255,255,255,.6); box-shadow: inset 0 0 0 1px var(--line); }
+  .agree .all { padding: 12px 14px; border-bottom: 1px solid var(--line); font-weight: 600; color: var(--ink); }
+  .agree ul { list-style: none; padding: 8px 14px 10px; display: grid; gap: 8px; }
+  .agree li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .agree em { font-style: normal; font-weight: 600; color: var(--ink); }
+  .agree em.opt { color: var(--ink-3); font-weight: 500; }
+  .agree .view { font-size: 12px; color: var(--ink-3); text-decoration: underline; text-underline-offset: 2px; }
+
+  .primary {
+    margin-top: 16px; width: 100%; height: 46px; border-radius: 12px;
+    background: var(--ink); color: #fff; font-size: 14.5px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    transition: background .2s, opacity .2s;
+  }
+  .primary:hover:not(:disabled) { background: #1e293b; }
+  .primary:disabled { opacity: .3; cursor: default; }
+  .primary [data-lucide] { transition: transform .2s; }
+  .primary:hover:not(:disabled) [data-lucide] { transform: translateX(3px); }
+
+  .terms { margin-top: 14px; font-size: 12px; line-height: 1.6; color: var(--ink-3); text-align: center; }
+  .terms a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
+  .switch { margin-top: 16px; font-size: 13px; color: var(--ink-2); }
+  .switch button { font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+
+  /* 등장: 아래에서 위로 촤라락 */
+  .reveal {
+    opacity: 0; transform: translateY(28px);
+    transition: opacity .8s cubic-bezier(.16,1,.3,1), transform .8s cubic-bezier(.16,1,.3,1);
+    transition-delay: var(--d, 0ms);
+  }
+  .reveal.in { opacity: 1; transform: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .slogan em, .pane.active { animation: none; }
+  }
+
+  @media (max-width: 900px) {
+    .login { grid-template-columns: 1fr; }
+    .intro { padding: 20px 20px 0; }
+    .pitch { padding: 36px 0 8px; }
+    .intro footer { display: none; }
+    .panel { padding: 16px 16px 40px; justify-content: flex-start; }
+    .card { padding: 22px 18px 20px; }
+  }
+</style>
+</head>
+<body>
+<canvas id="dots" aria-hidden="true"></canvas>
+
+<main class="login">
+  <!-- ===================== 소개 ===================== -->
+  <section class="intro">
+    <div class="brand reveal">
+      <span class="brand-company">Horcrux Technologies</span>
+    </div>
+
+    <div class="pitch">
+      <span class="eyebrow reveal"><i></i>AI 학습 에이전트</span>
+      <h1 class="wordmark reveal">Eureka</h1>
+      <p class="slogan reveal">시험 준비를 <em>AI</em>로.</p>
+      <p class="desc reveal">AI Agent와 함께 목표를 달성해보세요</p>
+    </div>
+
+    <footer>© 2026 Horcrux Technologies</footer>
+  </section>
+
+  <!-- ===================== 로그인 / 회원가입 ===================== -->
+  <section class="panel">
+    <div class="card glass reveal" id="card" data-mode="login">
+      <h2 id="title">환영합니다</h2>
+      <p class="sub" id="subtitle">로그인을 통해, Eureka를 경험해보세요</p>
+
+      <div class="socials">
+        <button class="social google" data-go>
+          <svg viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/>
+            <path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/>
+            <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.5-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/>
+            <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/>
+          </svg>
+          <span data-label="Google">Google로 로그인</span>
+        </button>
+        <button class="social kakao" data-go>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#000" d="M12 3C6.48 3 2 6.58 2 11c0 2.83 1.86 5.32 4.66 6.73l-.95 3.48c-.08.3.26.54.52.37l4.13-2.73c.53.06 1.08.1 1.64.1 5.52 0 10-3.58 10-8s-4.48-8-10-8z"/></svg>
+          <span data-label="카카오">카카오로 로그인</span>
+        </button>
+      </div>
+
+      <div class="or" id="or">또는 이메일로 로그인</div>
+
+      <!-- 로그인 -->
+      <form class="pane active" id="login-form" novalidate>
+        <div class="field">
+          <label for="login-email">이메일</label>
+          <div class="control"><input id="login-email" type="email" placeholder="name@example.com" autocomplete="email" required /></div>
+        </div>
+        <div class="field">
+          <label for="login-pw">비밀번호</label>
+          <div class="control">
+            <input id="login-pw" type="password" placeholder="비밀번호" autocomplete="current-password" required />
+            <button type="button" class="peek" aria-label="비밀번호 보기"><i data-lucide="eye"></i></button>
+          </div>
+        </div>
+        <div class="row">
+          <label class="check"><input type="checkbox" checked /> 로그인 상태 유지</label>
+          <a href="#">비밀번호 찾기</a>
+        </div>
+        <p class="hint bad" id="login-error"></p>
+        <button class="primary" type="submit">로그인 <i data-lucide="arrow-right"></i></button>
+      </form>
+
+      <!-- 회원가입 -->
+      <form class="pane" id="signup-form" novalidate>
+        <div class="field">
+          <label for="su-name">이름</label>
+          <div class="control"><input id="su-name" placeholder="홍길동" autocomplete="name" required /></div>
+        </div>
+        <div class="field">
+          <label for="su-email">이메일</label>
+          <div class="control"><input id="su-email" type="email" placeholder="name@example.com" autocomplete="email" required /></div>
+          <p class="hint" id="su-email-hint"></p>
+        </div>
+        <div class="field">
+          <label for="su-pw">비밀번호</label>
+          <div class="control">
+            <input id="su-pw" type="password" placeholder="8자 이상, 영문과 숫자 포함" autocomplete="new-password" required />
+            <button type="button" class="peek" aria-label="비밀번호 보기"><i data-lucide="eye"></i></button>
+          </div>
+          <div class="strength" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+          <p class="hint" id="su-pw-hint">8자 이상, 영문과 숫자를 함께 써 주세요</p>
+        </div>
+        <div class="field">
+          <label for="su-pw2">비밀번호 확인</label>
+          <div class="control"><input id="su-pw2" type="password" placeholder="한 번 더 입력" autocomplete="new-password" required /></div>
+          <p class="hint" id="su-pw2-hint"></p>
+        </div>
+
+        <div class="agree">
+          <label class="check all"><input type="checkbox" id="agree-all" /> 전체 동의</label>
+          <ul>
+            <li><label class="check"><input type="checkbox" data-agree required /> <span><em>[필수]</em> 만 14세 이상입니다</span></label></li>
+            <li><label class="check"><input type="checkbox" data-agree required /> <span><em>[필수]</em> 이용약관 동의</span></label><a class="view" href="#">보기</a></li>
+            <li><label class="check"><input type="checkbox" data-agree required /> <span><em>[필수]</em> 개인정보 수집·이용 동의</span></label><a class="view" href="#">보기</a></li>
+            <li><label class="check"><input type="checkbox" data-agree /> <span><em class="opt">[선택]</em> 학습 알림·소식 받기</span></label></li>
+          </ul>
+        </div>
+
+        <button class="primary" type="submit" id="signup-submit" disabled>가입하기 <i data-lucide="arrow-right"></i></button>
+      </form>
+
+      <p class="terms" id="terms">간편 로그인 시 Eureka의 <a href="#">이용약관</a> 및 <a href="#">개인정보처리방침</a>에 동의하게 됩니다.</p>
+    </div>
+
+    <p class="switch reveal" id="switch">
+      <span>계정이 없으신가요?</span> <button type="button" data-switch>회원가입</button>
+    </p>
+  </section>
+</main>
+
+<script>
+  lucide.createIcons();
+
+  const $ = (s) => document.querySelector(s);
+  const $$ = (s) => [...document.querySelectorAll(s)];
+  const card = $("#card");
+
+  // ---------- 등장: 순서대로 시간차를 두고 떠오름 ----------
+  $$(".reveal").forEach((el, i) => el.style.setProperty("--d", `${120 + i * 70}ms`));
+  requestAnimationFrame(() => requestAnimationFrame(() => $$(".reveal").forEach((el) => el.classList.add("in"))));
+
+  // ---------- 도트: 카드를 중심으로 퍼지고, 왼쪽 글자 주변은 비켜 간다 ----------
+  const textEls = [".brand", ".eyebrow", ".wordmark", ".slogan", ".desc"].map((s) => $(s));
+  dotField($("#dots"), {
+    gap: 18, baseR: 1, peakR: 2.4, baseAlpha: 0.1, peakAlpha: 0.55, light: 60,
+    wavelength: 90, speed: 1.1, hueSpeed: 25, reach: 0.75, floor: 0.55, introSec: 1.3,
+    focus: () => {
+      const r = card.getBoundingClientRect();
+      return [r.left + r.width / 2, r.top + r.height / 2];
+    },
+    clear: () => textEls.filter((el) => el.offsetParent).map((el) => el.getBoundingClientRect()),
+  });
+
+  // ---------- 로그인 ↔ 회원가입 전환 ----------
+  const COPY = {
+    login: {
+      title: "환영합니다", sub: "로그인을 통해, Eureka를 경험해보세요",
+      social: "로그인", or: "또는 이메일로 로그인",
+      switchText: "계정이 없으신가요?", switchBtn: "회원가입",
+    },
+    signup: {
+      title: "Eureka 시작하기", sub: "Google·카카오로 3초 만에, 또는 이메일로 가입해요",
+      social: "시작하기", or: "또는 이메일로 가입",
+      switchText: "이미 계정이 있으신가요?", switchBtn: "로그인",
+    },
+  };
+
+  function setMode(mode) {
+    const c = COPY[mode];
+    card.dataset.mode = mode;
+    $("#title").textContent = c.title;
+    $("#subtitle").textContent = c.sub;
+    $("#or").textContent = c.or;
+    $$("[data-label]").forEach((s) => (s.textContent = `${s.dataset.label}로 ${c.social}`));
+    $("#login-form").classList.toggle("active", mode === "login");
+    $("#signup-form").classList.toggle("active", mode === "signup");
+    $("#terms").style.display = mode === "login" ? "" : "none";
+    $("#switch span").textContent = c.switchText;
+    $("[data-switch]").textContent = c.switchBtn;
+    history.replaceState(null, "", mode === "signup" ? "#signup" : location.pathname + location.search);
+  }
+  $("[data-switch]").addEventListener("click", () => setMode(card.dataset.mode === "login" ? "signup" : "login"));
+  if (location.hash === "#signup") setMode("signup");
+
+  // ---------- 비밀번호 보기 ----------
+  $$(".peek").forEach((btn) => btn.addEventListener("click", () => {
+    const input = btn.previousElementSibling;
+    const show = input.type === "password";
+    input.type = show ? "text" : "password";
+    btn.setAttribute("aria-label", show ? "비밀번호 숨기기" : "비밀번호 보기");
+    btn.innerHTML = `<i data-lucide="${show ? "eye-off" : "eye"}"></i>`;
+    lucide.createIcons();
+  }));
+
+  // ---------- 프로토타입: 로그인/가입하면 메인 화면으로 ----------
+  const go = () => (location.href = "index.html");
+  $$("[data-go]").forEach((b) => b.addEventListener("click", go));
+
+  const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+
+  $("#login-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const email = $("#login-email"), pw = $("#login-pw");
+    email.classList.toggle("invalid", !isEmail(email.value));
+    pw.classList.toggle("invalid", !pw.value);
+    $("#login-error").textContent = !isEmail(email.value) ? "이메일 형식을 확인해 주세요" : !pw.value ? "비밀번호를 입력해 주세요" : "";
+    if (isEmail(email.value) && pw.value) go();
+  });
+
+  // ---------- 회원가입 검증 ----------
+  const su = { name: $("#su-name"), email: $("#su-email"), pw: $("#su-pw"), pw2: $("#su-pw2") };
+  const agreeBoxes = $$("[data-agree]");
+  const agreeAll = $("#agree-all");
+  const STRENGTH = [["", ""], ["#e11d48", "약해요"], ["#f59e0b", "보통이에요"], ["#22c55e", "안전해요"], ["#16a34a", "아주 안전해요"]];
+
+  function pwScore(v) {
+    if (v.length < 8 || !/[a-zA-Z]/.test(v) || !/\d/.test(v)) return v ? 1 : 0;
+    return 2 + (v.length >= 12) + /[^a-zA-Z0-9]/.test(v);
+  }
+
+  function setHint(el, text, state) { el.textContent = text; el.className = `hint ${state ?? ""}`; }
+
+  function validateSignup() {
+    const emailOk = isEmail(su.email.value);
+    const score = pwScore(su.pw.value);
+    const pwOk = score >= 2;
+    const matchOk = pwOk && su.pw.value === su.pw2.value;
+
+    if (su.email.value) setHint($("#su-email-hint"), emailOk ? "사용할 수 있는 형식이에요" : "이메일 형식을 확인해 주세요", emailOk ? "ok" : "bad");
+    else setHint($("#su-email-hint"), "");
+
+    $$(".strength i").forEach((bar, i) => (bar.style.background = i < score ? STRENGTH[score][0] : ""));
+    if (!su.pw.value) setHint($("#su-pw-hint"), "8자 이상, 영문과 숫자를 함께 써 주세요");
+    else if (!pwOk) setHint($("#su-pw-hint"), "8자 이상, 영문과 숫자를 함께 써 주세요", "bad");
+    else setHint($("#su-pw-hint"), `비밀번호가 ${STRENGTH[score][1]}`, "ok");
+
+    if (su.pw2.value) setHint($("#su-pw2-hint"), matchOk ? "비밀번호가 일치해요" : "비밀번호가 일치하지 않아요", matchOk ? "ok" : "bad");
+    else setHint($("#su-pw2-hint"), "");
+
+    const requiredAgreed = agreeBoxes.filter((b) => b.required).every((b) => b.checked);
+    agreeAll.checked = agreeBoxes.every((b) => b.checked);
+    $("#signup-submit").disabled = !(su.name.value.trim() && emailOk && matchOk && requiredAgreed);
+  }
+
+  Object.values(su).forEach((el) => el.addEventListener("input", validateSignup));
+  agreeBoxes.forEach((b) => b.addEventListener("change", validateSignup));
+  agreeAll.addEventListener("change", () => { agreeBoxes.forEach((b) => (b.checked = agreeAll.checked)); validateSignup(); });
+  $("#signup-form").addEventListener("submit", (e) => { e.preventDefault(); if (!$("#signup-submit").disabled) go(); });
+</script>
+</body>
+</html>
