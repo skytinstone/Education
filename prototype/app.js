@@ -5,7 +5,17 @@
   const $ = (s, el = document) => el.querySelector(s);
   const $$ = (s, el = document) => [...el.querySelectorAll(s)];
   const esc = (s = "") => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
-  const icons = () => lucide.createIcons();
+  // 아이콘과 수식을 함께 그린다. 수식은 data-math 가 붙은 요소의 $…$ 만 렌더링 (대화 글의 '$5' 같은 건 건드리지 않음)
+  const MATH_OPTS = { delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }], throwOnError: false };
+  const icons = () => {
+    lucide.createIcons();
+    if (window.renderMathInElement) $$("[data-math]").forEach((el) => renderMathInElement(el, MATH_OPTS));
+  };
+  // 검색 결과처럼 짧은 글로 보여 줄 때: LaTeX 명령을 걷어 낸 평문
+  const plainMath = (s = "") => s.replace(/\$+([^$]*)\$+/g, (_, m) => m
+    .replace(/\\(displaystyle|mathrm|dfrac|frac|left|right|text)\b/g, " ").replace(/\\[,;!]/g, " ")
+    .replace(/\\int/g, "∫").replace(/\\log/g, "log").replace(/\\times/g, "×").replace(/\\cap/g, "∩").replace(/\\mid/g, "|")
+    .replace(/[{}\\]/g, "").replace(/\s+/g, " ").trim());
   const DAY = 864e5;
 
   const DOMAINS = ["math", "physics", "chemistry", "biology", "earth_science"];
@@ -48,6 +58,61 @@
   const home = $("#home");
   const contentEl = $(".content");
 
+
+  // ================= 프로필 사진: 사진 · Eureka 캐릭터 · 이름 첫 글자 =================
+  // 캐릭터는 브랜드 색 배경 + 동그란 얼굴(눈·입 조합) + 소품 배지(앱 아이콘과 같은 lucide 아이콘)로 그린다
+  const PRESETS = {
+    spark: { name: "반짝", a: "#ff7a59", b: "#ffd36e", icon: "sparkles", eyes: "happy", mouth: "grin" },
+    cap: { name: "합격", a: "#4f6bff", b: "#9db0ff", icon: "graduation-cap", eyes: "dot", mouth: "grin" },
+    glasses: { name: "꼼꼼", a: "#8b5cf6", b: "#cbb4ff", icon: "glasses", eyes: "glasses", mouth: "smile" },
+    flask: { name: "실험", a: "#14b8a6", b: "#86ead9", icon: "flask-conical", eyes: "wink", mouth: "smile" },
+    atom: { name: "원자", a: "#0ea5e9", b: "#9fdcff", icon: "atom", eyes: "dot", mouth: "o" },
+    bulb: { name: "유레카", a: "#f59e0b", b: "#ffe28a", icon: "lightbulb", eyes: "happy", mouth: "o" },
+    book: { name: "독서", a: "#22c55e", b: "#a7ecbe", icon: "book-open", eyes: "dot", mouth: "smile" },
+    pencil: { name: "필기", a: "#ec4899", b: "#ffb6da", icon: "pencil", eyes: "wink", mouth: "grin" },
+    star: { name: "별", a: "#eab308", b: "#fff0a0", icon: "star", eyes: "happy", mouth: "smile" },
+    rocket: { name: "도약", a: "#6366f1", b: "#c9cbff", icon: "rocket", eyes: "dot", mouth: "o" },
+    headphones: { name: "집중", a: "#06b6d4", b: "#a5eefa", icon: "headphones", eyes: "happy", mouth: "smile" },
+    crown: { name: "1등", a: "#f43f5e", b: "#ffb8c4", icon: "crown", eyes: "dot", mouth: "grin" },
+  };
+  const INK = "#1f2937";
+  const EYES = {
+    dot: `<circle cx="25" cy="34" r="2.7" fill="${INK}"/><circle cx="39" cy="34" r="2.7" fill="${INK}"/>`,
+    happy: `<path d="M21.5 35 q3.5 -4 7 0 M35.5 35 q3.5 -4 7 0" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`,
+    wink: `<circle cx="25" cy="34" r="2.7" fill="${INK}"/><path d="M35.5 35 q3.5 -4 7 0" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`,
+    glasses: `<circle cx="25" cy="34" r="5.2" fill="#fff" stroke="${INK}" stroke-width="1.8"/><circle cx="39" cy="34" r="5.2" fill="#fff" stroke="${INK}" stroke-width="1.8"/>
+      <path d="M30.2 34 h3.6" stroke="${INK}" stroke-width="1.8"/><circle cx="25" cy="34.5" r="1.8" fill="${INK}"/><circle cx="39" cy="34.5" r="1.8" fill="${INK}"/>`,
+  };
+  const MOUTH = {
+    smile: `<path d="M27.5 41.5 q4.5 4.5 9 0" stroke="${INK}" stroke-width="2.2" fill="none" stroke-linecap="round"/>`,
+    grin: `<path d="M27 40.5 q5 7 10 0 z" fill="${INK}"/><path d="M29.5 43.6 q2.5 1.6 5 0" stroke="#ff8fa8" stroke-width="1.6" fill="none" stroke-linecap="round"/>`,
+    o: `<ellipse cx="32" cy="43" rx="2.4" ry="2.8" fill="${INK}"/>`,
+  };
+  const pascal = (k) => k.replace(/(^|-)(\w)/g, (_, __, c) => c.toUpperCase());
+  function iconPaths(name) {
+    const node = lucide.icons?.[pascal(name)];
+    const children = Array.isArray(node?.[2]) ? node[2] : Array.isArray(node) ? node : [];
+    return children.map(([tag, attrs]) => `<${tag} ${Object.entries(attrs).map(([k, v]) => `${k}="${v}"`).join(" ")}/>`).join("");
+  }
+  function presetSVG(key) {
+    const p = PRESETS[key] ?? PRESETS.spark;
+    return `<svg viewBox="0 0 64 64" class="avatar-svg" aria-hidden="true">
+      <defs><linearGradient id="avg-${key}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${p.b}"/><stop offset="1" stop-color="${p.a}"/></linearGradient></defs>
+      <circle cx="32" cy="32" r="32" fill="url(#avg-${key})"/>
+      <ellipse cx="32" cy="38" rx="20.5" ry="18.5" fill="#fff"/>
+      <ellipse cx="21" cy="41" rx="3.2" ry="2" fill="#ffadc2" opacity=".75"/><ellipse cx="43" cy="41" rx="3.2" ry="2" fill="#ffadc2" opacity=".75"/>
+      ${EYES[p.eyes]}${MOUTH[p.mouth]}
+      <circle cx="49" cy="15" r="11" fill="#fff" opacity=".96"/>
+      <g transform="translate(42 8) scale(.58)" fill="none" stroke="${p.a}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${iconPaths(p.icon)}</g>
+    </svg>`;
+  }
+  // 사용자 프로필 사진 마크업 (크기는 CSS 의 .avatar 가 정한다)
+  function avatarInner(user) {
+    if (user.avatarType === "photo" && user.avatarUrl) return `<img src="${esc(user.avatarUrl)}" alt="" />`;
+    if (user.avatarType === "preset") return presetSVG(user.avatarPreset);
+    return esc((user.name || "?").slice(0, 1));
+  }
+
   // ================= 라우팅 =================
   // #/  #/?project=id  #/chat/id  #/project/id  #/notes  #/library[/cards|/saved|/concept/id]
   function route() {
@@ -64,6 +129,7 @@
   }
 
   function render() {
+    if (!Store.state) return; // 서버 데이터를 받기 전
     closeOverlays();
     const { parts, params } = route();
     const [page, a, b] = parts;
@@ -76,6 +142,7 @@
     else if (page === "project") renderProject(a);
     else if (page === "notes") renderNotes();
     else if (page === "library") renderLibrary(a ?? "concepts", b);
+    else if (page === "settings") renderSettings();
     else return go("/");
     renderSidebar();
     if (page !== "chat") contentEl.scrollTop = 0;
@@ -84,11 +151,14 @@
   }
   window.addEventListener("hashchange", render);
   Store.subscribe(() => {
-    // 보고 있던 대화·프로젝트가 삭제되면 홈으로
     const [page, id] = route().parts;
+    // 새 대화가 서버 id 를 받으면 주소만 바꾼다
+    if (page === "chat" && !Store.session(id) && Store.resolveId(id) !== id) return location.replace(`#/chat/${Store.resolveId(id)}`);
+    // 보고 있던 대화·프로젝트가 삭제되면 홈으로
     if ((page === "chat" && !Store.session(id)) || (page === "project" && !Store.project(id))) return go("/");
     renderSidebar();
   });
+  Store.onError((msg) => toast(`저장하지 못했어요: ${msg}`));
 
   // ================= 사이드바 =================
   function renderSidebar() {
@@ -142,7 +212,9 @@
     $$("#projects [data-key], #chats [data-key]").forEach((el) => el.classList.toggle("active", el.dataset.key === key));
 
     $("#profile-name").textContent = st.user.name;
-    $("#profile-avatar").textContent = st.user.name.slice(0, 1);
+    const av = $("#profile-avatar");
+    av.innerHTML = avatarInner(st.user);
+    av.classList.toggle("has-image", st.user.avatarType !== "initial" && !!st.user.avatarType);
     $("#profile-sub").textContent = `오늘 ${Store.todayCount()} / ${st.user.dailyGoal}문제 · 🔥 ${Store.streak()}일 연속`;
     icons();
   }
@@ -157,7 +229,7 @@
       else chatMenu(more, more.dataset.id, close);
     }
   });
-  $("#new-project").addEventListener("click", () => projectModal());
+  $("#new-project").addEventListener("click", () => projectWizard());
   $("#nav-search").addEventListener("click", openPalette);
   $("#profile").addEventListener("click", (e) => profileMenu(e.currentTarget));
 
@@ -192,21 +264,13 @@
   function profileMenu(anchor) {
     openMenu(anchor, [
       { label: Store.state.user.name, header: true },
-      { icon: "user", label: "이름 바꾸기", run: () => formModal({
-        title: "이름 바꾸기", submit: "저장",
-        body: `<div class="field"><label for="f-name">이름</label><input id="f-name" value="${esc(Store.state.user.name)}" maxlength="20" /></div>`,
-        onSubmit: (f) => { const v = $("#f-name", f).value.trim(); if (!v) return invalid($("#f-name", f), "이름을 입력해 주세요"); Store.updateUser({ name: v }); },
-      }) },
-      { icon: "target", label: `하루 목표 (${Store.state.user.dailyGoal}문제)`, run: () => formModal({
-        title: "하루 목표", submit: "저장",
-        body: `<div class="field"><label for="f-goal">하루에 풀 문제 수</label><input id="f-goal" type="number" min="1" max="200" value="${Store.state.user.dailyGoal}" /></div>`,
-        onSubmit: (f) => { const v = Number($("#f-goal", f).value); if (!(v >= 1 && v <= 200)) return invalid($("#f-goal", f), "1에서 200 사이로 입력해 주세요"); Store.updateUser({ dailyGoal: v }); },
-      }) },
-      { icon: "rotate-ccw", label: "데모 데이터 초기화", run: () => confirmModal({
+      { icon: "user-round-cog", label: "계정 설정", run: () => go("/settings") },
+      Store.mode === "local" && { icon: "rotate-ccw", label: "데모 데이터 초기화", run: () => confirmModal({
         title: "데모 데이터를 초기화할까요?", text: "직접 만든 프로젝트, 대화, 풀이 기록이 모두 지워지고 처음 샘플 데이터로 돌아가요.", action: "초기화",
         run: () => { Store.reset(); go("/"); render(); toast("처음 상태로 되돌렸어요"); },
       }) },
       "-",
+      Store.mode === "api" && { label: Store.state.user.email ?? "", header: true },
       { icon: "log-out", label: "로그아웃", run: () => {
         try { localStorage.removeItem("eureka.token"); localStorage.removeItem("eureka.user"); } catch { /* 저장소 없음 */ }
         location.href = "login.html";
@@ -298,11 +362,9 @@
     e.preventDefault();
     const text = prompt.value.trim();
     if (!text) return;
-    const sid = Store.createSession({ projectId: homeProjectId, text });
     prompt.value = "";
     send.disabled = true;
-    replyLater(sid);
-    go(`/chat/${sid}`);
+    ask({ projectId: homeProjectId, text });
   });
 
   // 아이콘 타일: 메뉴로 이동하거나 예시 요청을 입력창에 채운다
@@ -321,50 +383,41 @@
   $("#banner-concept").addEventListener("click", (e) => { location.hash = e.currentTarget.dataset.href || "#/library"; });
 
   // ================= 대화 =================
-  const pending = new Set(); // 답변 대기 중인 대화
-
-  // AI 연결 전: 요청 문장에서 과목·문항 수를 읽어 문제 은행에서 샘플 문제를 고른다
-  const KEYWORDS = [
-    ["math", /수학|미적|적분|미분|로그|수열|확률|함수|모의고사/],
-    ["physics", /물리|운동|역학|가속|운동량|속력/],
-    ["chemistry", /화학|몰|중화|산화|염기|분자/],
-    ["biology", /생명|생물|염색체|유전|세포/],
-    ["earth_science", /지구|별|H-R|반감기|지층|은하/],
-  ];
-  function pickProblems(text, projectId) {
-    let domain = projectDomain(Store.project(projectId));
-    for (const [d, re] of KEYWORDS) if (re.test(text)) { domain = d; break; }
-    const pool = Store.bank.filter((p) => !domain || p.domain === domain);
-    const n = Math.min(Number(text.match(/(\d+)\s*(문제|문항|개)/)?.[1]) || 2, 3, pool.length);
-    return [...pool].sort(() => Math.random() - 0.5).slice(0, n).map((p) => p.id);
+  // 질문을 보내고 답을 기다린다. 새 대화면 바로 그 대화로 이동하고, 서버가 진짜 id 를 주면 주소를 바꾼다
+  function ask({ sessionId = null, projectId = null, text }) {
+    const { id, done } = Store.sendMessage({ sessionId, projectId, text });
+    if (!sessionId) go(`/chat/${id}`);
+    const refresh = (realId = id) => {
+      if (navKey() !== `chat:${id}`) return;
+      if (realId !== id) location.replace(`#/chat/${realId}`);
+      else renderChat(id);
+    };
+    done.then(refresh, () => refresh());
+    return id;
   }
 
-  function replyLater(sid) {
-    pending.add(sid);
-    setTimeout(() => {
-      const s = Store.session(sid);
-      pending.delete(sid);
-      if (!s) return;
-      const ask = s.messages.filter((m) => m.role === "user").at(-1).text;
-      const ids = pickProblems(ask, s.projectId);
-      Store.addMessage(sid, {
-        role: "ai",
-        text: `AI 연결 전이라 문제 은행의 샘플 문제 ${ids.length}개를 보여드려요. 틀린 문제는 오답노트에 자동으로 저장돼요.`,
-        problemIds: ids,
-      });
-      if (navKey() === `chat:${sid}`) renderChat(sid, { keepScroll: false });
-    }, 800);
-  }
+  const isShort = (p) => p.problemType === "short_answer" || !p.choices;
+  const conceptLabel = (p) => {
+    const c = concept(p.conceptIds?.[0]);
+    return c ? `${subjectOf(c.id).name} · ${c.name}` : DOMAIN_NAME[p.domain] ?? "";
+  };
 
   function problemHTML(pid, { attempt = null, index = null } = {}) {
     const p = Store.problem(pid);
-    const c = concept(p.conceptIds[0]);
+    if (!p) return "";
     const saved = Store.state.savedProblemIds.includes(pid);
-    const choices = p.choices.map((ch, i) => {
-      const n = String(i + 1);
-      const cls = !attempt ? "" : n === p.answer ? "correct" : n === attempt.answer ? "wrong" : "dim";
-      return `<button class="choice ${cls}" data-choice="${n}" ${attempt ? "disabled" : ""}><span class="n">${n}</span>${esc(ch)}</button>`;
-    }).join("");
+    let answerArea;
+    if (isShort(p)) {
+      answerArea = attempt
+        ? `<div class="short-result ${attempt.correct ? "ok" : "bad"}"><span>내 답 <b>${esc(attempt.answer)}</b></span>${p.answer ? `<span>정답 <b>${esc(p.answer)}</b></span>` : ""}</div>`
+        : `<div class="short-form" data-short><input name="answer" inputmode="numeric" placeholder="답을 정수로 입력하세요" autocomplete="off" maxlength="10" aria-label="답" /><button class="btn-primary" type="button" data-short-submit>제출</button></div>`;
+    } else {
+      answerArea = `<div class="choices">${p.choices.map((ch, i) => {
+        const n = String(i + 1);
+        const cls = !attempt ? "" : n === p.answer ? "correct" : n === attempt.answer ? "wrong" : "dim";
+        return `<button class="choice ${cls}" data-choice="${n}" ${attempt ? "disabled" : ""}><span class="n">${n}</span><span data-math>${esc(ch)}</span></button>`;
+      }).join("")}</div>`;
+    }
     let result = "";
     if (attempt) {
       const note = !attempt.correct && Store.state.wrongNotes.find((w) => w.problemId === pid && !w.resolvedAt);
@@ -372,20 +425,47 @@
         <div class="result ${attempt.correct ? "ok" : "bad"}">
           <i data-lucide="${attempt.correct ? "circle-check" : "circle-x"}"></i>${attempt.correct ? "정답이에요!" : "아쉬워요. 오답노트에 저장했어요"}
         </div>
-        <div class="solution"><b>해설</b>${esc(p.solution)}</div>
+        ${p.solution ? `<div class="solution"><b>해설</b><span data-math>${esc(p.solution)}</span></div>` : ""}
         ${note ? whyHTML(note) : ""}`;
     }
     return `
       <article class="problem" data-problem="${pid}" style="--c:${COLOR[p.domain]}">
         <div class="problem-meta">
-          <span class="kind"><span class="sw"></span>${esc(subjectOf(c.id).name)} · ${esc(c.name)}</span>
+          <span class="kind"><span class="sw"></span>${esc(conceptLabel(p))}${isShort(p) ? " · 단답형" : ""}</span>
           <span class="stars" title="난이도 ${p.difficulty}">${"★".repeat(p.difficulty)}${"☆".repeat(5 - p.difficulty)}</span>
           <button class="icon-btn save ${saved ? "on" : ""}" data-save="${pid}" title="${saved ? "저장 취소" : "저장"}"><i data-lucide="bookmark"></i></button>
         </div>
-        <p class="stem">${index ? `<b>${index}.</b> ` : ""}${esc(p.stem)}</p>
-        <div class="choices">${choices}</div>
+        <p class="stem" data-math>${index ? `<b>${index}.</b> ` : ""}${esc(p.stem)}</p>
+        ${answerArea}
         ${result}
       </article>`;
+  }
+
+  // 보기 클릭 또는 단답형 제출 → 채점. 서버 결과를 받은 뒤 redraw(문제 카드, 풀이) 로 다시 그린다
+  // (단답형은 form 이 아니라 입력칸+버튼 — 모달 자체가 form 이라 form 을 겹칠 수 없음)
+  async function handleAnswer(e, ctx, redraw) {
+    let box, answer;
+    const choice = e.target.closest?.("[data-choice]");
+    const shortBtn = e.target.closest?.("[data-short-submit]");
+    if (choice) {
+      box = choice.closest("[data-problem]");
+      answer = choice.dataset.choice;
+    } else if (shortBtn) {
+      box = shortBtn.closest("[data-problem]");
+      answer = $("[name=answer]", box).value.trim();
+      if (!/^-?\d[\d,]*$/.test(answer)) { toast("답을 정수로 입력해 주세요"); return true; }
+    } else return false;
+    if (box.classList.contains("busy")) return true;
+    box.classList.add("busy");
+    try {
+      const r = await Store.answer({ problemId: box.dataset.problem, answer, ...ctx });
+      redraw(box, { answer, correct: r.correct });
+      if (r.resolved) toast("오답을 극복했어요! 🎉");
+    } catch (err) {
+      toast(err.message);
+      box.classList.remove("busy");
+    }
+    return true;
   }
 
   const whyHTML = (note) => `
@@ -413,6 +493,9 @@
     return false;
   }
 
+  // 문제 카드 하나만 다시 그리기 (라이브러리·다시 풀기 등)
+  const redrawCard = (box, attempt) => { box.outerHTML = problemHTML(box.dataset.problem, { attempt }); icons(); };
+
   function renderChat(id, { keepScroll = false } = {}) {
     const s = Store.session(id);
     if (!s) { toast("대화를 찾을 수 없어요"); return go("/"); }
@@ -433,7 +516,7 @@
         </div>
         <div class="thread">
           ${msgs}
-          ${pending.has(id) ? '<div class="msg ai"><span class="ai-avatar"></span><div class="typing"><i></i><i></i><i></i></div></div>' : ""}
+          ${Store.isPending(id) ? `<div class="msg ai"><span class="ai-avatar"></span><div class="ai-body"><div class="typing"><i></i><i></i><i></i></div>${Store.mode === "api" ? '<p class="mini">문제를 만들고 다른 AI가 검증하고 있어요. 1분 정도 걸릴 수 있어요</p>' : ""}</div></div>` : ""}
         </div>
         <form class="composer glass chat-composer" id="chat-form">
           <input id="chat-input" placeholder="이어서 물어보세요" autocomplete="off" />
@@ -448,22 +531,16 @@
       e.preventDefault();
       const text = input.value.trim();
       if (!text) return;
-      Store.addMessage(id, { role: "user", text });
-      replyLater(id);
+      ask({ sessionId: id, text });
       renderChat(id);
       $("#chat-input").focus();
     });
     $("#chat-more").addEventListener("click", (e) => chatMenu(e.currentTarget, id));
 
-    view.onclick = (e) => {
-      if (handleProblemExtras(e)) return;
-      const choice = e.target.closest("[data-choice]");
-      if (!choice) return;
-      const pid = choice.closest("[data-problem]").dataset.problem;
-      const { correct } = Store.answer({ problemId: pid, answer: choice.dataset.choice, projectId: s.projectId, sessionId: s.id });
-      renderChat(id, { keepScroll: true });
-      if (correct && Store.state.wrongNotes.some((w) => w.problemId === pid && w.resolvedAt > Date.now() - 1000)) toast("오답을 극복했어요! 🎉");
-    };
+    const ctx = { projectId: s.projectId, sessionId: s.id };
+    const redraw = () => renderChat(id, { keepScroll: true });
+    view.onclick = (e) => { if (!handleProblemExtras(e)) handleAnswer(e, ctx, redraw); };
+
 
     contentEl.scrollTop = keepScroll ? scroll : contentEl.scrollHeight;
   }
@@ -485,7 +562,7 @@
       <div class="page-head">
         <div>
           <h1><i data-lucide="folder" style="color:${COLOR[d]}"></i>${esc(p.name)}</h1>
-          <p>${esc(concept(p.subjectId).name)}${p.goal ? ` · 목표 ${esc(p.goal)}` : ""}${p.examDate ? ` · 시험일 ${p.examDate}` : ""}</p>
+          <p>${esc(concept(p.subjectId).name)} · ${QTYPE[p.questionType ?? "multiple_choice"]}${p.goal ? ` · 목표 ${esc(p.goal)}` : ""}${p.examDate ? ` · 시험일 ${p.examDate}` : ""}</p>
         </div>
         <div class="page-actions">
           <a class="btn-primary" href="#/?project=${id}" style="text-decoration:none"><i data-lucide="square-pen"></i>이 프로젝트에서 새 학습</a>
@@ -499,6 +576,24 @@
         <div class="stat"><b>${pct(acc)}</b><span>정답률</span></div>
         <a class="stat" href="#/notes?project=${id}" style="text-decoration:none;color:inherit"><b style="color:${open ? "var(--warn)" : "inherit"}">${open}</b><span>남은 오답 →</span></a>
       </div>
+
+      <section class="glass-card past-panel" style="--c:${COLOR[d]}">
+        <div class="past-head">
+          <h3><i data-lucide="file-stack"></i>기출 기반 문제 만들기</h3>
+          ${Store.mode === "api" ? '<button class="btn-ghost glassy" id="add-material"><i data-lucide="upload"></i>기출 올리기</button>' : ""}
+        </div>
+        ${Store.mode === "api" ? `
+          <div id="materials" class="materials"><p class="mini">불러오는 중…</p></div>
+          <div class="gen-row">
+            <span>기출보다</span>
+            <div class="seg" id="gen-level">${[["easier", "쉽게"], ["same", "비슷하게"], ["harder", "어렵게"]].map(([k, v]) => `<button type="button" data-level="${k}" class="${k === "same" ? "on" : ""}">${v}</button>`).join("")}</div>
+            <select class="select" id="gen-count" aria-label="문항 수">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === 3 ? "selected" : ""}>${n}문제</option>`).join("")}</select>
+            <button class="btn-primary" id="gen-go"><i data-lucide="sparkles"></i>문제 만들기</button>
+          </div>
+          <p class="mini" id="gen-status">기출이 없으면 프로젝트 범위와 약점을 바탕으로 만들어요. 만든 문제는 다른 AI가 다시 풀어 검증해요</p>
+          <div id="past-list"></div>`
+          : '<div class="ai-slot"><i data-lucide="info"></i><div>기출 업로드와 AI 문제 생성은 로그인해서 서버 화면(localhost:8000/app)으로 열었을 때 쓸 수 있어요.</div></div>'}
+      </section>
 
       <div class="cols">
         <section class="panel">
@@ -522,6 +617,79 @@
           : '<p class="mini">아직 대화가 없어요. "이 프로젝트에서 새 학습"으로 시작해 보세요</p>'}
       </section>`;
     $("#project-more").addEventListener("click", (e) => projectMenu(e.currentTarget, id));
+    if (Store.mode === "api") bindPastPanel(id);
+  }
+
+  // 기출 자료 목록 (분석이 끝날 때까지 몇 초마다 새로고침) + 기출 기반 생성
+  const MATERIAL_STATUS = { uploaded: ["분석 대기", "clock"], extracting: ["AI가 읽는 중", "loader"], ready: ["완료", "circle-check"], failed: ["실패", "circle-alert"] };
+  function bindPastPanel(id) {
+    const here = () => navKey() === `project:${id}`;
+    async function loadMaterials() {
+      if (!here()) return;
+      let list;
+      try { list = await Store.listMaterials(id); } catch (e) { $("#materials").innerHTML = `<p class="mini">${esc(e.message)}</p>`; return; }
+      if (!here()) return;
+      $("#materials").innerHTML = list.length ? list.map((m) => {
+        const [label, icon] = MATERIAL_STATUS[m.status];
+        return `
+          <div class="material ${m.status}">
+            <i data-lucide="${m.content_type === "application/pdf" ? "file-text" : "image"}"></i>
+            <div class="material-name"><b>${esc(m.filename)}</b><small>${fmtSize(m.size_bytes)} · ${relTime(Date.parse(m.created_at))}</small></div>
+            <span class="status-pill ${m.status}"><i data-lucide="${icon}"></i>${label}${m.status === "ready" ? ` · ${m.problem_count}문제` : ""}</span>
+            <button class="icon-btn" data-del-material="${m.id}" aria-label="삭제" title="삭제"><i data-lucide="trash-2"></i></button>
+            ${m.error ? `<p class="material-error">${esc(m.error)}</p>` : ""}
+          </div>`;
+      }).join("") : '<p class="mini">아직 올린 기출이 없어요. 기출을 올리면 그 시험의 결을 따라 문제를 만들어요</p>';
+      icons();
+      if (list.some((m) => m.status === "uploaded" || m.status === "extracting")) setTimeout(loadMaterials, 4000);
+      else loadPast();
+    }
+    async function loadPast() {
+      const past = await Store.pastProblems(id).catch(() => []);
+      if (!here() || !past.length) { if (here()) $("#past-list").innerHTML = ""; return; }
+      $("#past-list").innerHTML = `
+        <details class="past-preview"><summary><i data-lucide="chevron-right"></i>AI가 읽은 기출 문제 ${past.length}개</summary>
+          ${past.map((q) => `
+            <div class="past-item">
+              <div class="past-meta">${q.number ? `<b>${q.number}번</b>` : ""}<span>${esc(conceptLabel(q.concept_ids ? { ...q, conceptIds: q.concept_ids } : q))}</span>
+                ${q.has_answer ? '<span class="pill" style="--c:var(--ok)">정답 있음</span>' : '<span class="pill">정답 없음</span>'}
+                ${q.needs_figure ? '<span class="pill" style="--c:var(--warn)">그림 필요</span>' : ""}</div>
+              <p class="stem" data-math>${esc(q.stem)}</p>
+              ${q.choices ? `<ol class="past-choices">${q.choices.map((c) => `<li data-math>${esc(c)}</li>`).join("")}</ol>` : ""}
+            </div>`).join("")}
+        </details>`;
+      icons();
+    }
+    $("#add-material").addEventListener("click", () => uploadSheet(id, loadMaterials));
+    $("#gen-level").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-level]");
+      if (b) $$("#gen-level [data-level]").forEach((x) => x.classList.toggle("on", x === b));
+    });
+    $("#materials").addEventListener("click", (e) => {
+      const del = e.target.closest("[data-del-material]");
+      if (del) confirmModal({
+        title: "올린 기출을 삭제할까요?", text: "원본 파일과 AI가 읽어 둔 기출 문제가 삭제돼요. 그것으로 만든 문제와 풀이 기록은 남아요.",
+        run: async () => { try { await Store.deleteMaterial(del.dataset.delMaterial); toast("삭제했어요"); } catch (err) { toast(err.message); } loadMaterials(); },
+      });
+    });
+    $("#gen-go").addEventListener("click", async (e) => {
+      const btn = e.currentTarget;
+      const level = $("#gen-level .on").dataset.level;
+      const count = Number($("#gen-count").value);
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader" class="spin"></i>만드는 중…';
+      $("#gen-status").textContent = `문제 ${count}개를 만들고 다른 AI가 검증하고 있어요. 1~2분 정도 걸려요`;
+      icons();
+      try {
+        const sid = await Store.generateFromPast(id, { level, count });
+        toast("새 문제를 만들었어요");
+        go(`/chat/${sid}`);
+      } catch (err) {
+        toast(err.message);
+        if (here()) { btn.disabled = false; btn.innerHTML = '<i data-lucide="sparkles"></i>문제 만들기'; $("#gen-status").textContent = err.message; icons(); }
+      }
+    });
+    loadMaterials();
   }
 
   // ================= 오답노트 =================
@@ -540,7 +708,8 @@
           <p>${proj ? `${esc(proj.name)}의 오답 · <a href="#/notes" style="color:inherit">전체 보기</a>` : "틀린 문제를 다시 풀어 맞히면 극복으로 표시돼요"}</p>
         </div>
       </div>
-      <div class="toolbar">
+      <div class="note-stats" id="note-stats"></div>
+      <div class="toolbar glass-bar">
         <div class="seg" id="note-domains">
           <button data-domain="all">전체</button>
           ${DOMAINS.map((d) => `<button data-domain="${d}" style="--c:${COLOR[d]}"><span class="sw"></span>${DOMAIN_NAME[d]}</button>`).join("")}
@@ -572,11 +741,27 @@
     view.onchange = (e) => {
       if (e.target.id === "note-error") { noteFilter.error = e.target.value; renderNoteList(); }
       if (e.target.id === "note-open") { noteFilter.openOnly = e.target.checked; renderNoteList(); }
-      if (e.target.dataset.setError) Store.setErrorType(e.target.dataset.setError, e.target.value);
+      if (e.target.dataset.setError) { Store.setErrorType(e.target.dataset.setError, e.target.value); renderNoteStats(); }
     };
   }
 
+  // 요약: 남은 오답 · 이번 주 극복 · 가장 많이 틀린 이유
+  function renderNoteStats() {
+    const notes = Store.state.wrongNotes.filter((w) => !noteFilter.project || w.projectId === noteFilter.project);
+    const open = notes.filter((w) => !w.resolvedAt);
+    const week = notes.filter((w) => w.resolvedAt && w.resolvedAt > Date.now() - 7 * DAY).length;
+    const counts = {};
+    open.filter((w) => w.errorType !== "unknown").forEach((w) => (counts[w.errorType] = (counts[w.errorType] ?? 0) + 1));
+    const [topType, topN] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] ?? [];
+    $("#note-stats").innerHTML = `
+      <div class="glass-tile"><span><i data-lucide="target"></i>남은 오답</span><b>${open.length}<small>문제</small></b></div>
+      <div class="glass-tile"><span><i data-lucide="trophy"></i>이번 주 극복</span><b>${week}<small>문제</small></b></div>
+      <div class="glass-tile"><span><i data-lucide="search-check"></i>가장 많이 틀린 이유</span>
+        <b class="text">${topType ? `${ERROR_TYPES[topType]}<small>${topN}문제</small>` : "<small>아직 분류 전이에요</small>"}</b></div>`;
+  }
+
   function renderNoteList() {
+    renderNoteStats();
     $$("#note-domains [data-domain]").forEach((b) => b.classList.toggle("on", b.dataset.domain === noteFilter.domain));
     const list = Store.state.wrongNotes
       .filter((w) => noteFilter.domain === "all" || Store.problem(w.problemId).domain === noteFilter.domain)
@@ -587,28 +772,39 @@
     $("#note-count").textContent = `${list.length}문제`;
     $("#note-list").innerHTML = list.length ? list.map((w) => {
       const p = Store.problem(w.problemId);
-      const c = concept(p.conceptIds[0]);
+      if (!p) return "";
+      const c = concept(p.conceptIds[0]) ?? { id: "", name: DOMAIN_NAME[p.domain] };
       return `
-        <article class="note ${w.resolvedAt ? "resolved" : ""}" style="--c:${COLOR[p.domain]}">
-          <div class="note-top">
-            <span class="kind"><span class="sw"></span>${esc(subjectOf(c.id).name)} · ${esc(c.name)}</span>
+        <article class="note glass-card ${w.resolvedAt ? "resolved" : ""}" style="--c:${COLOR[p.domain]}">
+          <header class="note-top">
+            <span class="subject-pill"><span class="sw"></span>${esc(subjectOf(c.id)?.name ?? DOMAIN_NAME[p.domain])}</span>
+            <a class="concept-link" href="#/library/concept/${c.id}">${esc(c.name)}</a>
+            <span class="stars" title="난이도 ${p.difficulty}">${"★".repeat(p.difficulty)}${"☆".repeat(5 - p.difficulty)}</span>
             ${w.resolvedAt ? '<span class="pill done-pill"><i data-lucide="check"></i>극복</span>' : ""}
             <time>${relTime(w.createdAt)}</time>
+          </header>
+          <div class="note-q">
+            <p class="stem" data-math>${esc(p.stem)}</p>
+            ${isShort(p) ? `<div class="note-short"><span class="pill">단답형</span>내 답 <b>${esc(w.answer || "–")}</b></div>` : `
+            <ol class="note-choices">
+              ${p.choices.map((ch, i) => `<li class="${String(i + 1) === w.answer ? "mine" : ""}"><span class="n">${i + 1}</span><span data-math>${esc(ch)}</span>${String(i + 1) === w.answer ? '<em>내 답</em>' : ""}</li>`).join("")}
+            </ol>`}
           </div>
-          <p class="stem">${esc(p.stem)}</p>
-          <p class="mine">내 답 ${w.answer || "–"}번 · 정답은 다시 풀어서 확인해요</p>
-          <div class="note-actions">
-            <button class="btn-primary" data-retry="${w.id}"><i data-lucide="rotate-ccw"></i>${w.resolvedAt ? "한 번 더 풀기" : "다시 풀기"}</button>
-            <a class="btn-ghost" href="#/library/concept/${c.id}" style="text-decoration:none;color:inherit"><i data-lucide="book-open"></i>개념 보기</a>
-            <button class="btn-ghost" disabled title="AI 연결 후 사용할 수 있어요" style="opacity:.5;cursor:default"><i data-lucide="sparkles"></i>변형 문제</button>
-            <select class="select" data-set-error="${w.id}" aria-label="틀린 이유">
-              ${Object.entries(ERROR_TYPES).map(([k, v]) => `<option value="${k}" ${w.errorType === k ? "selected" : ""}>${k === "unknown" ? "틀린 이유 선택" : v}</option>`).join("")}
-            </select>
-            <button class="icon-btn" data-del-note="${w.id}" title="삭제" style="margin-left:auto"><i data-lucide="trash-2"></i></button>
-          </div>
+          <footer class="note-foot">
+            <label class="why-select"><i data-lucide="tag"></i>
+              <select data-set-error="${w.id}" aria-label="틀린 이유">
+                ${Object.entries(ERROR_TYPES).map(([k, v]) => `<option value="${k}" ${w.errorType === k ? "selected" : ""}>${k === "unknown" ? "틀린 이유 고르기" : v}</option>`).join("")}
+              </select>
+            </label>
+            <div class="note-actions">
+              <button class="btn-ghost glassy" disabled title="AI 연결 후 사용할 수 있어요"><i data-lucide="sparkles"></i>변형 문제</button>
+              <button class="icon-btn glassy" data-del-note="${w.id}" title="삭제" aria-label="삭제"><i data-lucide="trash-2"></i></button>
+              <button class="btn-primary" data-retry="${w.id}"><i data-lucide="rotate-ccw"></i>${w.resolvedAt ? "한 번 더 풀기" : "다시 풀기"}</button>
+            </div>
+          </footer>
         </article>`;
     }).join("") : `
-      <div class="empty"><i data-lucide="party-popper"></i><b>${noteFilter.openOnly ? "남은 오답이 없어요" : "오답이 없어요"}</b>문제를 풀다 틀리면 여기에 모여요</div>`;
+      <div class="empty glass-card"><i data-lucide="party-popper"></i><b>${noteFilter.openOnly ? "남은 오답이 없어요" : "오답이 없어요"}</b>문제를 풀다 틀리면 여기에 모여요</div>`;
     icons();
   }
 
@@ -618,17 +814,12 @@
       title: "다시 풀기",
       body: problemHTML(w.problemId),
       onMount(sheet) {
-        sheet.addEventListener("click", (e) => {
-          if (handleProblemExtras(e)) return;
-          const choice = e.target.closest("[data-choice]");
-          if (!choice) return;
-          const { correct } = Store.answer({ problemId: w.problemId, answer: choice.dataset.choice, projectId: w.projectId });
-          const attempt = { answer: choice.dataset.choice, correct };
-          $(".modal-body", sheet).innerHTML = problemHTML(w.problemId, { attempt });
-          icons();
-          if (correct) toast("오답을 극복했어요! 🎉");
+        const ctx = { projectId: w.projectId };
+        const redraw = (box, attempt) => {
+          redrawCard(box, attempt);
           if (navKey() === "notes") renderNoteList();
-        });
+        };
+        sheet.addEventListener("click", (e) => { if (!handleProblemExtras(e)) handleAnswer(e, ctx, redraw); });
       },
     });
   }
@@ -716,16 +907,8 @@
         ${problems.length ? problems.map((p) => problemHTML(p.id)).join("") : '<p class="mini">문제 은행에 아직 이 개념의 문제가 없어요. AI 연결 후 바로 만들 수 있어요</p>'}
       </section>`;
 
-    view.onclick = (e) => {
-      if (handleProblemExtras(e)) return;
-      const choice = e.target.closest("[data-choice]");
-      if (!choice) return;
-      const box = choice.closest("[data-problem]");
-      const pid = box.dataset.problem;
-      const { correct } = Store.answer({ problemId: pid, answer: choice.dataset.choice });
-      box.outerHTML = problemHTML(pid, { attempt: { answer: choice.dataset.choice, correct } });
-      icons();
-    };
+    view.onclick = (e) => { if (!handleProblemExtras(e)) handleAnswer(e, {}, redrawCard); };
+
   }
 
   function renderDeck() {
@@ -792,14 +975,107 @@
         handleProblemExtras(e);
         return renderSaved();
       }
-      if (handleProblemExtras(e)) return;
-      const choice = e.target.closest("[data-choice]");
-      if (!choice) return;
-      const box = choice.closest("[data-problem]");
-      const { correct } = Store.answer({ problemId: box.dataset.problem, answer: choice.dataset.choice });
-      box.outerHTML = problemHTML(box.dataset.problem, { attempt: { answer: choice.dataset.choice, correct } });
-      icons();
+      if (!handleProblemExtras(e)) handleAnswer(e, {}, redrawCard);
     };
+
+  }
+
+
+  // ================= 계정 설정 =================
+  function renderSettings() {
+    const u = Store.state.user;
+    view.innerHTML = `
+      <div class="page-head"><div><h1><i data-lucide="user-round-cog"></i>계정 설정</h1><p>프로필 사진과 내 정보를 관리해요</p></div></div>
+
+      <section class="glass-card settings-card" style="--c:var(--accent)">
+        <h3><i data-lucide="image"></i>프로필 사진</h3>
+        <div class="avatar-current">
+          <span class="avatar xl ${u.avatarType && u.avatarType !== "initial" ? "has-image" : ""}" id="avatar-big">${avatarInner(u)}</span>
+          <div class="avatar-actions">
+            <label class="btn-primary"><i data-lucide="upload"></i>내 사진 올리기<input type="file" id="avatar-file" accept="image/png,image/jpeg,image/webp" hidden /></label>
+            <button class="btn-ghost glassy" data-avatar="initial"><i data-lucide="type"></i>이름 첫 글자</button>
+            <p class="mini">사진은 정사각형으로 맞춰 저장하고, 사진 속 위치·기기 정보는 지워요</p>
+          </div>
+        </div>
+        <p class="settings-sub">Eureka 캐릭터</p>
+        <div class="preset-grid">${Object.entries(PRESETS).map(([k, p]) => `
+          <button class="preset ${u.avatarType === "preset" && u.avatarPreset === k ? "on" : ""}" data-avatar="${k}" title="${p.name}">
+            <span class="avatar lg has-image">${presetSVG(k)}</span><small>${p.name}</small></button>`).join("")}</div>
+      </section>
+
+      <form class="glass-card settings-card" id="profile-form" novalidate style="--c:var(--accent)">
+        <h3><i data-lucide="id-card"></i>내 정보</h3>
+        <div class="two">
+          <div class="field"><label for="s-name">이름</label><input id="s-name" value="${esc(u.name)}" maxlength="40" autocomplete="name" /></div>
+          <div class="field"><label for="s-email">이메일</label><input id="s-email" value="${esc(u.email ?? "로컬 모드")}" disabled /></div>
+        </div>
+        <div class="two">
+          <div class="field"><label for="s-birth">생년월일 <small>· 선택</small></label><input id="s-birth" type="date" min="1900-01-01" max="${new Date().toISOString().slice(0, 10)}" value="${u.birthDate ?? ""}" autocomplete="bday" /></div>
+          <div class="field"><label for="s-goal">하루 목표</label><input id="s-goal" type="number" min="1" max="200" value="${u.dailyGoal}" /></div>
+        </div>
+        <div class="two">
+          <div class="field"><label for="s-school">학교 <small>· 선택</small></label><input id="s-school" value="${esc(u.school ?? "")}" maxlength="80" placeholder="예: 유레카고등학교" autocomplete="organization" /></div>
+          <div class="field"><label for="s-major">전공 · 계열 <small>· 선택</small></label><input id="s-major" value="${esc(u.major ?? "")}" maxlength="80" placeholder="예: 자연계열, 컴퓨터공학" /></div>
+        </div>
+        <div class="field"><label for="s-address">주소지 <small>· 선택 · 시·군·구까지만 적어도 충분해요</small></label>
+          <input id="s-address" value="${esc(u.address ?? "")}" maxlength="200" placeholder="예: 서울특별시 강남구" autocomplete="address-level2" /></div>
+        <div class="settings-foot"><button class="btn-primary" type="submit"><i data-lucide="check"></i>저장</button></div>
+      </form>
+
+      <section class="glass-card settings-card" style="--c:#94a3b8">
+        <h3><i data-lucide="shield"></i>계정</h3>
+        <div class="settings-row"><span>${Store.mode === "api" ? `${esc(u.email)}로 로그인했어요` : "로컬 모드 (브라우저에만 저장)"}</span>
+          <button class="btn-ghost glassy" id="s-logout"><i data-lucide="log-out"></i>로그아웃</button></div>
+      </section>`;
+
+    const refreshAvatar = () => {
+      const big = $("#avatar-big");
+      big.innerHTML = avatarInner(Store.state.user);
+      big.classList.toggle("has-image", Store.state.user.avatarType !== "initial");
+      $$(".preset").forEach((b) => b.classList.toggle("on", Store.state.user.avatarType === "preset" && Store.state.user.avatarPreset === b.dataset.avatar));
+    };
+    view.onclick = async (e) => {
+      const pick = e.target.closest("[data-avatar]");
+      if (!pick) return;
+      try {
+        await Store.setAvatar(pick.dataset.avatar);
+        refreshAvatar();
+        toast(pick.dataset.avatar === "initial" ? "이름 첫 글자로 바꿨어요" : `'${PRESETS[pick.dataset.avatar].name}' 캐릭터로 바꿨어요`);
+      } catch (err) { toast(err.message); }
+    };
+    $("#avatar-file").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) return toast("PNG·JPG·WEBP 사진만 올릴 수 있어요");
+      if (file.size > 5 * 1048576) return toast("사진은 5MB 까지 올릴 수 있어요");
+      try {
+        await Store.setAvatarPhoto(file);
+        refreshAvatar();
+        toast("프로필 사진을 바꿨어요");
+      } catch (err) { toast(err.message); }
+    });
+    $("#profile-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const f = e.currentTarget;
+      $$(".invalid", f).forEach((x) => x.classList.remove("invalid"));
+      const name = $("#s-name").value.trim();
+      const goal = Number($("#s-goal").value);
+      const birth = $("#s-birth").value;
+      if (!name) return invalid($("#s-name"), "이름을 입력해 주세요");
+      if (!(goal >= 1 && goal <= 200)) return invalid($("#s-goal"), "1에서 200 사이로 입력해 주세요");
+      if (birth && (birth > new Date().toISOString().slice(0, 10) || birth < "1900-01-01")) return invalid($("#s-birth"), "생년월일을 확인해 주세요");
+      try {
+        await Store.updateUser({ name, dailyGoal: goal, birthDate: birth || null, school: $("#s-school").value.trim(),
+          major: $("#s-major").value.trim(), address: $("#s-address").value.trim() });
+        toast("저장했어요");
+        renderSidebar();
+      } catch (err) { toast(err.message); }
+    });
+    $("#s-logout").addEventListener("click", () => {
+      try { localStorage.removeItem("eureka.token"); localStorage.removeItem("eureka.user"); } catch { /* 무시 */ }
+      location.href = "login.html";
+    });
   }
 
   // ================= 모달 =================
@@ -886,6 +1162,8 @@
         <div class="field"><label for="f-subject">과목</label>
           <select id="f-subject"><option value="" disabled ${p ? "" : "selected"}>과목을 고르세요</option>${subjectOptions}</select></div>
         <div class="field" id="f-units-wrap" hidden><label>학습 범위 <small>· 고르지 않으면 과목 전체</small></label><div class="chips" id="f-units"></div></div>
+        <div class="field"><label for="f-qtype">문제 형태</label>
+          <select id="f-qtype">${Object.entries(QTYPE).map(([k, v]) => `<option value="${k}" ${(p?.questionType ?? "multiple_choice") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
         <div class="two">
           <div class="field"><label for="f-goal">목표 <small>· 선택</small></label><input id="f-goal" placeholder="예: 1등급" value="${esc(p?.goal ?? "")}" maxlength="20" /></div>
           <div class="field"><label for="f-date">시험일 <small>· 선택</small></label><input id="f-date" type="date" value="${p?.examDate ?? ""}" /></div>
@@ -911,6 +1189,7 @@
           unitIds: $$("#f-units input:checked", f).map((i) => i.value),
           goal: $("#f-goal", f).value.trim(),
           examDate: $("#f-date", f).value || null,
+          questionType: $("#f-qtype", f).value,
         };
         if (p) {
           Store.updateProject(p.id, data);
@@ -925,10 +1204,209 @@
     });
   }
 
+
+  // ================= 새 프로젝트 마법사 =================
+  // ① 과목 ② 시험 범위 ③ 시험 정보(시험일·문제 형태·목표·이름) ④ 기출 업로드(선택)
+  const QTYPE = { multiple_choice: "객관식 (5지선다)", short_answer: "주관식 (단답형)", mixed: "객관식 + 주관식" };
+  const UPLOAD_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
+  const fmtSize = (n) => (n > 1048576 ? `${(n / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`);
+  const isoAfter = (days) => new Date(Date.now() + days * DAY - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+
+  // 파일 고르기 영역 (마법사·업로드 창 공용). onChange(files) 로 바뀐 목록을 알린다
+  function dropzoneHTML() {
+    return `
+      <label class="dropzone" data-drop>
+        <input type="file" accept=".pdf,image/png,image/jpeg,image/webp" multiple hidden />
+        <i data-lucide="upload-cloud"></i>
+        <b>기출·시험지 파일을 끌어다 놓거나 눌러서 고르세요</b>
+        <span>PDF(30쪽 이하) 또는 사진 · 파일당 20MB까지 · 여러 개 가능</span>
+      </label>
+      <ul class="file-list" data-files></ul>
+      <label class="check rights"><input type="checkbox" data-rights /> 본인이 학습용으로 쓸 수 있는 자료예요 <small>(올린 자료와 그것으로 만든 문제는 나에게만 보여요)</small></label>`;
+  }
+  function bindDropzone(root, files, onChange) {
+    const zone = $("[data-drop]", root), input = $("input[type=file]", zone);
+    const add = (list) => {
+      for (const f of list) {
+        if (!UPLOAD_TYPES.includes(f.type)) { toast(`${f.name}: PDF나 사진만 올릴 수 있어요`); continue; }
+        if (f.size > 20 * 1048576) { toast(`${f.name}: 20MB를 넘어요`); continue; }
+        files.push(f);
+      }
+      draw();
+    };
+    const draw = () => {
+      $("[data-files]", root).innerHTML = files.map((f, i) => `
+        <li><i data-lucide="${f.type === "application/pdf" ? "file-text" : "image"}"></i><span>${esc(f.name)}</span><small>${fmtSize(f.size)}</small>
+          <button type="button" class="icon-btn" data-remove="${i}" aria-label="빼기"><i data-lucide="x"></i></button></li>`).join("");
+      icons();
+      onChange(files);
+    };
+    input.addEventListener("change", () => { add(input.files); input.value = ""; });
+    zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("over"); });
+    zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+    zone.addEventListener("drop", (e) => { e.preventDefault(); zone.classList.remove("over"); add(e.dataTransfer.files); });
+    $("[data-files]", root).addEventListener("click", (e) => {
+      const b = e.target.closest("[data-remove]");
+      if (b) { files.splice(Number(b.dataset.remove), 1); draw(); }
+    });
+    draw();
+  }
+
+  async function uploadAll(projectId, files) {
+    let ok = 0;
+    for (const f of files) {
+      try { await Store.uploadMaterial(projectId, f, true); ok++; } catch (e) { toast(`${f.name}: ${e.message}`); }
+    }
+    return ok;
+  }
+
+  function projectWizard() {
+    const w = { step: 0, subjectId: null, unitIds: [], examDate: isoAfter(30), questionType: "multiple_choice", goal: "", name: "", files: [], busy: false };
+    const STEPS = ["과목", "시험 범위", "시험 정보", "기출 업로드"];
+    const sheet = openSheet({
+      title: "새 프로젝트", wide: true, body: "",
+      footer: `<div class="modal-foot wizard-foot">
+        <button type="button" class="btn-ghost" data-back>이전</button><span class="grow"></span>
+        <button type="button" class="btn-ghost" data-skip hidden>업로드 없이 만들기</button>
+        <button type="submit" class="btn-primary" data-next>다음</button></div>`,
+      onSubmit: () => { next(); return false; },
+    });
+    const body = $(".modal-body", sheet);
+    const subjectName = () => concept(w.subjectId)?.name ?? "";
+
+    function draw() {
+      const steps = `<ol class="wizard-steps">${STEPS.map((t, i) => `<li class="${i < w.step ? "done" : i === w.step ? "on" : ""}"><span>${i < w.step ? "✓" : i + 1}</span>${t}</li>`).join("")}</ol>`;
+      let html = "";
+      if (w.step === 0) {
+        html = `<p class="wizard-q">어떤 시험을 준비하나요?</p>` + DOMAINS.map((d) => `
+          <div class="pick-group" style="--c:${COLOR[d]}"><h4><span class="sw"></span>${DOMAIN_NAME[d]}</h4>
+            <div class="pick-grid">${SUBJECTS.filter((x) => x.domain === d).map((x) => `
+              <button type="button" class="pick ${w.subjectId === x.id ? "on" : ""}" data-subject="${x.id}">${esc(x.name)}<small>${childrenOf(x.id).length}개 단원</small></button>`).join("")}</div></div>`).join("");
+      } else if (w.step === 1) {
+        const units = childrenOf(w.subjectId);
+        html = `<p class="wizard-q">${esc(subjectName())} — 시험 범위는 어디까지인가요?</p>
+          <p class="mini">고르지 않으면 과목 전체가 범위예요</p>
+          <div class="chips unit-chips">${units.map((u) => `
+            <label><input type="checkbox" value="${u.id}" ${w.unitIds.includes(u.id) ? "checked" : ""} /><span>${esc(u.name)} <small>${childrenOf(u.id).length}</small></span></label>`).join("")}</div>
+          <p class="mini" data-scope-count></p>`;
+      } else if (w.step === 2) {
+        const left = daysLeft(w.examDate);
+        html = `<p class="wizard-q">시험 정보를 알려 주세요</p>
+          <div class="field"><label for="w-date">시험일</label>
+            <div class="date-row"><input id="w-date" type="date" min="${isoAfter(0)}" value="${w.examDate ?? ""}" />
+              ${[["2주 뒤", 14], ["1개월 뒤", 30], ["3개월 뒤", 90]].map(([t, n]) => `<button type="button" class="tag" data-days="${n}">${t}</button>`).join("")}</div>
+            <p class="mini" data-period>${left != null && left >= 0 ? `준비 기간 ${left}일 · ${ddayLabel(left)}` : ""}</p></div>
+          <div class="field"><label>문제 형태</label>
+            <div class="seg qtype">${Object.entries(QTYPE).map(([k, v]) => `<button type="button" data-qtype="${k}" class="${w.questionType === k ? "on" : ""}">${v}</button>`).join("")}</div></div>
+          <div class="two">
+            <div class="field"><label for="w-goal">목표 <small>· 선택</small></label><input id="w-goal" placeholder="예: 1등급, 90점" value="${esc(w.goal)}" maxlength="20" /></div>
+            <div class="field"><label for="w-name">프로젝트 이름</label><input id="w-name" value="${esc(w.name || `${subjectName()} 시험 준비`)}" maxlength="30" /></div>
+          </div>`;
+      } else {
+        html = `<p class="wizard-q">기출 문제나 실제 시험지가 있나요? <small class="opt">선택</small></p>
+          <p class="mini">올리면 AI가 문제를 읽어서, 그 시험과 비슷한 결의 문제를 <b>쉽게 · 비슷하게 · 어렵게</b> 만들어 드려요</p>
+          ${Store.mode === "api" ? dropzoneHTML() : '<div class="ai-slot"><i data-lucide="info"></i><div>기출 업로드와 AI 문제 생성은 로그인해서 서버 화면(localhost:8000/app)으로 열었을 때 쓸 수 있어요.</div></div>'}`;
+      }
+      body.innerHTML = steps + `<div class="wizard-body">${html}</div>`;
+      $("[data-back]", sheet).style.visibility = w.step ? "visible" : "hidden";
+      const last = w.step === STEPS.length - 1;
+      $("[data-skip]", sheet).hidden = !(last && Store.mode === "api");
+      $("[data-next]", sheet).textContent = last ? "만들기" : "다음";
+      if (w.step === 3 && Store.mode === "api") bindDropzone(body, w.files, updateLast);
+      if (w.step === 1) updateScope();
+      icons();
+    }
+    function updateScope() {
+      const units = w.unitIds.length ? w.unitIds : childrenOf(w.subjectId).map((u) => u.id);
+      const n = units.reduce((k, u) => k + childrenOf(u).length, 0);
+      $("[data-scope-count]", body).textContent = `${w.unitIds.length ? `${w.unitIds.length}개 단원` : "과목 전체"} · 개념 ${n}개`;
+    }
+    function updateLast() {
+      const has = w.files.length > 0;
+      $("[data-next]", sheet).textContent = has ? `만들고 ${w.files.length}개 올리기` : "만들기";
+      $("[data-skip]", sheet).hidden = !has;
+    }
+
+    body.addEventListener("click", (e) => {
+      const subj = e.target.closest("[data-subject]");
+      if (subj) { w.subjectId = subj.dataset.subject; w.unitIds = []; w.name = ""; draw(); return next(); }
+      const days = e.target.closest("[data-days]");
+      if (days) { w.examDate = isoAfter(Number(days.dataset.days)); $("#w-date").value = w.examDate; syncPeriod(); }
+      const qt = e.target.closest("[data-qtype]");
+      if (qt) { w.questionType = qt.dataset.qtype; $$("[data-qtype]", body).forEach((b) => b.classList.toggle("on", b === qt)); }
+    });
+    body.addEventListener("change", (e) => {
+      if (e.target.closest(".unit-chips")) { w.unitIds = $$(".unit-chips input:checked", body).map((i) => i.value); updateScope(); }
+      if (e.target.id === "w-date") { w.examDate = e.target.value || null; syncPeriod(); }
+    });
+    body.addEventListener("input", (e) => {
+      if (e.target.id === "w-goal") w.goal = e.target.value;
+      if (e.target.id === "w-name") w.name = e.target.value;
+    });
+    function syncPeriod() {
+      const left = daysLeft(w.examDate);
+      $("[data-period]", body).textContent = left != null && left >= 0 ? `준비 기간 ${left}일 · ${ddayLabel(left)}` : "";
+    }
+    $("[data-back]", sheet).addEventListener("click", () => { w.step--; draw(); });
+    $("[data-skip]", sheet).addEventListener("click", () => { w.files.length = 0; finish(); });
+
+    function next() {
+      if (w.busy) return;
+      if (w.step === 0 && !w.subjectId) return toast("과목을 골라 주세요");
+      if (w.step === 2) {
+        w.name = ($("#w-name").value || "").trim();
+        if (!w.examDate) return invalid($("#w-date"), "시험일을 골라 주세요");
+        if (daysLeft(w.examDate) < 0) return invalid($("#w-date"), "오늘 이후 날짜를 골라 주세요");
+        if (!w.name) return invalid($("#w-name"), "이름을 입력해 주세요");
+      }
+      if (w.step < STEPS.length - 1) { w.step++; return draw(); }
+      if (w.files.length && !$("[data-rights]", body)?.checked) return toast("학습용으로 쓸 수 있는 자료인지 확인해 주세요");
+      finish();
+    }
+    async function finish() {
+      w.busy = true;
+      const btn = $("[data-next]", sheet);
+      btn.disabled = true;
+      btn.textContent = w.files.length ? "만들고 올리는 중…" : "만드는 중…";
+      try {
+        const id = await Store.createProject({ name: w.name, subjectId: w.subjectId, unitIds: w.unitIds, goal: w.goal.trim(),
+          examDate: w.examDate, questionType: w.questionType });
+        const uploaded = w.files.length ? await uploadAll(id, w.files) : 0;
+        closeOverlays();
+        go(`/project/${id}`);
+        toast(uploaded ? `프로젝트를 만들었어요. 기출 ${uploaded}개를 분석하고 있어요` : "프로젝트를 만들었어요");
+      } catch (e) {
+        toast(e.message);
+        w.busy = false;
+        btn.disabled = false;
+        updateLast();
+      }
+    }
+    draw();
+  }
+
+  function uploadSheet(projectId, onDone) {
+    const files = [];
+    openSheet({
+      title: "기출·시험지 올리기", body: dropzoneHTML(),
+      footer: `<div class="modal-foot"><button type="button" class="btn-ghost" data-close>취소</button><button type="submit" class="btn-primary" data-up disabled>올리기</button></div>`,
+      onMount(f) { bindDropzone(f, files, () => { $("[data-up]", f).disabled = !files.length; $("[data-up]", f).textContent = files.length ? `${files.length}개 올리기` : "올리기"; }); },
+      onSubmit(f) {
+        if (!$("[data-rights]", f).checked) { toast("학습용으로 쓸 수 있는 자료인지 확인해 주세요"); return false; }
+        const btn = $("[data-up]", f);
+        btn.disabled = true;
+        btn.textContent = "올리는 중…";
+        uploadAll(projectId, files).then((n) => { closeOverlays(); if (n) toast(`${n}개를 올렸어요. AI가 문제를 읽는 중이에요`); onDone(); });
+        return false;
+      },
+    });
+  }
+
   // ================= 팝업 메뉴 =================
   let menuCleanup = null;
   function openMenu(anchor, items, onClose) {
     closeMenu();
+    items = items.filter(Boolean);
     const m = document.createElement("div");
     m.className = "menu";
     m.setAttribute("role", "menu");
@@ -987,7 +1465,7 @@
           { icon: "circle-x", t: "오답노트", go: "/notes", sub: `${Store.openNotes().length}문제` },
           { icon: "library", t: "라이브러리", go: "/library" },
           { icon: "layers", t: "암기 카드", go: "/library/cards" },
-          { icon: "folder-plus", t: "새 프로젝트 만들기", run: projectModal },
+          { icon: "folder-plus", t: "새 프로젝트 만들기", run: projectWizard },
         ]]);
         groups.push(["최근 대화", [...Store.state.sessions].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5)
           .map((s) => ({ icon: "message-circle", t: s.title, go: `/chat/${s.id}`, sub: relTime(s.updatedAt) }))]);
@@ -997,7 +1475,7 @@
         groups.push(["대화", Store.state.sessions.filter((s) => has(s.title) || s.messages.some((m) => has(m.text)))
           .map((s) => ({ icon: "message-circle", t: s.title, go: `/chat/${s.id}`, sub: relTime(s.updatedAt) }))]);
         groups.push(["오답", Store.state.wrongNotes.filter((w) => has(Store.problem(w.problemId).stem) || has(concept(Store.problem(w.problemId).conceptIds[0]).name))
-          .map((w) => ({ icon: "circle-x", t: Store.problem(w.problemId).stem, go: "/notes", sub: w.resolvedAt ? "극복" : "안 품" }))]);
+          .map((w) => ({ icon: "circle-x", t: plainMath(Store.problem(w.problemId).stem), go: "/notes", sub: w.resolvedAt ? "극복" : "안 품" }))]);
         groups.push(["개념", CONCEPTS.filter((c) => c.level === "concept" && has(c.name)).slice(0, 8)
           .map((c) => ({ icon: "book-open", t: c.name, go: `/library/concept/${c.id}`, sub: subjectOf(c.id).name }))]);
       }
@@ -1035,6 +1513,13 @@
     input.focus();
   }
 
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.matches?.("[data-short] input")) {
+      e.preventDefault();
+      $("[data-short-submit]", e.target.closest("[data-short]")).click();
+    }
+  });
+
   $(".search input").addEventListener("focus", (e) => { e.target.blur(); openPalette(); });
   document.addEventListener("keydown", (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openPalette(); }
@@ -1060,7 +1545,8 @@
     ["ellipsis", "더보기", ""],
   ].map(([icon, label, p]) => `<button class="action" data-prompt="${p}"><span class="tile"><i data-lucide="${icon}"></i></span>${label}</button>`).join("");
 
-  // 첫 화면 표시
+  // 첫 화면 표시 — 서버 모드면 내 데이터를 받아 온 뒤에 그린다
+  Store.ready.then(() => {
   render();
 
   // 홈 요소: 스크롤하면 아래에서 위로 떠오름
@@ -1070,6 +1556,7 @@
     for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); revealer.unobserve(e.target); }
   }, { root: contentEl, threshold: 0.12, rootMargin: "0px 0px -6% 0px" });
   $$(".reveal").forEach((el) => revealer.observe(el));
+  }).catch((e) => toast(`데이터를 불러오지 못했어요: ${e.message}`));
 
   $$("[data-tab]").forEach((t) => t.addEventListener("click", () => {
     $$("[data-tab]").forEach((x) => x.classList.toggle("active", x === t));

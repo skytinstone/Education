@@ -17,6 +17,12 @@ from education.config import ROOT, get_settings
 from education.seed import seed_concepts, seed_problems
 
 
+@pytest.fixture(autouse=True)
+def no_real_ai(monkeypatch):
+    """테스트는 절대 실제 AI API 를 부르지 않는다 (.env 에 키가 있어도). AI 가 필요한 테스트는 가짜 LLM 을 넣는다."""
+    monkeypatch.setattr(get_settings(), "openai_api_key", None)
+
+
 @pytest.fixture(scope="session")
 def test_db_url() -> str:
     url = get_settings().test_database_url

@@ -1,105 +1,105 @@
 # 샘플 문제 은행 — 정답·해설을 직접 계산해 검증함. 객관식 answer 는 보기 번호(1~5).
-# 새 문제는 AI 생성 → 검증 에이전트 통과 후 DB 에 쌓인다. 이 파일은 초기 시드용.
+# 수식은 LaTeX($…$). 새 문제는 AI 생성 → 검증 에이전트 통과 후 DB 에 쌓인다. 이 파일은 초기 시드용.
 problems:
   - id: pb_log
     domain: math
     concept_ids: [math.math1.exp_log.log_properties]
     difficulty: 1
     problem_type: multiple_choice
-    stem: "log₂8 + log₃9 의 값은?"
+    stem: "$\\log_2 8 + \\log_3 9$의 값은?"
     choices: ["3", "4", "5", "6", "7"]
     answer: "3"
-    solution: "log₂8 = log₂2³ = 3, log₃9 = log₃3² = 2 이므로 3 + 2 = 5"
+    solution: "$\\log_2 8 = \\log_2 2^3 = 3$, $\\log_3 9 = \\log_3 3^2 = 2$이므로 $3 + 2 = 5$"
   - id: pb_subst
     domain: math
     concept_ids: [math.calculus.int_methods.substitution_parts]
     difficulty: 2
     problem_type: multiple_choice
-    stem: "∫₀¹ 2x·e^(x²) dx 의 값은?"
-    choices: ["e − 1", "e", "e + 1", "2e − 1", "(e − 1)/2"]
+    stem: "$\\displaystyle\\int_0^1 2x\\,e^{x^2}\\,dx$의 값은?"
+    choices: ["$e-1$", "$e$", "$e+1$", "$2e-1$", "$\\dfrac{e-1}{2}$"]
     answer: "1"
-    solution: "t = x² 로 치환하면 dt = 2x dx, x: 0→1 일 때 t: 0→1. ∫₀¹ eᵗ dt = e − 1"
+    solution: "$t = x^2$으로 치환하면 $dt = 2x\\,dx$이고, $x$가 $0 \\to 1$일 때 $t$도 $0 \\to 1$이다. 따라서 $\\displaystyle\\int_0^1 e^t\\,dt = e - 1$"
   - id: pb_defint
     domain: math
     concept_ids: [math.math2.integration.definite_integral]
     difficulty: 3
     problem_type: multiple_choice
-    stem: "f(x) = ∫₁ˣ (3t² − 2t) dt 일 때, f′(2) 의 값은?"
+    stem: "함수 $f(x) = \\displaystyle\\int_1^x (3t^2 - 2t)\\,dt$에 대하여 $f'(2)$의 값은?"
     choices: ["4", "6", "8", "10", "12"]
     answer: "3"
-    solution: "정적분으로 정의된 함수를 미분하면 f′(x) = 3x² − 2x. f′(2) = 12 − 4 = 8"
+    solution: "정적분으로 정의된 함수를 미분하면 $f'(x) = 3x^2 - 2x$이므로 $f'(2) = 12 - 4 = 8$"
   - id: pb_seq
     domain: math
     concept_ids: [math.math1.sequence.arithmetic_geometric]
     difficulty: 1
     problem_type: multiple_choice
-    stem: "첫째항이 3, 공차가 4인 등차수열의 제10항은?"
+    stem: "첫째항이 $3$, 공차가 $4$인 등차수열의 제$10$항은?"
     choices: ["35", "37", "39", "41", "43"]
     answer: "3"
-    solution: "aₙ = a₁ + (n − 1)d 이므로 a₁₀ = 3 + 9 × 4 = 39"
+    solution: "$a_n = a_1 + (n-1)d$이므로 $a_{10} = 3 + 9 \\times 4 = 39$"
   - id: pb_cond
     domain: math
     concept_ids: [math.prob_stat.probability.conditional_probability]
     difficulty: 2
     problem_type: multiple_choice
-    stem: "P(A) = 0.5, P(A ∩ B) = 0.2 일 때, P(B | A) 의 값은?"
+    stem: "두 사건 $A$, $B$에 대하여 $P(A) = 0.5$, $P(A \\cap B) = 0.2$일 때, $P(B \\mid A)$의 값은?"
     choices: ["0.2", "0.3", "0.4", "0.5", "0.6"]
     answer: "3"
-    solution: "P(B | A) = P(A ∩ B) / P(A) = 0.2 / 0.5 = 0.4"
+    solution: "$P(B \\mid A) = \\dfrac{P(A \\cap B)}{P(A)} = \\dfrac{0.2}{0.5} = 0.4$"
   - id: pb_kin
     domain: physics
     concept_ids: [physics.physics1.mechanics_energy.kinematics]
     difficulty: 1
     problem_type: multiple_choice
-    stem: "정지 상태에서 출발한 물체가 2 m/s² 의 등가속도로 5초 동안 이동한 거리는?"
-    choices: ["10 m", "20 m", "25 m", "50 m", "100 m"]
+    stem: "정지 상태에서 출발한 물체가 $2\\,\\mathrm{m/s^2}$의 등가속도로 $5$초 동안 이동한 거리는?"
+    choices: ["$10\\,\\mathrm{m}$", "$20\\,\\mathrm{m}$", "$25\\,\\mathrm{m}$", "$50\\,\\mathrm{m}$", "$100\\,\\mathrm{m}$"]
     answer: "3"
-    solution: "s = ½at² = ½ × 2 × 5² = 25 m"
+    solution: "$s = \\dfrac{1}{2}at^2 = \\dfrac{1}{2} \\times 2 \\times 5^2 = 25\\,\\mathrm{m}$"
   - id: pb_mom
     domain: physics
     concept_ids: [physics.physics1.mechanics_energy.momentum_impulse]
     difficulty: 2
     problem_type: multiple_choice
-    stem: "3 m/s 로 움직이는 2 kg 물체가 정지한 1 kg 물체와 충돌한 뒤 한 덩어리가 되었다. 충돌 직후 속력은?"
-    choices: ["1 m/s", "1.5 m/s", "2 m/s", "3 m/s", "6 m/s"]
+    stem: "$3\\,\\mathrm{m/s}$로 움직이는 $2\\,\\mathrm{kg}$ 물체가 정지한 $1\\,\\mathrm{kg}$ 물체와 충돌한 뒤 한 덩어리가 되었다. 충돌 직후 속력은?"
+    choices: ["$1\\,\\mathrm{m/s}$", "$1.5\\,\\mathrm{m/s}$", "$2\\,\\mathrm{m/s}$", "$3\\,\\mathrm{m/s}$", "$6\\,\\mathrm{m/s}$"]
     answer: "3"
-    solution: "운동량 보존: 2 × 3 = (2 + 1) × v 이므로 v = 2 m/s"
+    solution: "운동량 보존: $2 \\times 3 = (2 + 1)\\,v$이므로 $v = 2\\,\\mathrm{m/s}$"
   - id: pb_mole
     domain: chemistry
     concept_ids: [chemistry.chemistry1.first_steps.mole]
     difficulty: 1
     problem_type: multiple_choice
-    stem: "물(H₂O) 36 g 의 양은 몇 mol 인가? (H = 1, O = 16)"
-    choices: ["0.5 mol", "1 mol", "2 mol", "3 mol", "4 mol"]
+    stem: "물$(\\mathrm{H_2O})$ $36\\,\\mathrm{g}$의 양은 몇 $\\mathrm{mol}$인가? (단, $\\mathrm{H}$, $\\mathrm{O}$의 원자량은 각각 $1$, $16$이다.)"
+    choices: ["$0.5\\,\\mathrm{mol}$", "$1\\,\\mathrm{mol}$", "$2\\,\\mathrm{mol}$", "$3\\,\\mathrm{mol}$", "$4\\,\\mathrm{mol}$"]
     answer: "3"
-    solution: "H₂O 의 몰 질량은 18 g/mol 이므로 36 ÷ 18 = 2 mol"
+    solution: "$\\mathrm{H_2O}$의 몰 질량은 $18\\,\\mathrm{g/mol}$이므로 $36 \\div 18 = 2\\,\\mathrm{mol}$"
   - id: pb_neut
     domain: chemistry
     concept_ids: [chemistry.chemistry1.dynamic_reactions.neutralization]
     difficulty: 2
     problem_type: multiple_choice
-    stem: "0.1 M HCl 20 mL 를 완전히 중화하는 데 필요한 0.2 M NaOH 의 부피는?"
-    choices: ["5 mL", "10 mL", "20 mL", "40 mL", "50 mL"]
+    stem: "$0.1\\,\\mathrm{M}$ $\\mathrm{HCl}(aq)$ $20\\,\\mathrm{mL}$를 완전히 중화하는 데 필요한 $0.2\\,\\mathrm{M}$ $\\mathrm{NaOH}(aq)$의 부피는?"
+    choices: ["$5\\,\\mathrm{mL}$", "$10\\,\\mathrm{mL}$", "$20\\,\\mathrm{mL}$", "$40\\,\\mathrm{mL}$", "$50\\,\\mathrm{mL}$"]
     answer: "2"
-    solution: "H⁺ 의 양 = 0.1 × 0.020 = 0.002 mol. OH⁻ 도 0.002 mol 필요하므로 0.002 ÷ 0.2 = 0.010 L = 10 mL"
+    solution: "$\\mathrm{H^+}$의 양은 $0.1 \\times 0.020 = 0.002\\,\\mathrm{mol}$. $\\mathrm{OH^-}$도 $0.002\\,\\mathrm{mol}$이 필요하므로 $0.002 \\div 0.2 = 0.010\\,\\mathrm{L} = 10\\,\\mathrm{mL}$"
   - id: pb_chrom
     domain: biology
     concept_ids: [biology.biology1.genetics.chromosome_cell_division]
     difficulty: 1
     problem_type: multiple_choice
-    stem: "사람의 체세포 염색체 수가 46개일 때, 정자 하나에 들어 있는 염색체 수는?"
+    stem: "사람의 체세포 염색체 수가 $46$개일 때, 정자 하나에 들어 있는 염색체 수는?"
     choices: ["22개", "23개", "44개", "46개", "92개"]
     answer: "2"
-    solution: "감수 분열로 염색체 수가 절반이 되므로 46 ÷ 2 = 23개"
+    solution: "감수 분열로 염색체 수가 절반이 되므로 $46 \\div 2 = 23$개"
   - id: pb_half
     domain: earth_science
     concept_ids: [earth_science.earth1.solid_earth.relative_absolute_age]
     difficulty: 2
     problem_type: multiple_choice
-    stem: "반감기가 1억 년인 방사성 원소가 3억 년이 지나면 처음 양의 몇 배가 남는가?"
-    choices: ["1/2", "1/3", "1/4", "1/6", "1/8"]
+    stem: "반감기가 $1$억 년인 방사성 원소가 $3$억 년이 지나면 처음 양의 몇 배가 남는가?"
+    choices: ["$\\dfrac{1}{2}$", "$\\dfrac{1}{3}$", "$\\dfrac{1}{4}$", "$\\dfrac{1}{6}$", "$\\dfrac{1}{8}$"]
     answer: "5"
-    solution: "반감기가 3번 지났으므로 (1/2)³ = 1/8"
+    solution: "반감기가 $3$번 지났으므로 $\\left(\\dfrac{1}{2}\\right)^3 = \\dfrac{1}{8}$"
   - id: pb_hr
     domain: earth_science
     concept_ids: [earth_science.earth1.space.stellar_properties]

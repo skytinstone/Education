@@ -29,7 +29,7 @@ docker-compose.yml          개발용 PostgreSQL 17 (127.0.0.1:5433)
 scripts/export_concepts.py  개념 트리 → prototype/concepts.js
 tests/                      API·마이그레이션 테스트 (테스트 전용 DB 사용)
 
-prototype/                  UI 프로토타입 (빌드 없이 브라우저로 열기) — 아직 localStorage 사용, API 연결 예정
+prototype/                  화면 — 서버(localhost:8000/app)로 열면 로그인한 계정의 DB 데이터, 파일로 열면 localStorage 샘플 데이터
   login.html · index.html   로그인 / 학습자 앱
   app.js · app.css · store.js · dots.js · concepts.js(자동 생성)
 ```
@@ -65,8 +65,15 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 | 오답노트 | `GET /wrong-notes` (과목·이유·안 푼 것만·프로젝트 필터) · `PATCH/DELETE /wrong-notes/{id}` |
 | 라이브러리 | `GET /concepts` · `GET /concepts/{id}` · `GET /saved` · `PUT/DELETE /saved/{problem_id}` · `GET /cards` · `PATCH /cards/{id}` · `POST /cards/reset` |
 | 통계 | `GET /stats` (오늘 푼 문제, 연속 학습일, 과목별 정답률, 약점) |
+| 기출 | `POST /projects/{id}/materials` (PDF·사진 업로드 → AI 분석) · `GET /projects/{id}/materials` · `GET /projects/{id}/past-problems` · `DELETE /materials/{id}` |
+| 기출 기반 생성 | `POST /projects/{id}/generate` `{level: easier\|same\|harder, count}` → 결과를 프로젝트의 새 대화로 |
+| 계정 | `PATCH /me` (생년월일·학교·전공·주소·캐릭터) · `POST /me/avatar` (사진) · `GET /users/{id}/avatar` |
+| 화면 동기화 | `GET /sync` — 로그인한 화면이 처음 열릴 때 내 데이터를 한 번에 |
 
 - 문제의 **정답과 해설은 답을 제출한 뒤에만** 응답에 들어간다
+- 올린 기출과 그것을 본보기로 만든 문제는 **올린 사람에게만** 보인다 (`problems.owner_user_id`)
+- 프로필 사진은 256px WEBP 로 다시 만들어 저장해 **위치·기기 정보(EXIF)가 남지 않는다**
+- AI 호출은 모두 `llm_calls` 에 토큰·비용·시간을 기록한다 (`uv run python -m education.generate` 로 문제 은행 채우기)
 - 모든 사용자 데이터는 본인 것만 보이고, 남의 데이터는 존재 여부와 상관없이 404
 - '오늘'의 기준 시간대는 `Asia/Seoul` (`TIMEZONE` 으로 변경)
 
@@ -93,8 +100,7 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 - [x] UI 프로토타입: 로그인, 메인, 메뉴별 화면
 - [x] 백엔드: PostgreSQL + FastAPI, 인증, 풀이·오답노트·통계 API
 - [x] 로그인 화면 API 연결: 이메일 로그인·가입, Google·카카오 간편 로그인 (키 발급 후 바로 사용)
-- [ ] 메인 화면을 API에 연결 (store.js → API 호출)
-- [ ] Phase 1: ① 문제 생성 + 검증 에이전트 (AI 연결)
+- [x] 메인 화면 API 연결, AI 문제 생성 + 검증 (OpenAI), 기출 업로드·분석·기출 기반 생성, 주관식, 계정 설정·프로필 사진
 - [ ] Phase 3: ③ 개념 정리 / 암기 카드 생성
 - [ ] Phase 4: ④ 기출 RAG + 난이도 조절 생성
 - [ ] Phase 5: 과목 확장

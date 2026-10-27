@@ -12,14 +12,10 @@ from education.services import learning, tutor
 router = APIRouter(prefix="/sessions", tags=["대화"])
 
 
-def _project_domain(db: Session, project: m.Project | None):
-    return db.get(m.Concept, project.subject_id).domain if project else None
-
-
 def _converse(db: Session, user: m.User, s: m.ChatSession, text: str) -> list[m.Message]:
     """학생 메시지를 남기고 답변을 만든다."""
     project = db.get(m.Project, s.project_id) if s.project_id else None
-    reply_text, problem_ids = tutor.reply(db, text, _project_domain(db, project))
+    reply_text, problem_ids = tutor.reply(db, user, text, project)
     msgs = [m.Message(session_id=s.id, role="user", text=text),
             m.Message(session_id=s.id, role="ai", text=reply_text, problem_ids=problem_ids)]
     db.add_all(msgs)
@@ -33,7 +29,7 @@ def _message_out(db: Session, user: m.User, msg: m.Message) -> MessageOut:
                       problems=learning.problem_views(db, user, msg.problem_ids, session_id=msg.session_id))
 
 
-def _detail(db: Session, user: m.User, s: m.ChatSession) -> SessionDetail:
+def session_detail(db: Session, user: m.User, s: m.ChatSession) -> SessionDetail:
     db.refresh(s)
     return SessionDetail(**SessionOut.model_validate(s).model_dump(),
                          messages=[_message_out(db, user, msg) for msg in s.messages])
@@ -58,12 +54,12 @@ def create_session(body: SessionIn, user: CurrentUser, db: DB) -> SessionDetail:
     db.add(s)
     db.flush()
     _converse(db, user, s, body.text.strip())
-    return _detail(db, user, s)
+    return session_detail(db, user, s)
 
 
 @router.get("/{session_id}")
 def get_session(session_id: UUID, user: CurrentUser, db: DB) -> SessionDetail:
-    return _detail(db, user, owned(db, m.ChatSession, session_id, user))
+    return session_detail(db, user, owned(db, m.ChatSession, session_id, user))
 
 
 @router.post("/{session_id}/messages", status_code=status.HTTP_201_CREATED)

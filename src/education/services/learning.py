@@ -15,11 +15,27 @@ from education.config import get_settings
 from education.db import models as m
 
 
+def visible_to(user: m.User):
+    """공용 문제이거나 내가 올린·만든 문제 (남이 올린 기출은 보이지 않음)."""
+    return (m.Problem.owner_user_id.is_(None)) | (m.Problem.owner_user_id == user.id)
+
+
+def is_correct(problem: m.Problem, answer: str) -> bool:
+    """단답형은 '007', '1,000', ' 12 ' 같은 표기 차이를 무시하고 수로 비교한다."""
+    given = answer.strip()
+    if problem.problem_type == "short_answer":
+        try:
+            return int(given.replace(",", "")) == int(problem.answer)
+        except ValueError:
+            return given == problem.answer
+    return given == problem.answer
+
+
 def problem_views(db: Session, user: m.User, problem_ids: list[str], session_id: UUID | None = None) -> list[ProblemView]:
     """문제 id 순서대로 보여 줄 문제. session_id 가 있으면 그 대화에서 마지막으로 푼 기록과 정답·해설을 붙인다."""
     if not problem_ids:
         return []
-    problems = {p.id: p for p in db.scalars(select(m.Problem).where(m.Problem.id.in_(problem_ids)))}
+    problems = {p.id: p for p in db.scalars(select(m.Problem).where(m.Problem.id.in_(problem_ids), visible_to(user)))}
     saved = set(db.scalars(select(m.SavedProblem.problem_id).where(
         m.SavedProblem.user_id == user.id, m.SavedProblem.problem_id.in_(problem_ids))))
     last: dict[str, m.Attempt] = {}
@@ -47,7 +63,7 @@ def problem_views(db: Session, user: m.User, problem_ids: list[str], session_id:
 def submit_answer(db: Session, user: m.User, body: AttemptIn) -> AttemptResult:
     """풀이를 기록한다. 틀리면 오답노트에 넣고, 오답노트에 있던 문제를 맞히면 극복 처리한다."""
     problem = db.get(m.Problem, body.problem_id)
-    if problem is None:
+    if problem is None or problem.owner_user_id not in (None, user.id) or not problem.answer:
         raise HTTPException(404, "문제를 찾을 수 없어요")
     for model, obj_id in ((m.Project, body.project_id), (m.ChatSession, body.session_id)):
         if obj_id is not None:
@@ -55,7 +71,7 @@ def submit_answer(db: Session, user: m.User, body: AttemptIn) -> AttemptResult:
             if obj is None or obj.user_id != user.id:
                 raise HTTPException(404, "찾을 수 없어요")
 
-    correct = body.answer.strip() == problem.answer
+    correct = is_correct(problem, body.answer)
     db.add(m.Attempt(user_id=user.id, problem_id=problem.id, project_id=body.project_id,
                      session_id=body.session_id, answer=body.answer, correct=correct))
 

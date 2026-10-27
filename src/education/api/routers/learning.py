@@ -48,7 +48,7 @@ def get_concept(concept_id: str, user: CurrentUser, db: DB) -> ConceptDetail:
 # ---------- 문제 · 풀이 ----------
 @router.get("/problems", tags=["문제"])
 def list_problems(db: DB, user: CurrentUser, domain: Domain | None = None, concept_id: str | None = None) -> list[ProblemOut]:
-    q = select(m.Problem).order_by(m.Problem.id)
+    q = select(m.Problem).where(learning.visible_to(user)).order_by(m.Problem.id)
     if domain:
         q = q.where(m.Problem.domain == domain)
     if concept_id:
@@ -59,7 +59,7 @@ def list_problems(db: DB, user: CurrentUser, domain: Domain | None = None, conce
 @router.get("/problems/{problem_id}", tags=["문제"])
 def get_problem(problem_id: str, db: DB, user: CurrentUser) -> ProblemOut:
     p = db.get(m.Problem, problem_id)
-    if p is None:
+    if p is None or p.owner_user_id not in (None, user.id):
         raise HTTPException(404, "문제를 찾을 수 없어요")
     return ProblemOut.model_validate(p)
 
@@ -113,7 +113,8 @@ def list_saved(user: CurrentUser, db: DB) -> list[ProblemView]:
 
 @router.put("/saved/{problem_id}", tags=["라이브러리"], status_code=status.HTTP_204_NO_CONTENT)
 def save_problem(problem_id: str, user: CurrentUser, db: DB) -> Response:
-    if db.get(m.Problem, problem_id) is None:
+    p = db.get(m.Problem, problem_id)
+    if p is None or p.owner_user_id not in (None, user.id):
         raise HTTPException(404, "문제를 찾을 수 없어요")
     db.execute(insert(m.SavedProblem).values(user_id=user.id, problem_id=problem_id).on_conflict_do_nothing())
     db.commit()

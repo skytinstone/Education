@@ -3,8 +3,10 @@ from datetime import timedelta
 from urllib.parse import urlencode
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from typing import Annotated
+
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -14,7 +16,7 @@ from education.api.dto import LoginIn, SignupIn, SocialSignupIn, TicketIn, Token
 from education.config import get_settings
 from education.db import models as m
 from education.security import create_ticket, create_token, hash_password, read_ticket, verify_password
-from education.services import oauth
+from education.services import avatars, oauth
 from education.services.oauth import OAuthError, Provider, SocialProfile
 
 router = APIRouter(tags=["인증 · 사용자"])
@@ -169,7 +171,46 @@ def me(user: CurrentUser) -> UserOut:
 
 @router.patch("/me")
 def update_me(body: UserPatch, user: CurrentUser, db: DB) -> UserOut:
-    for k, v in body.model_dump(exclude_unset=True, exclude_none=True).items():
-        setattr(user, k, v)
+    changes = body.model_dump(exclude_unset=True)
+    for k in ("name", "daily_goal"):
+        if changes.get(k) is not None:
+            setattr(user, k, changes[k].strip() if isinstance(changes[k], str) else changes[k])
+    for k in ("birth_date", "school", "major", "address"):  # 선택 항목: 빈 값이면 지운다
+        if k in changes:
+            v = changes[k]
+            setattr(user, k, (v.strip() or None) if isinstance(v, str) else v)
+    if "avatar" in changes:
+        avatar = changes["avatar"]
+        if avatar == "initial":
+            avatars.delete_photo(user.id)
+            user.avatar_type, user.avatar_preset = "initial", None
+        elif avatar in avatars.PRESETS:
+            avatars.delete_photo(user.id)
+            user.avatar_type, user.avatar_preset = "preset", avatar
+        else:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "없는 캐릭터예요")
     db.commit()
     return UserOut.model_validate(user)
+
+
+@router.post("/me/avatar")
+def upload_avatar(user: CurrentUser, db: DB, file: Annotated[UploadFile, File()]) -> UserOut:
+    """프로필 사진 — 256px 정사각형으로 다시 만들어 저장 (위치 정보 등 메타데이터 제거)."""
+    try:
+        avatars.save_photo(user.id, file.file.read(avatars.MAX_BYTES + 1))
+    except avatars.AvatarError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
+    user.avatar_type, user.avatar_preset = "photo", None
+    user.avatar_version += 1
+    db.commit()
+    return UserOut.model_validate(user)
+
+
+@router.get("/users/{user_id}/avatar", include_in_schema=False)
+def get_avatar(user_id: UUID, db: DB) -> FileResponse:
+    """<img> 로 불러오므로 로그인 없이 열린다 (주소에 추측할 수 없는 사용자 id 가 들어감)."""
+    user = db.get(m.User, user_id)
+    path = avatars.path_for(user_id)
+    if user is None or user.avatar_type != "photo" or not path.exists():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "사진이 없어요")
+    return FileResponse(path, media_type="image/webp", headers={"Cache-Control": "public, max-age=31536000, immutable"})

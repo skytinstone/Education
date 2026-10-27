@@ -25,6 +25,15 @@ class Settings(BaseSettings):
     kakao_rest_api_key: str | None = None
     kakao_client_secret: str | None = None
 
+    # AI (OpenAI) — 키가 없으면 대화 답변은 문제 은행에서 고른다
+    # 모델 목록: https://developers.openai.com/api/docs/models
+    openai_api_key: str | None = None
+    openai_model_generate: str = "gpt-6.1-sol"
+    openai_model_verify: str = "gpt-6.1-sol"
+    openai_effort_generate: str = "high"
+    openai_effort_verify: str = "high"
+    ai_max_attempts: int = 2  # 검증에 실패하면 문제당 다시 만드는 최대 횟수
+
     # 다른 출처의 프론트엔드(예: 추후 Next.js 개발 서버)가 API 를 부를 수 있게 허용할 목록.
     # 프로토타입은 API 서버가 /app 으로 함께 서빙하므로 같은 출처라 필요 없다.
     cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]

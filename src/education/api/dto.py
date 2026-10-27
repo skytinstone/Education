@@ -10,9 +10,9 @@ import re
 from datetime import date, datetime
 from uuid import UUID
 
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator
 
 from education.schemas import ConceptLevel, Domain, ErrorType
 
@@ -57,6 +57,18 @@ class UserOut(Out):
     email: str
     name: str
     daily_goal: int
+    birth_date: date | None = None
+    school: str | None = None
+    major: str | None = None
+    address: str | None = None
+    avatar_type: str = "initial"
+    avatar_preset: str | None = None
+    avatar_version: int = 0
+
+    @computed_field
+    @property
+    def avatar_url(self) -> str | None:
+        return f"/api/users/{self.id}/avatar?v={self.avatar_version}" if self.avatar_type == "photo" else None
 
 
 class TokenOut(BaseModel):
@@ -79,8 +91,21 @@ class SocialSignupIn(BaseModel):
 
 
 class UserPatch(BaseModel):
+    """보낸 필드만 바꾼다. 학교·전공·주소·생년월일은 빈 값("" 또는 null)을 보내면 지운다."""
     name: str | None = Field(default=None, min_length=1, max_length=40)
     daily_goal: int | None = Field(default=None, ge=1, le=200)
+    birth_date: date | None = None
+    school: str | None = Field(default=None, max_length=80)
+    major: str | None = Field(default=None, max_length=80)
+    address: str | None = Field(default=None, max_length=200)
+    avatar: str | None = Field(default=None, description="initial 또는 Eureka 캐릭터 이름 (사진은 POST /me/avatar)")
+
+    @field_validator("birth_date")
+    @classmethod
+    def _birth(cls, v: date | None) -> date | None:
+        if v and not (date(1900, 1, 1) <= v <= date.today()):
+            raise ValueError("생년월일을 확인해 주세요")
+        return v
 
 
 # ---------- 개념 · 문제 ----------
@@ -133,12 +158,16 @@ class AttemptResult(BaseModel):
 
 
 # ---------- 프로젝트 · 대화 ----------
+QuestionType = Literal["multiple_choice", "short_answer", "mixed"]
+
+
 class ProjectIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
     subject_id: str
     unit_ids: list[str] = []
     goal: str = Field(default="", max_length=60)
     exam_date: date | None = None
+    question_type: QuestionType = "multiple_choice"
 
 
 class ProjectPatch(BaseModel):
@@ -147,6 +176,7 @@ class ProjectPatch(BaseModel):
     unit_ids: list[str] | None = None
     goal: str | None = Field(default=None, max_length=60)
     exam_date: date | None = None
+    question_type: QuestionType | None = None
     pinned: bool | None = None
 
 
@@ -157,8 +187,33 @@ class ProjectOut(Out):
     unit_ids: list[str]
     goal: str
     exam_date: date | None
+    question_type: str
     pinned: bool
     created_at: datetime
+
+
+class MaterialOut(Out):
+    id: UUID
+    filename: str
+    content_type: str
+    size_bytes: int
+    status: str  # uploaded | extracting | ready | failed
+    error: str | None
+    problem_count: int
+    created_at: datetime
+
+
+class PastProblemOut(ProblemOut):
+    number: int | None
+    has_answer: bool
+    needs_figure: bool
+
+
+class GenerateIn(BaseModel):
+    """기출 기반 문제 만들기 — 기출보다 쉽게 / 비슷하게 / 어렵게."""
+    level: Literal["easier", "same", "harder"] = "same"
+    count: int = Field(default=3, ge=1, le=5)
+    concept_id: str | None = None
 
 
 class WeakConcept(BaseModel):
