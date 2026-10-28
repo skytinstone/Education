@@ -5,18 +5,18 @@ from uuid import UUID
 
 from typing import Annotated
 
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from education.api.deps import DB, CurrentUser
-from education.api.dto import LoginIn, SignupIn, SocialSignupIn, TicketIn, TokenOut, UserOut, UserPatch
+from education.api.dto import AccountDeleteIn, LoginIn, SignupIn, SocialSignupIn, TicketIn, TokenOut, UserOut, UserPatch
 from education.config import get_settings
 from education.db import models as m
 from education.security import create_ticket, create_token, hash_password, read_ticket, verify_password
-from education.services import avatars, oauth
+from education.services import avatars, materials, oauth
 from education.services.oauth import OAuthError, Provider, SocialProfile
 
 router = APIRouter(tags=["인증 · 사용자"])
@@ -191,6 +191,20 @@ def update_me(body: UserPatch, user: CurrentUser, db: DB) -> UserOut:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "없는 캐릭터예요")
     db.commit()
     return UserOut.model_validate(user)
+
+
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
+def delete_me(body: AccountDeleteIn, user: CurrentUser, db: DB) -> Response:
+    """회원 탈퇴 — 계정과 학습 기록(DB 에서 함께 지워짐), 올린 기출 파일, 프로필 사진을 지운다.
+    백업에는 최대 90일 남았다가 자동 삭제된다 (개인정보처리방침 4번)."""
+    if body.confirm_email.strip().lower() != user.email:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "이메일이 맞지 않아요")
+    user_id = user.id
+    db.delete(user)  # 학습 기록·프로젝트·카드 등은 DB 의 ON DELETE CASCADE 로 함께 지워진다
+    db.commit()
+    avatars.delete_photo(user_id)
+    materials.delete_user_files(user_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/me/avatar")

@@ -79,3 +79,26 @@ def test_sync_includes_profile(client, auth):
     client.patch("/api/me", json={"school": "유레카고", "avatar": "flask"}, headers=auth)
     user = client.get("/api/sync", headers=auth).json()["user"]
     assert user["school"] == "유레카고" and user["avatarType"] == "preset" and user["avatarPreset"] == "flask"
+
+
+def test_delete_account(client, new_user, tmp_path, monkeypatch):
+    from education.services import materials
+    monkeypatch.setattr(materials, "UPLOAD_DIR", tmp_path)
+    auth = new_user(email="leaver@example.com")
+    other = new_user()
+    me = client.get("/api/me", headers=auth).json()
+    client.post("/api/me/avatar", files={"file": ("me.jpg", photo_bytes(), "image/jpeg")}, headers=auth)
+    (tmp_path / me["id"]).mkdir()
+    (tmp_path / me["id"] / "past.pdf").write_bytes(b"%PDF")
+    client.post("/api/projects", json={"name": "수능", "subject_id": "math.calculus"}, headers=auth)
+
+    wrong = client.request("DELETE", "/api/me", json={"confirm_email": "someone@example.com"}, headers=auth)
+    assert wrong.status_code == 422  # 이메일이 다르면 지우지 않는다
+    assert client.get("/api/me", headers=auth).status_code == 200
+
+    r = client.request("DELETE", "/api/me", json={"confirm_email": " Leaver@Example.com "}, headers=auth)
+    assert r.status_code == 204
+    assert client.get("/api/me", headers=auth).status_code == 401  # 토큰도 더는 쓸 수 없다
+    assert not avatars.path_for(me["id"]).exists() and not (tmp_path / me["id"]).exists()
+    assert client.post("/api/auth/login", json={"email": "leaver@example.com", "password": "abc12345"}).status_code == 401
+    assert client.get("/api/me", headers=other).status_code == 200  # 다른 사람은 그대로

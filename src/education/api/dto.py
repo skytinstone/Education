@@ -90,6 +90,11 @@ class SocialSignupIn(BaseModel):
     agreed_marketing: bool = False
 
 
+class AccountDeleteIn(BaseModel):
+    """회원 탈퇴 — 실수로 누르지 않도록 내 이메일을 그대로 입력받는다."""
+    confirm_email: str
+
+
 class UserPatch(BaseModel):
     """보낸 필드만 바꾼다. 학교·전공·주소·생년월일은 빈 값("" 또는 null)을 보내면 지운다."""
     name: str | None = Field(default=None, min_length=1, max_length=40)

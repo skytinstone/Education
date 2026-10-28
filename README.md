@@ -36,7 +36,7 @@ tests/                      API·마이그레이션 테스트 (테스트 전용 
 
 prototype/                  화면 — 서버(localhost:8000/app)로 열면 로그인한 계정의 DB 데이터, 파일로 열면 localStorage 샘플 데이터
   login.html · index.html   로그인 / 학습자 앱
-  terms.html · privacy.html 이용약관 / 개인정보처리방침 (legal.css)
+  terms.html · privacy.html · consent.html   이용약관 / 개인정보처리방침 / 가입 동의 안내 (legal.css)
   app.js · app.css · store.js · dots.js · concepts.js(자동 생성)
 ```
 
@@ -66,7 +66,7 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 ## API 요약 (`/api`)
 | 영역 | 엔드포인트 |
 |---|---|
-| 인증 | `POST /auth/signup` · `POST /auth/login` · `GET/PATCH /me` |
+| 인증 | `POST /auth/signup` · `POST /auth/login` · `GET/PATCH /me` · `DELETE /me` (회원 탈퇴, `{confirm_email}`) |
 | 간편 로그인 | `GET /auth/providers` · `GET /auth/{google\|kakao}/start` → `/callback` · `POST /auth/social/exchange` · `POST /auth/social/complete` |
 | 프로젝트 | `GET/POST /projects` · `GET/PATCH/DELETE /projects/{id}` (GET 은 정답률·약점 요약 포함) |
 | 대화 | `GET/POST /sessions` · `GET/PATCH/DELETE /sessions/{id}` · `POST /sessions/{id}/messages` |

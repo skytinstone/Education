@@ -21,6 +21,15 @@ body {
 h1 { font-size: 28px; letter-spacing: -0.02em; line-height: 1.3; }
 .meta { margin-top: 8px; color: var(--ink-3); font-size: 13px; }
 .intro { margin-top: 24px; color: var(--ink-2); }
+.summary { margin-top: 28px; }
+h2.summary-title { margin-top: 0; font-size: 15px; color: var(--ink-2); }
+.label-grid { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+.label { padding: 14px 16px; border-radius: 14px; background: #fff; box-shadow: inset 0 0 0 1px var(--line); display: grid; gap: 4px; font-size: 14px; }
+.label b { font-size: 12.5px; color: var(--accent); font-weight: 600; }
+.label small { color: var(--ink-3); }
+.consent { margin-top: 28px; padding: 20px 22px; border-radius: 16px; background: #fff; box-shadow: inset 0 0 0 1px var(--line); scroll-margin-top: 16px; }
+.consent h2 { margin-top: 0; }
+.consent .note { color: var(--ink-2); font-size: 14px; }
 nav.toc { margin-top: 24px; padding: 16px 20px; border-radius: 14px; background: #fff; box-shadow: inset 0 0 0 1px var(--line); font-size: 14px; }
 nav.toc ol { padding-left: 20px; columns: 2; column-gap: 24px; }
 nav.toc a { color: var(--ink-2); text-decoration: none; }

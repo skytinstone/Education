@@ -445,6 +445,10 @@ const Store = (() => {
         return send("/me", { method: "PATCH", body });
       }
     },
+    // 회원 탈퇴 — 확인용으로 내 이메일을 그대로 보낸다
+    async deleteAccount(confirmEmail) {
+      await api("/me", { method: "DELETE", body: { confirm_email: confirmEmail } });
+    },
     // 프로필 사진: "initial" 또는 Eureka 캐릭터 이름
     async setAvatar(key) {
       if (local) {

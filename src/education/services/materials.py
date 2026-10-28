@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import shutil
 import uuid
 from collections.abc import Callable
 from contextlib import AbstractContextManager
@@ -52,6 +53,11 @@ EXTRACT_INSTRUCTIONS = r"""당신은 시험지를 디지털 문제 은행으로 
 - 정답은 시험지나 정답표에 실제로 적혀 있을 때만 옮기고, 없으면 null. 직접 풀어서 채우지 않는다
 - 그림·그래프·표가 있어야 풀 수 있는 문항은 needs_figure 를 true 로 하고, 그림의 핵심 정보를 글로 짧게 설명해 본문 끝에 [그림: …] 으로 덧붙인다
 - concept_id 는 주어진 목록에서만 고른다"""
+
+
+def delete_user_files(user_id: uuid.UUID) -> None:
+    """회원 탈퇴 — 그 사용자가 올린 기출 파일을 모두 지운다."""
+    shutil.rmtree(UPLOAD_DIR / str(user_id), ignore_errors=True)
 
 
 def validate_upload(content_type: str, data: bytes) -> str | None:

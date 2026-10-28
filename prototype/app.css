@@ -470,3 +470,9 @@ a.nav-item { text-decoration: none; }
 .settings-foot .btn-primary { height: 38px; border-radius: 11px; padding: 0 18px; }
 .settings-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; font-size: 14px; color: var(--ink-2); }
 .settings-row .btn-ghost { height: 36px; border-radius: 11px; }
+.leave { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13.5px; color: var(--ink-2); }
+.leave summary { cursor: pointer; color: var(--ink-3); width: fit-content; }
+.leave summary:hover { color: var(--bad); }
+.leave p { margin: 12px 0; line-height: 1.6; }
+.leave p a { color: var(--ink-2); }
+.leave .btn-primary[disabled] { opacity: .45; cursor: not-allowed; }

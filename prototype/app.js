@@ -1026,6 +1026,16 @@
         <h3><i data-lucide="shield"></i>계정</h3>
         <div class="settings-row"><span>${Store.mode === "api" ? `${esc(u.email)}로 로그인했어요` : "로컬 모드 (브라우저에만 저장)"}</span>
           <button class="btn-ghost glassy" id="s-logout"><i data-lucide="log-out"></i>로그아웃</button></div>
+        ${Store.mode === "api" ? `<details class="leave">
+          <summary>회원 탈퇴</summary>
+          <form id="leave-form" novalidate>
+            <p>탈퇴하면 학습 기록, 오답노트, 프로젝트, 암기 카드, 올린 기출 파일이 <b>모두 지워지고 되살릴 수 없어요.</b>
+              장애 복구용 백업에는 최대 90일 남았다가 자동으로 지워져요. <a href="privacy.html#p4" target="_blank" rel="noopener">자세히</a></p>
+            <div class="field"><label for="leave-email">확인을 위해 이메일 <b>${esc(u.email)}</b> 을 입력해 주세요</label>
+              <input id="leave-email" type="email" autocomplete="off" placeholder="${esc(u.email)}" /></div>
+            <div class="settings-foot"><button class="btn-primary danger" type="submit" id="leave-submit" disabled><i data-lucide="user-x"></i>탈퇴하기</button></div>
+          </form>
+        </details>` : ""}
       </section>`;
 
     const refreshAvatar = () => {
@@ -1076,6 +1086,21 @@
       try { localStorage.removeItem("eureka.token"); localStorage.removeItem("eureka.user"); } catch { /* 무시 */ }
       location.href = "login.html";
     });
+    const leave = $("#leave-form");
+    if (leave) {
+      const same = () => $("#leave-email").value.trim().toLowerCase() === u.email.toLowerCase();
+      $("#leave-email").addEventListener("input", () => ($("#leave-submit").disabled = !same()));
+      leave.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        if (!same()) return;
+        $("#leave-submit").disabled = true;
+        try {
+          await Store.deleteAccount($("#leave-email").value.trim());
+          try { localStorage.removeItem("eureka.token"); localStorage.removeItem("eureka.user"); } catch { /* 무시 */ }
+          location.href = "login.html#left";
+        } catch (err) { toast(err.message); $("#leave-submit").disabled = false; }
+      });
+    }
   }
 
   // ================= 모달 =================

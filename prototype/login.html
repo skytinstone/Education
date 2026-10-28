@@ -171,6 +171,9 @@
   .terms { margin-top: 14px; font-size: 12px; line-height: 1.6; color: var(--ink-3); text-align: center; }
   .terms a { color: var(--ink-2); text-decoration: underline; text-underline-offset: 2px; }
   .switch { margin-top: 16px; font-size: 13px; color: var(--ink-2); }
+  .legal-links { margin-top: 10px; font-size: 12px; color: var(--ink-3); }
+  .legal-links a { color: var(--ink-3); text-decoration: none; }
+  .legal-links a:hover { color: var(--ink-2); text-decoration: underline; }
   .switch button { font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 
   /* 안내·오류 배너 */
@@ -311,8 +314,8 @@
           <ul>
             <li><label class="check"><input type="checkbox" data-agree required /> <span><em>[필수]</em> 만 14세 이상입니다</span></label></li>
             <li><label class="check"><input type="checkbox" data-agree required /> <span><em>[필수]</em> 이용약관 동의</span></label><a class="view" href="terms.html" target="_blank" rel="noopener">보기</a></li>
-            <li><label class="check"><input type="checkbox" data-agree required /> <span><em>[필수]</em> 개인정보 수집·이용 동의</span></label><a class="view" href="privacy.html" target="_blank" rel="noopener">보기</a></li>
-            <li><label class="check"><input type="checkbox" data-agree /> <span><em class="opt">[선택]</em> 학습 알림·소식 받기</span></label></li>
+            <li><label class="check"><input type="checkbox" data-agree required /> <span><em>[필수]</em> 개인정보 수집·이용 동의</span></label><a class="view" href="consent.html#privacy" target="_blank" rel="noopener">보기</a></li>
+            <li><label class="check"><input type="checkbox" data-agree /> <span><em class="opt">[선택]</em> 학습 알림·소식 받기</span></label><a class="view" href="consent.html#marketing" target="_blank" rel="noopener">보기</a></li>
           </ul>
         </div>
 
@@ -336,8 +339,8 @@
           <ul>
             <li><label class="check"><input type="checkbox" data-sagree="over_14" required /> <span><em>[필수]</em> 만 14세 이상입니다</span></label></li>
             <li><label class="check"><input type="checkbox" data-sagree="terms" required /> <span><em>[필수]</em> 이용약관 동의</span></label><a class="view" href="terms.html" target="_blank" rel="noopener">보기</a></li>
-            <li><label class="check"><input type="checkbox" data-sagree="privacy" required /> <span><em>[필수]</em> 개인정보 수집·이용 동의</span></label><a class="view" href="privacy.html" target="_blank" rel="noopener">보기</a></li>
-            <li><label class="check"><input type="checkbox" data-sagree="marketing" /> <span><em class="opt">[선택]</em> 학습 알림·소식 받기</span></label></li>
+            <li><label class="check"><input type="checkbox" data-sagree="privacy" required /> <span><em>[필수]</em> 개인정보 수집·이용 동의</span></label><a class="view" href="consent.html#privacy" target="_blank" rel="noopener">보기</a></li>
+            <li><label class="check"><input type="checkbox" data-sagree="marketing" /> <span><em class="opt">[선택]</em> 학습 알림·소식 받기</span></label><a class="view" href="consent.html#marketing" target="_blank" rel="noopener">보기</a></li>
           </ul>
         </div>
         <p class="hint bad" id="sf-error"></p>
@@ -350,6 +353,7 @@
     <p class="switch reveal" id="switch">
       <span>계정이 없으신가요?</span> <button type="button" data-switch>회원가입</button>
     </p>
+    <p class="legal-links reveal"><a href="terms.html" target="_blank" rel="noopener">이용약관</a> · <a href="privacy.html" target="_blank" rel="noopener"><b>개인정보처리방침</b></a></p>
   </section>
 </main>
 
@@ -606,6 +610,9 @@
     notice((ERRORS[back.get("error")] ?? ERRORS.provider)(back.get("provider")));
   } else if (location.hash === "#signup") {
     setMode("signup");
+  } else if (location.hash === "#left") {
+    history.replaceState(null, "", location.pathname);
+    notice("탈퇴가 끝났어요. 그동안 Eureka를 이용해 주셔서 고마워요", "info");
   }
 </script>
 </body>
