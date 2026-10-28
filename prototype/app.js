@@ -1111,7 +1111,7 @@
           ${next.length ? `<div class="links">${next.map(link).join("")}</div>` : '<p class="mini">이 개념이 이 단원의 마무리예요</p>'}</section>
       </div>
       ${cards.length ? `<section class="panel" style="margin-top:12px"><h3><i data-lucide="layers"></i>암기 카드 ${cards.length}장</h3>
-        <div class="list">${cards.map((k) => `<a href="#/library/cards"><i data-lucide="${k.known ? "check" : "circle-dashed"}"></i>${esc(k.front)}<span>${k.known ? "외움" : "아직"}</span></a>`).join("")}</div></section>` : ""}
+        <div class="list">${cards.map((k) => `<a href="#/library/cards"><i data-lucide="${k.known ? "check" : "circle-dashed"}"></i><span class="card-front" data-math>${esc(k.front)}</span><span>${k.known ? "외움" : "아직"}</span></a>`).join("")}</div></section>` : ""}
       <section style="margin-top:12px">
         <h3 style="font-size:14.5px;font-weight:600">관련 문제 ${problems.length}개</h3>
         ${problems.length ? problems.map((p) => problemHTML(p.id)).join("") : '<p class="mini">문제 은행에 아직 이 개념의 문제가 없어요. AI 연결 후 바로 만들 수 있어요</p>'}
@@ -1175,6 +1175,9 @@
       </section>`;
   }
 
+  // 카드 글 길이에 따라 글씨 크기 (수식 기호는 길이에서 뺀다)
+  const cardLen = (t = "") => { const n = plainMath(t).length; return n > 120 ? "longer" : n > 60 ? "long" : ""; };
+
   function renderDeck() {
     const all = Store.state.cards;
     const deck = all.filter((c) => c.known !== true);
@@ -1196,8 +1199,8 @@
         <div class="deck-progress"><span>외운 카드 ${known} / ${all.length}</span><div class="bar"><i style="width:${(known / all.length) * 100}%"></i></div></div>
         <div class="flash ${flipped ? "flipped" : ""}" id="flash" style="--c:${COLOR[c.domain]}" tabindex="0" role="button" aria-label="카드 뒤집기">
           <div class="flash-inner">
-            <div class="flash-face"><small>${esc(subjectOf(c.id).name)} · ${esc(c.name)}</small><p>${esc(card.front)}</p><small>눌러서 정답 보기</small></div>
-            <div class="flash-face flash-back"><small>정답</small><p>${esc(card.back)}</p></div>
+            <div class="flash-face"><small>${esc(subjectOf(c.id).name)} · ${esc(c.name)}</small><p class="${cardLen(card.front)}" data-math>${esc(card.front)}</p><small>눌러서 정답 보기</small></div>
+            <div class="flash-face flash-back"><small>정답</small><p class="${cardLen(card.back)}" data-math>${esc(card.back)}</p></div>
           </div>
         </div>
         <div class="deck-actions">
