@@ -1,9 +1,9 @@
-# 운영 배포 — AWS EC2 (서울) + eurekai.cloud
+# 운영 배포 — AWS EC2 (시드니) + eurekai.cloud
 
 서버 한 대에 Docker Compose 로 세 가지를 띄운다. 내 PC 는 꺼도 된다.
 
 ```
-사용자 ── https://eurekai.cloud ──▶ [EC2 t4g.small (서울), 탄력적 IP]
+사용자 ── https://eurekai.cloud ──▶ [EC2 t4g.small (시드니), 탄력적 IP]
                                      ├─ caddy  : HTTPS 인증서 자동 발급·갱신, 80·443 만 외부에 열림
                                      ├─ app    : FastAPI (/api + /app 화면), 시작할 때 마이그레이션·seed 자동 실행
                                      └─ db     : PostgreSQL 17 (외부에서 접속 불가)
@@ -14,7 +14,7 @@
 관련 파일: `Dockerfile` · `docker-compose.prod.yml` · `deploy/Caddyfile` · `.env.production.example` · `scripts/backup.sh`
 같은 파일이 다른 클라우드(Oracle, Lightsail 등)의 우분투 서버에서도 그대로 동작한다.
 
-비용(서울, 대략): EC2 t4g.small 약 $15 + 탄력적 IP 약 $3.6 + 디스크 20GB 약 $1.6 + S3 백업 몇 센트 ≈ **월 $20**.
+비용(대략): EC2 t4g.small 약 $15 + 탄력적 IP 약 $3.6 + 디스크 20GB 약 $1.6 + S3 백업 몇 센트 ≈ **월 $20**.
 Free plan 크레딧은 2027-04-28 까지 — 크레딧이 떨어지거나 기간이 끝나면 서비스가 멈추므로 그 전에 유료 전환 여부를 정한다.
 
 ---
@@ -23,7 +23,7 @@ Free plan 크레딧은 2027-04-28 까지 — 크레딧이 떨어지거나 기간
 **Billing and Cost Management → Budgets → 예산 생성 → 템플릿: 제로 지출 예산**, 이메일 수신자에 내 이메일.
 
 ## 2. EC2 서버 만들기
-오른쪽 위 리전을 **아시아 태평양(서울) ap-northeast-2** 로 바꾼 뒤 **EC2 → 인스턴스 시작**
+오른쪽 위 리전을 **아시아 태평양(시드니) ap-southeast-2** 로 바꾼 뒤 (Free plan 계정은 배정된 리전 하나만 쓸 수 있다 — 서울은 플랜 업그레이드 후) **EC2 → 인스턴스 시작**
 
 | 항목 | 값 |
 |---|---|
@@ -51,7 +51,7 @@ SSH 를 '내 IP' 로 막아 두면 집·회사 IP 가 바뀌었을 때 접속이
 내 PC 에서 `nslookup eurekai.cloud` 결과가 탄력적 IP 로 나오면 반영된 것이다 (보통 몇 분). **반영된 뒤에 6번을 해야** HTTPS 인증서가 발급된다.
 
 ## 4. S3 백업 버킷 + 서버 권한
-1. **S3 → 버킷 만들기** — 리전 서울, 이름 예: `eurekai-backups-<아무숫자>` (전 세계에서 유일해야 함), **모든 퍼블릭 액세스 차단** 켜 둔 그대로
+1. **S3 → 버킷 만들기** — 리전 시드니(서버와 같은 곳), 이름 예: `eurekai-backups-<아무숫자>` (전 세계에서 유일해야 함), **모든 퍼블릭 액세스 차단** 켜 둔 그대로
 2. 만든 버킷 → **관리 → 수명 주기 규칙 생성** — 이름 `expire-90d`, 범위 '모든 객체', **객체의 현재 버전 만료: 90일** (오래된 백업 자동 삭제)
 3. **IAM → 역할 → 역할 생성** — 신뢰할 엔터티 'AWS 서비스', 사용 사례 **EC2** → 권한 정책은 건너뛰고 이름 `eureka-prod-ec2` 로 생성
 4. 만든 역할 → **권한 추가 → 인라인 정책 생성 → JSON** 에 붙여넣기 (버킷 이름 두 곳을 바꾼다), 이름 `eureka-backup-s3`:
