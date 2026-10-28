@@ -24,6 +24,7 @@ src/education/
   services/learning.py      채점, 오답노트, 약점 통계
   services/tutor.py         대화 답변 (AI 연결 전 임시: 문제 은행에서 고르기)
   services/notes.py         내 맞춤 개념 정리 + 암기 카드 (생성 → 검증 에이전트)
+  services/review.py        서술형 풀이 확인 (손글씨 사진도 읽음, 처음 틀린 단계 표시)
   seed.py                   개념·문제·데모 계정 적재
 migrations/                 Alembic 마이그레이션
 docker-compose.yml          개발용 PostgreSQL 17 (127.0.0.1:5433)
@@ -71,7 +72,7 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 | 간편 로그인 | `GET /auth/providers` · `GET /auth/{google\|kakao}/start` → `/callback` · `POST /auth/social/exchange` · `POST /auth/social/complete` |
 | 프로젝트 | `GET/POST /projects` · `GET/PATCH/DELETE /projects/{id}` (GET 은 정답률·약점 요약 포함) |
 | 대화 | `GET/POST /sessions` · `GET/PATCH/DELETE /sessions/{id}` · `POST /sessions/{id}/messages` |
-| 문제·풀이 | `GET /problems` · `GET /problems/{id}` · `POST /attempts` |
+| 문제·풀이 | `GET /problems` · `GET /problems/{id}` · `POST /attempts` · `POST /problems/{id}/review` (서술형 풀이 확인, 글 또는 손글씨 PNG) |
 | 오답노트 | `GET /wrong-notes` (과목·이유·안 푼 것만·프로젝트 필터) · `PATCH/DELETE /wrong-notes/{id}` |
 | 라이브러리 | `GET /concepts` · `GET /concepts/{id}` · `GET/POST /concepts/{id}/note` (내 맞춤 개념 정리, 만들 때 카드도 덱에) · `GET /saved` · `PUT/DELETE /saved/{problem_id}` · `GET /cards` · `PATCH /cards/{id}` · `POST /cards/reset` |
 | 통계 | `GET /stats` (오늘 푼 문제, 연속 학습일, 과목별 정답률, 약점) |

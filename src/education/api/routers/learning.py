@@ -9,11 +9,11 @@ from sqlalchemy.dialects.postgresql import insert
 from education.api.deps import DB, CurrentUser, owned
 from education.api.dto import (
     AttemptIn, AttemptResult, CardOut, CardPatch, ConceptDetail, ConceptNoteCreated, ConceptNoteOut, ConceptOut,
-    ProblemOut, ProblemView, StatsOut, WrongNoteOut, WrongNotePatch,
+    ProblemOut, ProblemView, SolutionReviewIn, StatsOut, WrongNoteOut, WrongNotePatch,
 )
 from education.db import models as m
 from education.schemas import Domain, ErrorType
-from education.services import learning, notes
+from education.services import learning, notes, review
 from education.services.llm import get_llm
 
 router = APIRouter(tags=["학습"])
@@ -86,6 +86,26 @@ def get_problem(problem_id: str, db: DB, user: CurrentUser) -> ProblemOut:
     if p is None or p.owner_user_id not in (None, user.id):
         raise HTTPException(404, "문제를 찾을 수 없어요")
     return ProblemOut.model_validate(p)
+
+
+@router.post("/problems/{problem_id}/review", tags=["문제"])
+def review_solution(problem_id: str, body: SolutionReviewIn, user: CurrentUser, db: DB) -> review.Review:
+    """서술형 풀이를 단계별로 확인해 어디서 틀렸는지 알려 준다 (손글씨 사진도 가능). 아직 답을 내지 않은 문제면 정답은 숨긴다."""
+    if not (body.text and body.text.strip()) and not body.image:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "풀이를 적거나 손글씨로 써 주세요")
+    p = db.get(m.Problem, problem_id)
+    if p is None or p.owner_user_id not in (None, user.id):
+        raise HTTPException(404, "문제를 찾을 수 없어요")
+    llm = get_llm()
+    if llm is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 아직 설정되지 않았어요")
+    attempted = db.scalar(select(m.Attempt.id).where(m.Attempt.user_id == user.id, m.Attempt.problem_id == problem_id).limit(1)) is not None
+    try:
+        return review.review_solution(db, llm, user, p, text=body.text, image=body.image, attempted=attempted)
+    except review.ImageError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
+    except review.ReviewError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from None
 
 
 @router.post("/attempts", tags=["문제"], status_code=status.HTTP_201_CREATED)

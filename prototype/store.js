@@ -456,6 +456,11 @@ const Store = (() => {
       commit();
       return r;
     },
+    // 서술형 풀이 확인 — { text } 또는 { image: PNG data URL }. 서버 모드에서만
+    reviewSolution(problemId, body) {
+      if (local) return Promise.reject(new Error("서술형 풀이 확인은 로그인한 서버 화면에서 쓸 수 있어요"));
+      return api(`/problems/${problemId}/review`, { method: "POST", body });
+    },
     // 학교 검색 (나이스, 서버가 대신 물음) — 로컬 모드에선 빈 목록
     searchSchools(q) {
       return local ? Promise.resolve([]) : api(`/search/schools?q=${encodeURIComponent(q)}`);

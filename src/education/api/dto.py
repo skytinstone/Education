@@ -299,6 +299,19 @@ class CardPatch(BaseModel):
     known: bool | None
 
 
+class SolutionReviewIn(BaseModel):
+    """서술형 풀이 — 타이핑한 글, 손글씨 캔버스(PNG data URL) 중 하나 이상."""
+    text: str | None = Field(default=None, max_length=4000)
+    image: str | None = Field(default=None, max_length=5_000_000)
+
+    @field_validator("image")
+    @classmethod
+    def _png(cls, v: str | None) -> str | None:
+        if v is not None and not v.startswith("data:image/png;base64,"):
+            raise ValueError("손글씨는 PNG 이미지여야 해요")
+        return v
+
+
 class ConceptNoteOut(Out):
     """내 맞춤 개념 정리 — content 는 services/notes.py 의 NoteContent
     (summary, must_memorize[{title, body}], pitfalls, example{question, solution}, personal_tip)."""

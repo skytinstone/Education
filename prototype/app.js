@@ -10,7 +10,10 @@
   const icons = () => {
     lucide.createIcons();
     if (window.renderMathInElement) $$("[data-math]").forEach((el) => renderMathInElement(el, MATH_OPTS));
+    mountWorkCanvases();
   };
+  // 서술형 풀이 칸 상태 — 문제 id → { open, tab, text, image, drawn, eraser, review, busy } (다시 그려도 유지)
+  const workState = {};
   // 검색 결과처럼 짧은 글로 보여 줄 때: LaTeX 명령을 걷어 낸 평문
   const plainMath = (s = "") => s.replace(/\$+([^$]*)\$+/g, (_, m) => m
     .replace(/\\(displaystyle|mathrm|dfrac|frac|left|right|text)\b/g, " ").replace(/\\[,;!]/g, " ")
@@ -428,18 +431,181 @@
         ${p.solution ? `<div class="solution"><b>해설</b><span data-math>${esc(p.solution)}</span></div>` : ""}
         ${note ? whyHTML(note) : ""}`;
     }
+    const work = workState[pid]?.open;
     return `
-      <article class="problem" data-problem="${pid}" style="--c:${COLOR[p.domain]}">
-        <div class="problem-meta">
-          <span class="kind"><span class="sw"></span>${esc(conceptLabel(p))}${isShort(p) ? " · 단답형" : ""}</span>
-          <span class="stars" title="난이도 ${p.difficulty}">${"★".repeat(p.difficulty)}${"☆".repeat(5 - p.difficulty)}</span>
-          <button class="icon-btn save ${saved ? "on" : ""}" data-save="${pid}" title="${saved ? "저장 취소" : "저장"}"><i data-lucide="bookmark"></i></button>
+      <article class="problem ${work ? "has-work" : ""}" data-problem="${pid}" style="--c:${COLOR[p.domain]}">
+        <div class="problem-main">
+          <div class="problem-meta">
+            <span class="kind"><span class="sw"></span>${esc(conceptLabel(p))}${isShort(p) ? " · 단답형" : ""}</span>
+            <span class="stars" title="난이도 ${p.difficulty}">${"★".repeat(p.difficulty)}${"☆".repeat(5 - p.difficulty)}</span>
+            <button class="work-btn ${work ? "on" : ""}" data-work="${pid}" title="풀이를 쓰면 AI가 어디서 틀렸는지 알려줘요"><i data-lucide="pencil-line"></i>서술형 풀이</button>
+            <button class="icon-btn save ${saved ? "on" : ""}" data-save="${pid}" title="${saved ? "저장 취소" : "저장"}"><i data-lucide="bookmark"></i></button>
+          </div>
+          <p class="stem" data-math>${index ? `<b>${index}.</b> ` : ""}${esc(p.stem)}</p>
+          ${answerArea}
+          ${result}
         </div>
-        <p class="stem" data-math>${index ? `<b>${index}.</b> ` : ""}${esc(p.stem)}</p>
-        ${answerArea}
-        ${result}
+        ${work ? workHTML(pid) : ""}
       </article>`;
   }
+
+  // ---------- 서술형 풀이: 타이핑(수식 미리보기) 또는 손글씨 → AI 가 단계별로 확인 ----------
+  const workPreview = (text) => esc(text || "").trim() || '<span class="mini">수식은 $x^2+1$ 처럼 $ 로 감싸면 여기에 보기 좋게 보여요</span>';
+  function workHTML(pid) {
+    const w = workState[pid];
+    const attempted = Store.state.attempts.some((a) => a.problemId === pid);
+    return `
+      <div class="work" data-work-panel="${pid}">
+        <div class="work-head"><b><i data-lucide="pencil-line"></i>서술형 풀이</b>
+          <div class="seg">${[["type", "타이핑"], ["draw", "손글씨"]].map(([k, t]) => `<button type="button" data-work-tab="${k}" class="${w.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
+          <button type="button" class="icon-btn" data-work-close aria-label="풀이 칸 닫기"><i data-lucide="x"></i></button></div>
+        <div class="work-type" ${w.tab === "type" ? "" : "hidden"}>
+          <textarea data-work-text rows="6" maxlength="4000" placeholder="한 줄에 한 단계씩 적어 주세요&#10;예) t = x^2 로 치환하면 dt = 2x dx&#10;    $\\int_0^1 e^t\\,dt = e - 1$">${esc(w.text)}</textarea>
+          <div class="work-preview" data-math data-work-preview>${workPreview(w.text)}</div>
+        </div>
+        <div class="work-draw" ${w.tab === "draw" ? "" : "hidden"}>
+          <canvas data-work-canvas aria-label="손글씨 풀이"></canvas>
+          <div class="work-tools">
+            <button type="button" class="tag ${w.eraser ? "" : "on"}" data-work-pen><i data-lucide="pen-line"></i>펜</button>
+            <button type="button" class="tag ${w.eraser ? "on" : ""}" data-work-eraser><i data-lucide="eraser"></i>지우개</button>
+            <button type="button" class="tag" data-work-clear><i data-lucide="trash-2"></i>모두 지우기</button>
+          </div>
+        </div>
+        <div class="work-foot"><span class="mini">${attempted ? "정답과 비교해서 알려줘요" : "답을 내기 전이라 정답 대신 틀린 곳과 힌트만 알려줘요"}</span>
+          <button type="button" class="btn-primary" data-work-submit ${w.busy ? "disabled" : ""}>${w.busy ? '<i data-lucide="loader-circle" class="spin"></i>확인하는 중…' : '<i data-lucide="scan-search"></i>풀이 확인'}</button></div>
+        <div data-work-review>${w.review ? reviewHTML(w.review, w.tab) : ""}</div>
+      </div>`;
+  }
+  const VERDICT = {
+    correct: ["circle-check", "풀이가 맞아요", "ok"], partial: ["circle-alert", "거의 맞았어요. 중간에 고칠 곳이 있어요", "warn"],
+    wrong: ["circle-x", "접근 방법을 다시 생각해 봐요", "bad"], unreadable: ["scan-eye", "풀이를 읽지 못했어요. 조금 더 크고 또렷하게 써 주세요", "warn"],
+  };
+  function reviewHTML(r, tab) {
+    const [icon, title, cls] = VERDICT[r.verdict] ?? VERDICT.partial;
+    return `
+      <div class="work-review ${cls}">
+        <div class="wr-head"><i data-lucide="${icon}"></i>${title}</div>
+        ${tab === "draw" && r.transcription ? `<details class="wr-read"><summary>AI가 읽은 내 풀이</summary><div class="prose" data-math>${esc(r.transcription)}</div></details>` : ""}
+        ${r.steps.length ? `<ol class="wr-steps">${r.steps.map((s, i) => `
+          <li class="${s.ok ? "ok" : "bad"} ${r.first_error === i + 1 ? "first" : ""}"><i data-lucide="${s.ok ? "check" : "x"}"></i>
+            <div><span data-math>${esc(s.step)}</span>${r.first_error === i + 1 ? "<em>여기서부터 틀렸어요</em>" : ""}<small data-math>${esc(s.comment)}</small></div></li>`).join("")}</ol>` : ""}
+        <p data-math>${esc(r.summary)}</p>
+        ${r.hint ? `<p class="wr-hint" data-math><b>힌트</b> ${esc(r.hint)}</p>` : ""}
+      </div>`;
+  }
+  // 손글씨 캔버스: 흰 바탕 PNG 로 저장 (지우개는 흰색으로 덧칠)
+  function mountWorkCanvases() {
+    $$("canvas[data-work-canvas]:not([data-ready])").forEach((cv) => {
+      const w = workState[cv.closest("[data-work-panel]").dataset.workPanel];
+      const ctx = cv.getContext("2d");
+      const width = cv.clientWidth;
+      if (!width) return; // 숨겨진 탭이면 보일 때 다시
+      const dpr = Math.min(devicePixelRatio || 1, 2);
+      cv.width = width * dpr;
+      cv.height = 320 * dpr;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, width, 320);
+      if (w.image) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, width, 320); img.src = w.image; }
+      cv.dataset.ready = "1";
+      let drawing = false;
+      const at = (e) => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+      cv.addEventListener("pointerdown", (e) => {
+        drawing = true;
+        cv.setPointerCapture(e.pointerId);
+        ctx.lineCap = ctx.lineJoin = "round";
+        ctx.strokeStyle = w.eraser ? "#fff" : "#0f172a";
+        ctx.lineWidth = w.eraser ? 22 : e.pointerType === "pen" && e.pressure ? 1.5 + e.pressure * 2 : 2.4;
+        ctx.beginPath();
+        ctx.moveTo(...at(e));
+        ctx.lineTo(...at(e));
+        ctx.stroke();
+      });
+      cv.addEventListener("pointermove", (e) => { if (drawing) { ctx.lineTo(...at(e)); ctx.stroke(); } });
+      const end = () => { if (!drawing) return; drawing = false; w.image = cv.toDataURL("image/png"); w.drawn = true; };
+      cv.addEventListener("pointerup", end);
+      cv.addEventListener("pointercancel", end);
+    });
+  }
+  // 풀이 칸의 버튼들 (문제 카드가 있는 모든 화면에서 공통)
+  async function handleWork(e) {
+    const toggle = e.target.closest("[data-work]");
+    if (toggle) {
+      const pid = toggle.dataset.work, card = toggle.closest("[data-problem]");
+      const w = (workState[pid] ??= { open: false, tab: "type", text: "", image: null, drawn: false, eraser: false, review: null, busy: false });
+      w.open = !w.open;
+      card.classList.toggle("has-work", w.open);
+      toggle.classList.toggle("on", w.open);
+      $("[data-work-panel]", card)?.remove();
+      if (w.open) { card.insertAdjacentHTML("beforeend", workHTML(pid)); icons(); $("[data-work-text]", card)?.focus(); }
+      return;
+    }
+    const panel = e.target.closest("[data-work-panel]");
+    const pid = panel.dataset.workPanel, w = workState[pid];
+    const tab = e.target.closest("[data-work-tab]");
+    if (tab) {
+      w.tab = tab.dataset.workTab;
+      $$("[data-work-tab]", panel).forEach((b) => b.classList.toggle("on", b === tab));
+      $(".work-type", panel).hidden = w.tab !== "type";
+      $(".work-draw", panel).hidden = w.tab !== "draw";
+      mountWorkCanvases();
+      return;
+    }
+    if (e.target.closest("[data-work-close]")) {
+      w.open = false;
+      const card = panel.closest("[data-problem]");
+      card.classList.remove("has-work");
+      $("[data-work]", card)?.classList.remove("on");
+      panel.remove();
+      return;
+    }
+    const pen = e.target.closest("[data-work-pen]"), eraser = e.target.closest("[data-work-eraser]");
+    if (pen || eraser) {
+      w.eraser = !!eraser;
+      $("[data-work-pen]", panel).classList.toggle("on", !w.eraser);
+      $("[data-work-eraser]", panel).classList.toggle("on", w.eraser);
+      return;
+    }
+    if (e.target.closest("[data-work-clear]")) {
+      w.image = null;
+      w.drawn = false;
+      const cv = $("canvas[data-work-canvas]", panel);
+      cv.replaceWith(Object.assign(document.createElement("canvas"), { ariaLabel: "손글씨 풀이" }));
+      $(".work-draw canvas", panel).setAttribute("data-work-canvas", "");
+      mountWorkCanvases();
+      return;
+    }
+    if (!e.target.closest("[data-work-submit]")) return; // 캔버스·글 입력 등은 채점으로 넘기지 않는다
+    const text = (w.text || "").trim();
+    const image = w.tab === "draw" && w.drawn ? w.image : null;
+    if (w.tab === "type" ? !text : !image) return toast(w.tab === "draw" ? "손글씨로 풀이를 써 주세요" : "풀이를 적어 주세요");
+    w.busy = true;
+    const setBtn = () => {
+      const b = $(`[data-work-panel="${pid}"] [data-work-submit]`);
+      if (!b) return;
+      b.disabled = w.busy;
+      b.innerHTML = w.busy ? '<i data-lucide="loader-circle" class="spin"></i>확인하는 중…' : '<i data-lucide="scan-search"></i>풀이 확인';
+      lucide.createIcons();
+    };
+    setBtn();
+    try {
+      w.review = await Store.reviewSolution(pid, w.tab === "type" ? { text } : { image });
+      const box = $(`[data-work-panel="${pid}"] [data-work-review]`);
+      if (box) { box.innerHTML = reviewHTML(w.review, w.tab); icons(); }
+    } catch (err) { toast(err.message); }
+    w.busy = false;
+    setBtn();
+  }
+  // 타이핑하면 수식 미리보기를 바로 바꾼다
+  document.addEventListener("input", (e) => {
+    if (!e.target.matches?.("[data-work-text]")) return;
+    const panel = e.target.closest("[data-work-panel]");
+    workState[panel.dataset.workPanel].text = e.target.value;
+    const pv = $("[data-work-preview]", panel);
+    pv.innerHTML = workPreview(e.target.value);
+    if (window.renderMathInElement) renderMathInElement(pv, MATH_OPTS);
+  });
+
 
   // 보기 클릭 또는 단답형 제출 → 채점. 서버 결과를 받은 뒤 redraw(문제 카드, 풀이) 로 다시 그린다
   // (단답형은 form 이 아니라 입력칸+버튼 — 모달 자체가 form 이라 form 을 겹칠 수 없음)
@@ -476,6 +642,7 @@
 
   // 문제 카드 공통 동작: 저장, 틀린 이유 표시
   function handleProblemExtras(e) {
+    if (e.target.closest("[data-work], [data-work-panel]")) { handleWork(e); return true; }
     const save = e.target.closest("[data-save]");
     if (save) {
       Store.toggleSaved(save.dataset.save);
@@ -496,15 +663,59 @@
   // 문제 카드 하나만 다시 그리기 (라이브러리·다시 풀기 등)
   const redrawCard = (box, attempt) => { box.outerHTML = problemHTML(box.dataset.problem, { attempt }); icons(); };
 
+  // 대화에 나온 문제 묶음 — '한 문제씩'(넘겨 보기) 또는 '모두 보기'. 고른 방식은 기억한다
+  let problemView = (() => { try { return localStorage.getItem("eureka.problemView") || "one"; } catch { return "one"; } })();
+  const problemPos = {}; // "대화id:메시지번호" → 보고 있는 문제 위치
+  function problemSetHTML(s, mi, ids) {
+    const cards = ids.map((pid, i) => problemHTML(pid, { attempt: Store.lastAttempt(s.id, pid), index: i + 1 }));
+    if (ids.length < 2) return cards.join("");
+    const key = `${s.id}:${mi}`, one = problemView === "one";
+    const pos = Math.min(problemPos[key] ?? 0, ids.length - 1);
+    const dots = ids.map((pid, i) => {
+      const a = Store.lastAttempt(s.id, pid);
+      return `<button type="button" class="pdot ${a ? (a.correct ? "ok" : "bad") : ""} ${i === pos ? "on" : ""}" data-pgo="${i}" aria-label="${i + 1}번 문제"></button>`;
+    }).join("");
+    const done = ids.filter((pid) => Store.lastAttempt(s.id, pid)).length;
+    return `
+      <div class="pset" data-pset="${key}" data-count="${ids.length}">
+        <div class="pset-bar">
+          <div class="seg">${[["one", "한 문제씩"], ["all", "모두 보기"]].map(([k, t]) => `<button type="button" data-pview="${k}" class="${problemView === k ? "on" : ""}">${t}</button>`).join("")}</div>
+          ${one ? `<div class="pnav">
+              <button type="button" class="icon-btn" data-pstep="-1" ${pos === 0 ? "disabled" : ""} aria-label="이전 문제"><i data-lucide="chevron-left"></i></button>
+              <b>${pos + 1}</b><span>/ ${ids.length}</span>
+              <button type="button" class="icon-btn" data-pstep="1" ${pos === ids.length - 1 ? "disabled" : ""} aria-label="다음 문제"><i data-lucide="chevron-right"></i></button>
+            </div><div class="pdots">${dots}</div>` : `<span class="mini">${done} / ${ids.length}문제 풀었어요</span>`}
+        </div>
+        ${cards.map((c, i) => `<div class="pslot" ${one && i !== pos ? "hidden" : ""}>${c}</div>`).join("")}
+      </div>`;
+  }
+  // 묶음의 보기 방식·위치 바꾸기 (다시 그리지 않고 보이는 카드만 바꾼다)
+  function handleProblemSet(e, rerender) {
+    const mode = e.target.closest("[data-pview]");
+    if (mode) {
+      problemView = mode.dataset.pview;
+      try { localStorage.setItem("eureka.problemView", problemView); } catch { /* 저장 불가 */ }
+      rerender();
+      return true;
+    }
+    const step = e.target.closest("[data-pstep]"), goTo = e.target.closest("[data-pgo]");
+    if (!step && !goTo) return false;
+    const set = e.target.closest("[data-pset]"), key = set.dataset.pset, n = Number(set.dataset.count);
+    const pos = goTo ? Number(goTo.dataset.pgo) : (problemPos[key] ?? 0) + Number(step.dataset.pstep);
+    problemPos[key] = Math.max(0, Math.min(n - 1, pos));
+    rerender();
+    return true;
+  }
+
   function renderChat(id, { keepScroll = false } = {}) {
     const s = Store.session(id);
     if (!s) { toast("대화를 찾을 수 없어요"); return go("/"); }
     const scroll = contentEl.scrollTop;
     const p = s.projectId && Store.project(s.projectId);
-    const msgs = s.messages.map((m) => m.role === "user"
+    const msgs = s.messages.map((m, mi) => m.role === "user"
       ? `<div class="msg user"><div class="bubble">${esc(m.text)}</div></div>`
       : `<div class="msg ai"><span class="ai-avatar"></span><div class="ai-body"><p>${esc(m.text)}</p>
-          ${(m.problemIds ?? []).map((pid, i) => problemHTML(pid, { attempt: Store.lastAttempt(s.id, pid), index: i + 1 })).join("")}
+          ${problemSetHTML(s, mi, m.problemIds ?? [])}
         </div></div>`).join("");
 
     view.innerHTML = `
@@ -539,8 +750,7 @@
 
     const ctx = { projectId: s.projectId, sessionId: s.id };
     const redraw = () => renderChat(id, { keepScroll: true });
-    view.onclick = (e) => { if (!handleProblemExtras(e)) handleAnswer(e, ctx, redraw); };
-
+    view.onclick = (e) => { if (!handleProblemSet(e, redraw) && !handleProblemExtras(e)) handleAnswer(e, ctx, redraw); };
 
     contentEl.scrollTop = keepScroll ? scroll : contentEl.scrollHeight;
   }
