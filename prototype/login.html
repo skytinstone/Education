@@ -105,6 +105,7 @@
 
   .or { display: flex; align-items: center; gap: 12px; margin: 20px 0 16px; font-size: 12.5px; color: var(--ink-3); }
   .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  #social-or + .socials { margin-top: 0; }
 
   /* 폼 전환: 살짝 떠오르며 바뀜 */
   .pane { display: none; }
@@ -180,7 +181,7 @@
   .social.loading { pointer-events: none; opacity: .7; }
 
   /* 간편 로그인 첫 가입: 소셜 버튼·이메일 영역을 숨기고 약관 동의만 */
-  .card[data-mode="social"] .socials, .card[data-mode="social"] .or, .card[data-mode="social"] #terms { display: none; }
+  .card[data-mode="social"] .socials, .card[data-mode="social"] .or, .card[data-mode="social"] #social-or, .card[data-mode="social"] #terms { display: none; }
   .who { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-top: 18px; border-radius: 14px; background: rgba(255,255,255,.7); box-shadow: inset 0 0 0 1px var(--line); }
   .who b { display: block; font-size: 14.5px; }
   .who small { font-size: 12.5px; color: var(--ink-3); }
@@ -239,6 +240,7 @@
       <p class="sub" id="subtitle">로그인을 통해, Eureka를 경험해보세요</p>
       <p class="notice" id="card-notice" role="alert" hidden></p>
 
+      <div class="or" id="social-or">소셜 계정으로 로그인</div>
       <div class="socials">
         <button class="social google" data-provider="google">
           <svg viewBox="0 0 48 48" aria-hidden="true">
@@ -416,17 +418,17 @@
   const COPY = {
     login: {
       title: "환영합니다", sub: "로그인을 통해, Eureka를 경험해보세요",
-      social: "로그인", or: "또는 이메일로 로그인",
+      social: "로그인", socialOr: "소셜 계정으로 로그인", or: "또는 이메일로 로그인",
       switchText: "계정이 없으신가요?", switchBtn: "회원가입",
     },
     signup: {
       title: "Eureka 시작하기", sub: "Google·카카오로 3초 만에, 또는 이메일로 가입해요",
-      social: "시작하기", or: "또는 이메일로 가입",
+      social: "시작하기", socialOr: "소셜 계정으로 가입", or: "또는 이메일로 가입",
       switchText: "이미 계정이 있으신가요?", switchBtn: "로그인",
     },
     social: {
       title: "거의 다 됐어요", sub: "처음 한 번만 약관에 동의하면 가입이 끝나요",
-      social: "로그인", or: "",
+      social: "로그인", socialOr: "", or: "",
       switchText: "다른 방법으로 할래요", switchBtn: "로그인으로 돌아가기",
     },
   };
@@ -437,6 +439,7 @@
     card.dataset.mode = mode;
     $("#title").textContent = c.title;
     $("#subtitle").textContent = c.sub;
+    $("#social-or").textContent = c.socialOr;
     $("#or").textContent = c.or;
     $$("[data-label]").forEach((s) => (s.textContent = `${s.dataset.label}로 ${c.social}`));
     Object.entries(PANES).forEach(([m, sel]) => $(sel).classList.toggle("active", m === mode));
