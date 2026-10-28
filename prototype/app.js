@@ -1036,6 +1036,15 @@
 
 
   // ================= 계정 설정 =================
+  // 카카오(다음) 우편번호 서비스 — 키 없이 쓰는 주소 검색. 처음 누를 때만 스크립트를 불러온다
+  let postcodeReady = null;
+  const loadPostcode = () => (postcodeReady ??= new Promise((ok, fail) => {
+    const s = Object.assign(document.createElement("script"), { src: "https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js" });
+    s.onload = ok;
+    s.onerror = () => { postcodeReady = null; s.remove(); fail(new Error("주소 검색을 불러오지 못했어요. 잠시 후 다시 시도해 주세요")); };
+    document.head.append(s);
+  }));
+
   function renderSettings() {
     const u = Store.state.user;
     view.innerHTML = `
@@ -1071,8 +1080,14 @@
           <div class="field"><label for="s-school">학교 <small>· 선택</small></label><input id="s-school" value="${esc(u.school ?? "")}" maxlength="80" placeholder="예: 유레카고등학교" autocomplete="organization" /></div>
           <div class="field"><label for="s-major">전공 · 계열 <small>· 선택</small></label><input id="s-major" value="${esc(u.major ?? "")}" maxlength="80" placeholder="예: 자연계열, 컴퓨터공학" /></div>
         </div>
-        <div class="field"><label for="s-address">주소지 <small>· 선택 · 시·군·구까지만 적어도 충분해요</small></label>
-          <input id="s-address" value="${esc(u.address ?? "")}" maxlength="200" placeholder="예: 서울특별시 강남구" autocomplete="address-level2" /></div>
+        <div class="field"><label for="s-address">주소지 <small>· 선택</small></label>
+          <div class="addr-row">
+            <input id="s-address" value="${esc(u.address ?? "")}" readonly placeholder="주소 검색을 눌러 찾아 주세요" />
+            <button type="button" class="btn-ghost glassy" id="addr-search"><i data-lucide="search"></i>주소 검색</button>
+            <button type="button" class="btn-ghost glassy" id="addr-clear" ${u.address ? "" : "hidden"} aria-label="주소 지우기"><i data-lucide="x"></i></button>
+          </div>
+          <input id="s-address-detail" maxlength="60" placeholder="상세 주소 (선택) · 동·호수까지는 적지 않아도 돼요" autocomplete="off" hidden />
+          <div class="addr-embed" id="addr-embed" hidden></div></div>
         <div class="settings-foot"><button class="btn-primary" type="submit"><i data-lucide="check"></i>저장</button></div>
       </form>
 
@@ -1119,6 +1134,30 @@
         toast("프로필 사진을 바꿨어요");
       } catch (err) { toast(err.message); }
     });
+    const addr = $("#s-address"), addrDetail = $("#s-address-detail"), addrBox = $("#addr-embed"), addrClear = $("#addr-clear");
+    $("#addr-search").addEventListener("click", async () => {
+      if (!addrBox.hidden) { addrBox.hidden = true; return; }
+      try { await loadPostcode(); } catch (err) { return toast(err.message); }
+      addrBox.hidden = false;
+      addrBox.innerHTML = "";
+      new daum.Postcode({
+        width: "100%", height: "100%",
+        oncomplete: (d) => {
+          // 고른 쪽(도로명 R / 지번 J) 주소, 아파트면 건물 이름을 덧붙인다
+          const base = d.userSelectedType === "J" ? d.jibunAddress : d.roadAddress;
+          addr.value = d.userSelectedType === "R" && d.apartment === "Y" && d.buildingName ? `${base} (${d.buildingName})` : base;
+          addrDetail.value = "";
+          addrDetail.hidden = false;
+          addrClear.hidden = false;
+          addrBox.hidden = true;
+          addrDetail.focus();
+        },
+      }).embed(addrBox);
+    });
+    addrClear.addEventListener("click", () => {
+      addr.value = addrDetail.value = "";
+      addrDetail.hidden = addrClear.hidden = addrBox.hidden = true;
+    });
     $("#profile-form").addEventListener("submit", async (e) => {
       e.preventDefault();
       const f = e.currentTarget;
@@ -1129,9 +1168,14 @@
       if (!name) return invalid($("#s-name"), "이름을 입력해 주세요");
       if (!(goal >= 1 && goal <= 200)) return invalid($("#s-goal"), "1에서 200 사이로 입력해 주세요");
       if (birth && (birth > new Date().toISOString().slice(0, 10) || birth < "1900-01-01")) return invalid($("#s-birth"), "생년월일을 확인해 주세요");
+      const address = [addr.value.trim(), addrDetail.value.trim()].filter(Boolean).join(", ");
+      if (address.length > 200) return invalid(addrDetail, "상세 주소를 줄여 주세요");
       try {
         await Store.updateUser({ name, dailyGoal: goal, birthDate: birth || null, school: $("#s-school").value.trim(),
-          major: $("#s-major").value.trim(), address: $("#s-address").value.trim() });
+          major: $("#s-major").value.trim(), address });
+        addr.value = address;
+        addrDetail.value = "";
+        addrDetail.hidden = true;
         toast("저장했어요");
         renderSidebar();
       } catch (err) { toast(err.message); }

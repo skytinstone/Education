@@ -497,3 +497,11 @@ a.nav-item { text-decoration: none; }
 .np-upload[open] summary [data-lucide] { transform: rotate(90deg); }
 .np-upload[open] summary { margin-bottom: 10px; }
 @keyframes npIn { from { opacity: 0; transform: translateY(6px); } }
+
+/* 주소 검색 (카카오 우편번호 서비스) */
+.addr-row { display: flex; gap: 6px; }
+.addr-row input { flex: 1; min-width: 0; cursor: default; }
+.addr-row .btn-ghost { height: 42px; border-radius: 11px; padding: 0 12px; white-space: nowrap; flex-shrink: 0; }
+#s-address-detail { margin-top: 6px; }
+.addr-embed { margin-top: 8px; height: 440px; border-radius: 12px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); background: #fff; }
+.addr-row [hidden], #s-address-detail[hidden], .addr-embed[hidden] { display: none; }
