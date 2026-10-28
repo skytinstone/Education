@@ -102,3 +102,17 @@ def test_delete_account(client, new_user, tmp_path, monkeypatch):
     assert not avatars.path_for(me["id"]).exists() and not (tmp_path / me["id"]).exists()
     assert client.post("/api/auth/login", json={"email": "leaver@example.com", "password": "abc12345"}).status_code == 401
     assert client.get("/api/me", headers=other).status_code == 200  # 다른 사람은 그대로
+
+
+def test_school_search(client, auth, monkeypatch):
+    from education.services import schools
+    found = (schools.School(name="여의도고등학교", kind="고등학교", region="서울특별시", address="서울특별시 영등포구"),)
+    monkeypatch.setattr(schools, "search", lambda q: found if q == "여의도" else ())
+    assert client.get("/api/search/schools", params={"q": " 여의도 "}, headers=auth).json()[0]["name"] == "여의도고등학교"
+    assert client.get("/api/search/schools", params={"q": "여"}, headers=auth).json() == []  # 두 글자부터
+    assert client.get("/api/search/schools", params={"q": "여의도"}).status_code == 401
+
+    def broken(q):
+        raise schools.SchoolSearchError("timeout")
+    monkeypatch.setattr(schools, "search", broken)
+    assert client.get("/api/search/schools", params={"q": "여의도"}, headers=auth).status_code == 502

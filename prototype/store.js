@@ -456,6 +456,10 @@ const Store = (() => {
       commit();
       return r;
     },
+    // 학교 검색 (나이스, 서버가 대신 물음) — 로컬 모드에선 빈 목록
+    searchSchools(q) {
+      return local ? Promise.resolve([]) : api(`/search/schools?q=${encodeURIComponent(q)}`);
+    },
     // 회원 탈퇴 — 확인용으로 내 이메일을 그대로 보낸다
     async deleteAccount(confirmEmail) {
       await api("/me", { method: "DELETE", body: { confirm_email: confirmEmail } });

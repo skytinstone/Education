@@ -1045,6 +1045,43 @@
     document.head.append(s);
   }));
 
+  // 고등학생이 고르는 계열 — 대학 학과는 직접 적는다
+  const MAJOR_PRESETS = ["인문계열", "자연계열", "예체능계열", "특성화고", "마이스터고"];
+
+  // 입력하면 아래에 후보 목록을 띄우는 칸 (학교 검색). fetch(q) → [{ label, sub, value }]
+  function bindSuggest(input, list, fetch) {
+    let items = [], active = -1, timer = 0, seq = 0;
+    const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); active = -1; };
+    const draw = () => {
+      list.innerHTML = items.map((x, i) => `<li role="option" data-i="${i}" class="${i === active ? "on" : ""}" aria-selected="${i === active}">
+        <b>${esc(x.label)}</b><small>${esc(x.sub)}</small></li>`).join("");
+      list.hidden = !items.length;
+      input.setAttribute("aria-expanded", String(!!items.length));
+    };
+    const pick = (i) => { input.value = items[i].value; close(); input.dispatchEvent(new Event("change", { bubbles: true })); };
+    input.addEventListener("input", () => {
+      clearTimeout(timer);
+      const q = input.value.trim();
+      if (q.length < 2) { items = []; return close(); }
+      timer = setTimeout(async () => {
+        const mine = ++seq;
+        try { const r = await fetch(q); if (mine === seq) { items = r; active = -1; draw(); } }
+        catch (err) { if (mine === seq) { items = []; close(); toast(err.message); } }
+      }, 250);
+    });
+    input.addEventListener("keydown", (e) => {
+      if (list.hidden) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        active = (active + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+        draw();
+      } else if (e.key === "Enter" && active >= 0) { e.preventDefault(); pick(active); }
+      else if (e.key === "Escape") close();
+    });
+    list.addEventListener("mousedown", (e) => { const li = e.target.closest("[data-i]"); if (li) { e.preventDefault(); pick(Number(li.dataset.i)); } });
+    input.addEventListener("blur", () => setTimeout(close, 100));
+  }
+
   function renderSettings() {
     const u = Store.state.user;
     view.innerHTML = `
@@ -1077,8 +1114,14 @@
           <div class="field"><label for="s-goal">하루 목표</label><input id="s-goal" type="number" min="1" max="200" value="${u.dailyGoal}" /></div>
         </div>
         <div class="two">
-          <div class="field"><label for="s-school">학교 <small>· 선택</small></label><input id="s-school" value="${esc(u.school ?? "")}" maxlength="80" placeholder="예: 유레카고등학교" autocomplete="organization" /></div>
-          <div class="field"><label for="s-major">전공 · 계열 <small>· 선택</small></label><input id="s-major" value="${esc(u.major ?? "")}" maxlength="80" placeholder="예: 자연계열, 컴퓨터공학" /></div>
+          <div class="field suggest"><label for="s-school">학교 <small>· 선택</small></label>
+            <input id="s-school" value="${esc(u.school ?? "")}" maxlength="80" placeholder="학교 이름으로 검색 (예: 여의도고)" autocomplete="off"
+              role="combobox" aria-autocomplete="list" aria-controls="school-list" aria-expanded="false" />
+            <ul class="suggest-list" id="school-list" role="listbox" hidden></ul>
+            <p class="mini">전국 초·중·고 (나이스) · 목록에 없으면 그대로 적어도 돼요</p></div>
+          <div class="field"><label for="s-major">전공 · 계열 <small>· 선택</small></label>
+            <input id="s-major" value="${esc(u.major ?? "")}" maxlength="80" placeholder="예: 자연계열, 컴퓨터공학과" autocomplete="off" />
+            <div class="quick">${MAJOR_PRESETS.map((x) => `<button type="button" class="tag" data-major="${x}">${x}</button>`).join("")}</div></div>
         </div>
         <div class="field"><label for="s-address">주소지 <small>· 선택</small></label>
           <div class="addr-row">
@@ -1114,6 +1157,8 @@
       $$(".preset").forEach((b) => b.classList.toggle("on", Store.state.user.avatarType === "preset" && Store.state.user.avatarPreset === b.dataset.avatar));
     };
     view.onclick = async (e) => {
+      const major = e.target.closest("[data-major]");
+      if (major) { $("#s-major").value = major.dataset.major; return; }
       const pick = e.target.closest("[data-avatar]");
       if (!pick) return;
       try {
@@ -1134,6 +1179,8 @@
         toast("프로필 사진을 바꿨어요");
       } catch (err) { toast(err.message); }
     });
+    bindSuggest($("#s-school"), $("#school-list"), async (q) => (await Store.searchSchools(q)).map((s) => ({
+      label: s.name, sub: [s.kind, s.address ?? s.region].filter(Boolean).join(" · "), value: s.name })));
     const addr = $("#s-address"), addrDetail = $("#s-address-detail"), addrBox = $("#addr-embed"), addrClear = $("#addr-clear");
     $("#addr-search").addEventListener("click", async () => {
       if (!addrBox.hidden) { addrBox.hidden = true; return; }

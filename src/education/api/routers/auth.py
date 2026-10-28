@@ -16,7 +16,7 @@ from education.api.dto import AccountDeleteIn, LoginIn, SignupIn, SocialSignupIn
 from education.config import get_settings
 from education.db import models as m
 from education.security import create_ticket, create_token, hash_password, read_ticket, verify_password
-from education.services import avatars, materials, oauth
+from education.services import avatars, materials, oauth, schools
 from education.services.oauth import OAuthError, Provider, SocialProfile
 
 router = APIRouter(tags=["인증 · 사용자"])
@@ -218,6 +218,18 @@ def upload_avatar(user: CurrentUser, db: DB, file: Annotated[UploadFile, File()]
     user.avatar_version += 1
     db.commit()
     return UserOut.model_validate(user)
+
+
+@router.get("/search/schools", tags=["인증 · 사용자"])
+def search_schools(q: str, user: CurrentUser) -> list[schools.School]:
+    """계정 설정의 학교 검색 (초·중·고, 나이스). 두 글자 이상."""
+    q = q.strip()
+    if len(q) < 2:
+        return []
+    try:
+        return list(schools.search(q[:30]))
+    except schools.SchoolSearchError:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "학교 검색이 잠시 안 돼요. 직접 입력해 주세요") from None
 
 
 @router.get("/users/{user_id}/avatar", include_in_schema=False)

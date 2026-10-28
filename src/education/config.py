@@ -32,7 +32,10 @@ class Settings(BaseSettings):
     openai_model_verify: str = "gpt-6.1-sol"
     openai_effort_generate: str = "high"
     openai_effort_verify: str = "high"
-    ai_max_attempts: int = 2  # 검증에 실패하면 문제당 다시 만드는 최대 횟수
+    ai_max_attempts: int = 2
+
+    # 학교 검색 (나이스 교육정보 개방 포털) — 없어도 되지만 키가 있으면 한 번에 더 많이 찾는다
+    neis_api_key: str | None = None  # 검증에 실패하면 문제당 다시 만드는 최대 횟수
 
     # 다른 출처의 프론트엔드(예: 추후 Next.js 개발 서버)가 API 를 부를 수 있게 허용할 목록.
     # 프로토타입은 API 서버가 /app 으로 함께 서빙하므로 같은 출처라 필요 없다.
