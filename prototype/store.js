@@ -445,6 +445,17 @@ const Store = (() => {
         return send("/me", { method: "PATCH", body });
       }
     },
+    // 내 맞춤 개념 정리 — 서버 모드에서만 (없으면 null)
+    getNote(conceptId) {
+      return local ? Promise.resolve(null) : api(`/concepts/${conceptId}/note`);
+    },
+    // 개념 정리 + 암기 카드를 만들고 검증 (1~2분). 새 카드는 내 덱에 바로 넣는다
+    async createNote(conceptId) {
+      const r = await api(`/concepts/${conceptId}/note`, { method: "POST" });
+      state.cards.push(...r.added_cards.map((c) => ({ id: c.id, conceptId: c.concept_id, front: c.front, back: c.back, known: c.known })));
+      commit();
+      return r;
+    },
     // 회원 탈퇴 — 확인용으로 내 이메일을 그대로 보낸다
     async deleteAccount(confirmEmail) {
       await api("/me", { method: "DELETE", body: { confirm_email: confirmEmail } });

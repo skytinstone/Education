@@ -271,6 +271,21 @@ class Card(Base):
     created_at: Mapped[datetime] = created_at()
 
 
+class ConceptNote(Base):
+    """사용자마다 따로 만드는 AI 개념 정리 — 그 사람의 풀이·오답 기록에 맞춘다.
+    검증 에이전트를 통과한 것만 저장하고, 다시 만들면 덮어쓴다."""
+    __tablename__ = "concept_notes"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    concept_id: Mapped[str] = mapped_column(ForeignKey("concepts.id"))
+    content: Mapped[dict] = mapped_column(JSONB)  # 핵심 정리·필수 암기·자주 틀리는 점·예제 (services/notes.py 의 NoteContent)
+    generation_meta: Mapped[dict | None] = mapped_column(JSONB)  # 모델, 검증자 지적 사항, 개인화에 쓴 기록 요약
+    created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (UniqueConstraint("user_id", "concept_id", name="uq_concept_note_user_concept"),)
+
+
 class LLMCall(Base):
     """AI 호출 기록 — 문제 1개당 실제 비용·시간을 측정하고 모델을 비교하는 데 쓴다."""
     __tablename__ = "llm_calls"

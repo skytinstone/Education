@@ -299,6 +299,19 @@ class CardPatch(BaseModel):
     known: bool | None
 
 
+class ConceptNoteOut(Out):
+    """내 맞춤 개념 정리 — content 는 services/notes.py 의 NoteContent
+    (summary, must_memorize[{title, body}], pitfalls, example{question, solution}, personal_tip)."""
+    concept_id: str
+    content: dict
+    created_at: datetime
+
+
+class ConceptNoteCreated(BaseModel):
+    note: ConceptNoteOut
+    added_cards: list[CardOut]  # 이번에 내 카드 덱에 새로 들어간 카드 (이미 있던 것과 겹치면 빠짐)
+
+
 class StatsOut(BaseModel):
     today_count: int
     daily_goal: int

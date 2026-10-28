@@ -23,6 +23,7 @@ src/education/
   api/                      FastAPI — main.py, dto.py(요청·응답), routers/
   services/learning.py      채점, 오답노트, 약점 통계
   services/tutor.py         대화 답변 (AI 연결 전 임시: 문제 은행에서 고르기)
+  services/notes.py         내 맞춤 개념 정리 + 암기 카드 (생성 → 검증 에이전트)
   seed.py                   개념·문제·데모 계정 적재
 migrations/                 Alembic 마이그레이션
 docker-compose.yml          개발용 PostgreSQL 17 (127.0.0.1:5433)
@@ -72,7 +73,7 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 | 대화 | `GET/POST /sessions` · `GET/PATCH/DELETE /sessions/{id}` · `POST /sessions/{id}/messages` |
 | 문제·풀이 | `GET /problems` · `GET /problems/{id}` · `POST /attempts` |
 | 오답노트 | `GET /wrong-notes` (과목·이유·안 푼 것만·프로젝트 필터) · `PATCH/DELETE /wrong-notes/{id}` |
-| 라이브러리 | `GET /concepts` · `GET /concepts/{id}` · `GET /saved` · `PUT/DELETE /saved/{problem_id}` · `GET /cards` · `PATCH /cards/{id}` · `POST /cards/reset` |
+| 라이브러리 | `GET /concepts` · `GET /concepts/{id}` · `GET/POST /concepts/{id}/note` (내 맞춤 개념 정리, 만들 때 카드도 덱에) · `GET /saved` · `PUT/DELETE /saved/{problem_id}` · `GET /cards` · `PATCH /cards/{id}` · `POST /cards/reset` |
 | 통계 | `GET /stats` (오늘 푼 문제, 연속 학습일, 과목별 정답률, 약점) |
 | 기출 | `POST /projects/{id}/materials` (PDF·사진 업로드 → AI 분석) · `GET /projects/{id}/materials` · `GET /projects/{id}/past-problems` · `DELETE /materials/{id}` |
 | 기출 기반 생성 | `POST /projects/{id}/generate` `{level: easier\|same\|harder, count}` → 결과를 프로젝트의 새 대화로 |
@@ -110,7 +111,7 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 - [x] 백엔드: PostgreSQL + FastAPI, 인증, 풀이·오답노트·통계 API
 - [x] 로그인 화면 API 연결: 이메일 로그인·가입, Google·카카오 간편 로그인 (키 발급 후 바로 사용)
 - [x] 메인 화면 API 연결, AI 문제 생성 + 검증 (OpenAI), 기출 업로드·분석·기출 기반 생성, 주관식, 계정 설정·프로필 사진
-- [ ] Phase 3: ③ 개념 정리 / 암기 카드 생성
+- [x] Phase 3: ③ 내 맞춤 개념 정리 / 암기 카드 생성 (풀이·오답 기록 반영, 검증 에이전트 통과분만)
 - [ ] Phase 4: ④ 기출 RAG + 난이도 조절 생성
 - [ ] Phase 5: 과목 확장
 

@@ -352,6 +352,24 @@ a.nav-item { text-decoration: none; }
 .note-short b { font-size: 17px; color: var(--bad); }
 .problem.busy { opacity: .6; pointer-events: none; }
 .spin { animation: spin 1s linear infinite; }
+/* 내 맞춤 개념 정리 */
+.concept-note { margin-top: 12px; }
+.note-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.note-head h3 { margin-right: auto; }
+.note-head .verified { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--ok, #16a34a); }
+.note-head .verified [data-lucide] { width: 14px; height: 14px; }
+.note-head .btn-ghost { height: 32px; border-radius: 10px; padding: 0 10px; font-size: 12.5px; }
+.concept-note h4 { margin-top: 16px; font-size: 13px; font-weight: 600; color: var(--ink-3); }
+.concept-note .prose { margin-top: 6px; font-size: 14px; line-height: 1.75; white-space: pre-line; }
+.concept-note .tip { margin-top: 12px; display: flex; gap: 8px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: rgba(79,107,255,.08); font-size: 13.5px; line-height: 1.6; }
+.concept-note .tip [data-lucide] { color: var(--accent); width: 16px; height: 16px; margin-top: 2px; }
+.concept-note ul { margin-top: 6px; padding-left: 18px; font-size: 14px; line-height: 1.7; }
+.concept-note .memo { list-style: none; padding: 0; display: grid; gap: 8px; }
+.concept-note .memo li { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); }
+.concept-note .memo b { font-size: 12.5px; color: var(--ink-2); }
+.concept-note .example summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; color: var(--ink-2); }
+.concept-note .example summary::-webkit-details-marker { display: none; }
+.concept-note .example[open] summary [data-lucide] { transform: rotate(90deg); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------- 새 프로젝트 마법사 ---------- */

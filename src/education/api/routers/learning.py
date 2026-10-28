@@ -8,12 +8,13 @@ from sqlalchemy.dialects.postgresql import insert
 
 from education.api.deps import DB, CurrentUser, owned
 from education.api.dto import (
-    AttemptIn, AttemptResult, CardOut, CardPatch, ConceptDetail, ConceptOut, ProblemOut, ProblemView,
-    StatsOut, WrongNoteOut, WrongNotePatch,
+    AttemptIn, AttemptResult, CardOut, CardPatch, ConceptDetail, ConceptNoteCreated, ConceptNoteOut, ConceptOut,
+    ProblemOut, ProblemView, StatsOut, WrongNoteOut, WrongNotePatch,
 )
 from education.db import models as m
 from education.schemas import Domain, ErrorType
-from education.services import learning
+from education.services import learning, notes
+from education.services.llm import get_llm
 
 router = APIRouter(tags=["학습"])
 
@@ -43,6 +44,29 @@ def get_concept(concept_id: str, user: CurrentUser, db: DB) -> ConceptDetail:
         problems=learning.problem_views(db, user, problem_ids),
         cards=[CardOut.model_validate(k) for k in cards],
     )
+
+
+@router.get("/concepts/{concept_id}/note", tags=["개념"])
+def get_note(concept_id: str, user: CurrentUser, db: DB) -> ConceptNoteOut | None:
+    """내 맞춤 개념 정리 — 아직 만들지 않았으면 null."""
+    note = db.scalar(select(m.ConceptNote).where(m.ConceptNote.user_id == user.id, m.ConceptNote.concept_id == concept_id))
+    return ConceptNoteOut.model_validate(note) if note else None
+
+
+@router.post("/concepts/{concept_id}/note", tags=["개념"], status_code=status.HTTP_201_CREATED)
+def create_note(concept_id: str, user: CurrentUser, db: DB) -> ConceptNoteCreated:
+    """내 풀이·오답 기록에 맞춘 개념 정리와 암기 카드를 만들고 검증한다 (1~2분). 이미 있으면 새로 만들어 덮어쓴다."""
+    if db.get(m.Concept, concept_id) is None:
+        raise HTTPException(404, "개념을 찾을 수 없어요")
+    llm = get_llm()
+    if llm is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 아직 설정되지 않았어요")
+    try:
+        result = notes.create_note(db, llm, user, concept_id)
+    except notes.NoteError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"검증을 통과한 정리를 만들지 못했어요. 잠시 후 다시 시도해 주세요 ({e})") from None
+    return ConceptNoteCreated(note=ConceptNoteOut.model_validate(result.note),
+                              added_cards=[CardOut.model_validate(c) for c in result.added_cards])
 
 
 # ---------- 문제 · 풀이 ----------

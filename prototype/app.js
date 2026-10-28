@@ -893,7 +893,7 @@
         <div><h1 style="color:inherit">${esc(c.name)}</h1>
           <p>${stats ? `내 정답률 ${pct(stats.accuracy)} · ${stats.attempts}문제 풀이` : "아직 이 개념의 문제를 풀지 않았어요"}${notes.length ? ` · 오답 ${notes.length}개` : ""}</p></div>
       </div>
-      <div class="ai-slot"><i data-lucide="sparkles"></i><div><b style="color:var(--ink)">개념 정리 · 필수 암기</b><br />AI 연결 후 이 개념의 핵심 정리와 꼭 외워야 할 내용이 여기에 만들어져요.</div></div>
+      <div id="note-slot"></div>
       <div class="cols">
         <section class="panel"><h3><i data-lucide="corner-left-up"></i>먼저 알아야 할 개념</h3>
           ${c.prerequisites.length ? `<div class="links">${c.prerequisites.map((p) => link(concept(p))).join("")}</div>` : '<p class="mini">선수 개념이 없어요. 여기서 시작하면 돼요</p>'}</section>
@@ -908,7 +908,61 @@
       </section>`;
 
     view.onclick = (e) => { if (!handleProblemExtras(e)) handleAnswer(e, {}, redrawCard); };
+    renderNote(id);
+  }
 
+  // ---------- 내 맞춤 개념 정리 (검증 에이전트를 통과한 것만) ----------
+  const noteCache = {}; // conceptId → note | null
+  const noteBusy = new Set(); // 만드는 중인 개념
+  async function renderNote(id) {
+    const slot = $("#note-slot");
+    if (!slot) return;
+    const draw = (html) => { if (document.contains(slot)) { slot.innerHTML = html; icons(); } };
+    if (concept(id).level !== "concept") return draw("");
+    if (Store.mode !== "api") {
+      return draw(`<div class="ai-slot"><i data-lucide="sparkles"></i><div><b style="color:var(--ink)">개념 정리 · 필수 암기</b><br />로그인한 계정으로 열면 내 풀이 기록에 맞춘 개념 정리와 암기 카드를 만들 수 있어요.</div></div>`);
+    }
+    if (noteBusy.has(id)) return draw(NOTE_BUSY);
+    if (!(id in noteCache)) {
+      draw(`<div class="ai-slot"><i data-lucide="loader-circle" class="spin"></i><div>내 개념 정리를 불러오는 중…</div></div>`);
+      try { noteCache[id] = await Store.getNote(id); } catch (err) { return draw(`<div class="ai-slot"><i data-lucide="circle-alert"></i><div>${esc(err.message)}</div></div>`); }
+    }
+    draw(noteCache[id] ? noteHTML(noteCache[id]) : `
+      <div class="ai-slot"><i data-lucide="sparkles"></i><div style="flex:1"><b style="color:var(--ink)">내 맞춤 개념 정리 · 암기 카드</b><br />
+        내 풀이·오답 기록에 맞춰 핵심 정리, 꼭 외울 공식, 자주 틀리는 점, 예제를 만들고 암기 카드도 덱에 넣어 드려요.
+        검증 에이전트가 내용을 확인한 뒤 보여줘요 (1~2분).
+        <div style="margin-top:10px"><button class="btn-primary" data-make-note><i data-lucide="wand-sparkles"></i>만들기</button></div></div></div>`);
+    slot.onclick = async (e) => {
+      if (!e.target.closest("[data-make-note]") || noteBusy.has(id)) return;
+      noteBusy.add(id);
+      draw(NOTE_BUSY);
+      try {
+        const r = await Store.createNote(id);
+        noteCache[id] = r.note;
+        toast(r.added_cards.length ? `암기 카드 ${r.added_cards.length}장을 덱에 넣었어요` : "개념 정리를 새로 만들었어요");
+      } catch (err) { toast(err.message); }
+      noteBusy.delete(id);
+      if (location.hash === `#/library/concept/${id}`) renderConcept(id);
+    };
+  }
+  const NOTE_BUSY = `<div class="ai-slot"><i data-lucide="loader-circle" class="spin"></i><div><b style="color:var(--ink)">AI가 정리하고, 검증 에이전트가 확인하는 중이에요</b><br />1~2분 걸려요. 다른 화면에 다녀와도 계속 만들어요.</div></div>`;
+
+  function noteHTML(n) {
+    const c = n.content;
+    const date = new Date(n.created_at).toLocaleDateString("ko-KR", { month: "long", day: "numeric" });
+    return `
+      <section class="panel concept-note">
+        <div class="note-head"><h3><i data-lucide="notebook-pen"></i>내 맞춤 개념 정리</h3>
+          <span class="verified"><i data-lucide="shield-check"></i>검증 완료 · ${date}</span>
+          <button class="btn-ghost" data-make-note title="내 최근 기록으로 다시 만들기"><i data-lucide="refresh-cw"></i>다시 만들기</button></div>
+        ${c.personal_tip ? `<p class="tip" data-math><i data-lucide="target"></i>${esc(c.personal_tip)}</p>` : ""}
+        <h4>핵심 정리</h4><div class="prose" data-math>${esc(c.summary)}</div>
+        <h4>꼭 외울 것</h4>
+        <ul class="memo">${c.must_memorize.map((x) => `<li><b>${esc(x.title)}</b><span data-math>${esc(x.body)}</span></li>`).join("")}</ul>
+        ${c.pitfalls.length ? `<h4>자주 틀리는 점</h4><ul class="pitfalls">${c.pitfalls.map((x) => `<li data-math>${esc(x)}</li>`).join("")}</ul>` : ""}
+        <h4>예제</h4><div class="prose" data-math>${esc(c.example.question)}</div>
+        <details class="example"><summary><i data-lucide="chevron-right"></i>풀이 보기</summary><div class="prose" data-math>${esc(c.example.solution)}</div></details>
+      </section>`;
   }
 
   function renderDeck() {
