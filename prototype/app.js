@@ -215,7 +215,7 @@
     const av = $("#profile-avatar");
     av.innerHTML = avatarInner(st.user);
     av.classList.toggle("has-image", st.user.avatarType !== "initial" && !!st.user.avatarType);
-    $("#profile-sub").textContent = `오늘 ${Store.todayCount()} / ${st.user.dailyGoal}문제 · 🔥 ${Store.streak()}일 연속`;
+    $("#profile-sub").textContent = `오늘 ${Store.todayCount()} / ${st.user.dailyGoal}문제 · ${Store.streak()}일 연속`;
     icons();
   }
 
@@ -460,7 +460,7 @@
     try {
       const r = await Store.answer({ problemId: box.dataset.problem, answer, ...ctx });
       redraw(box, { answer, correct: r.correct });
-      if (r.resolved) toast("오답을 극복했어요! 🎉");
+      if (r.resolved) toast("오답을 극복했어요");
     } catch (err) {
       toast(err.message);
       box.classList.remove("busy");

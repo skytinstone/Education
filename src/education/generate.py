@@ -46,14 +46,14 @@ def main() -> None:
         for pid in report.accepted + report.rejected:
             p = db.get(m.Problem, pid)
             meta = p.generation_meta
-            mark = "✅ 통과" if pid in report.accepted else f"❌ 탈락 ({meta['reject_reason']})"
+            mark = "[통과]" if pid in report.accepted else f"[탈락] {meta['reject_reason']}"
             print(f"\n{mark}  [{pid}]\n{p.stem}")
             for i, c in enumerate(p.choices, 1):
                 print(f"  {i}) {c}{'  ← 정답' if str(i) == p.answer else ''}")
             print(f"해설: {p.solution}\n검증자 답: {meta['verifier_answer']}  지적: {meta['verifier_issues'] or '없음'}")
         # 문제가 저장되지도 못한 실패 (API 오류, 형식 오류 반복 등)
         for reason in report.reasons[len(report.rejected):]:
-            print(f"\n⚠️ {reason}")
+            print(f"\n[경고] {reason}")
 
         calls = db.scalars(select(m.LLMCall).order_by(m.LLMCall.created_at.desc()).limit(count * 6)).all()
         secs = sum(c.latency_ms for c in calls) / 1000
