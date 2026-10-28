@@ -1,0 +1,33 @@
+# push·PR 마다 전체 테스트 (실제 PostgreSQL 로 마이그레이션까지 검증)
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:17
+        env:
+          POSTGRES_USER: eureka
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: eureka_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U eureka -d eureka_test"
+          --health-interval 3s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql+psycopg://eureka:ci@127.0.0.1:5432/eureka_test
+      TEST_DATABASE_URL: postgresql+psycopg://eureka:ci@127.0.0.1:5432/eureka_test
+      JWT_SECRET: ci-only-secret-not-used-anywhere-else
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+      - run: uv sync --locked
+      - run: uv run pytest -q

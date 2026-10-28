@@ -29,10 +29,14 @@ docker-compose.yml          개발용 PostgreSQL 17 (127.0.0.1:5433)
 Dockerfile · docker-compose.prod.yml · deploy/Caddyfile   운영 배포 (docs/DEPLOY.md)
 scripts/export_concepts.py  개념 트리 → prototype/concepts.js
 scripts/backup.sh           운영 서버 DB·업로드 백업 (+ S3)
+scripts/auto_deploy.sh      운영 서버 자동 배포 (main 새 커밋 → 다시 빌드)
+scripts/harden_server.sh    운영 서버 보안 기본 설정
+.github/workflows/ci.yml    push 마다 전체 테스트
 tests/                      API·마이그레이션 테스트 (테스트 전용 DB 사용)
 
 prototype/                  화면 — 서버(localhost:8000/app)로 열면 로그인한 계정의 DB 데이터, 파일로 열면 localStorage 샘플 데이터
   login.html · index.html   로그인 / 학습자 앱
+  terms.html · privacy.html 이용약관 / 개인정보처리방침 (legal.css)
   app.js · app.css · store.js · dots.js · concepts.js(자동 생성)
 ```
 

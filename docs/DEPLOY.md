@@ -136,12 +136,28 @@ crontab -e
 ```
 서버 `backups/` 에 14일치, S3 버킷에 90일치가 남는다.
 
+## 9. 자동 배포
+서버가 2분마다 GitHub `main` 을 확인해서, 새 커밋이 있으면 받아서 다시 빌드한다. GitHub 가 서버에 접속하는 방식이 아니라서 SSH 포트를 '내 IP' 로 막아 둔 채로 쓸 수 있다.
+```bash
+crontab -e
+# 맨 아래에 추가:
+*/2 * * * * cd ~/Education && sh scripts/auto_deploy.sh >> backups/deploy.log 2>&1
+```
+이후로는 내 PC 에서 `git push` 만 하면 몇 분 안에 반영된다. 기록은 `tail backups/deploy.log`.
+테스트는 GitHub Actions(`.github/workflows/ci.yml`)가 push 마다 돌린다 — 저장소 **Actions** 탭에서 확인. 테스트가 실패해도 배포는 진행되므로, 실패하면 바로 고쳐서 다시 push 한다.
+
+## 10. 서버 보안 기본 설정 (한 번만)
+```bash
+sudo sh scripts/harden_server.sh
+```
+보안 업데이트 자동 설치, SSH 무차별 대입 차단(fail2ban), SSH 비밀번호 로그인 금지, Docker 로그 크기 제한.
+
 ---
 
 ## 새 버전 배포
-내 PC 에서 `git push` 한 뒤, 서버에서:
+9번 자동 배포를 켜 두었으면 `git push` 만 하면 된다. 바로 반영하고 싶으면 서버에서:
 ```bash
-cd ~/Education && git pull && docker compose -f docker-compose.prod.yml up -d --build
+cd ~/Education && sh scripts/auto_deploy.sh
 ```
 마이그레이션과 개념·문제 은행 갱신은 컨테이너가 시작할 때 자동으로 된다.
 
