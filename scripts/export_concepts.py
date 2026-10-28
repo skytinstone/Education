@@ -14,7 +14,7 @@ OUT = Path(__file__).resolve().parents[1] / "prototype" / "concepts.js"
 
 def main() -> None:
     tree = load_concept_tree()
-    concepts = [c.model_dump(mode="json") for c in sorted(tree, key=lambda c: c.id)]
+    concepts = [c.model_dump(mode="json") for c in tree]  # YAML 순서 = 교육과정 순서 (단원 "~까지" 범위에 쓰임)
     body = json.dumps(concepts, ensure_ascii=False, indent=None, separators=(",", ":"))
     OUT.write_text(
         "// 자동 생성 파일 — scripts/export_concepts.py 로 다시 만들 것 (직접 수정 금지)\n"

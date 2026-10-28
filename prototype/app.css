@@ -374,32 +374,11 @@ a.nav-item { text-decoration: none; }
 
 /* ---------- 새 프로젝트 마법사 ---------- */
 .modal.wide { width: min(720px, 100%); }
-.wizard-steps { list-style: none; display: flex; gap: 6px; margin-bottom: 18px; }
-.wizard-steps li { flex: 1; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; font-size: 13px; color: var(--ink-3);
-  background: rgba(15,23,42,.035); }
-.wizard-steps li span { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700;
-  background: #fff; box-shadow: inset 0 0 0 1px rgba(15,23,42,.12); flex-shrink: 0; }
-.wizard-steps li.on { color: var(--ink); font-weight: 600; background: #fff; box-shadow: 0 1px 4px rgba(15,23,42,.06); }
-.wizard-steps li.on span { background: var(--ink); color: #fff; box-shadow: none; }
-.wizard-steps li.done span { background: var(--ok); color: #fff; box-shadow: none; }
-.wizard-body { min-height: 300px; display: grid; gap: 14px; align-content: start; }
-.wizard-q { font-size: 17px; font-weight: 700; color: var(--ink); letter-spacing: -0.02em; }
-.wizard-q small.opt { font-size: 12px; font-weight: 500; color: var(--ink-3); margin-left: 6px; }
-.pick-group h4 { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 600; color: var(--ink-3); margin-bottom: 8px; }
-.pick-group .sw { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
-.pick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
-.pick { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 12px 14px; border-radius: 14px; text-align: left; font-size: 14.5px; font-weight: 600;
-  background: rgba(255,255,255,.75); box-shadow: inset 0 0 0 1px rgba(15,23,42,.08); transition: box-shadow .15s, transform .15s; }
-.pick small { font-size: 12px; font-weight: 400; color: var(--ink-3); }
-.pick:hover { transform: translateY(-1px); box-shadow: inset 0 0 0 1px var(--c), 0 4px 14px rgba(15,23,42,.06); }
-.pick.on { box-shadow: inset 0 0 0 2px var(--c); background: color-mix(in srgb, var(--c) 7%, #fff); }
 .unit-chips span small { color: inherit; opacity: .6; margin-left: 2px; }
 .date-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .date-row input { max-width: 200px; }
 .seg.qtype { display: flex; }
 .seg.qtype button { flex: 1; justify-content: center; height: 36px; }
-.wizard-foot .grow { flex: 1; }
-.wizard-foot { align-items: center; }
 
 /* 파일 올리기 */
 .dropzone { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 28px 16px; border-radius: 18px; cursor: pointer; text-align: center;
@@ -450,8 +429,6 @@ a.nav-item { text-decoration: none; }
 .past-choices { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 8px 0 0 18px; font-size: 14.5px; color: var(--ink-2); }
 
 @media (max-width: 760px) {
-  .wizard-steps li { font-size: 0; justify-content: center; }
-  .wizard-steps li span { font-size: 12px; }
   .material { grid-template-columns: auto 1fr auto; }
   .material .status-pill { grid-column: 2; justify-self: start; }
   .gen-row .btn-primary { margin-left: 0; width: 100%; justify-content: center; }
@@ -494,3 +471,29 @@ a.nav-item { text-decoration: none; }
 .leave p { margin: 12px 0; line-height: 1.6; }
 .leave p a { color: var(--ink-2); }
 .leave .btn-primary[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* 새 프로젝트 — 글로 적으면 알아듣는 한 화면 */
+.np { display: grid; gap: 14px; min-height: 320px; align-content: start; }
+.np-q { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); }
+.np-big { width: 100%; height: 52px; padding: 0 16px; border-radius: 14px; border: 0; outline: 0; font: inherit; font-size: 16px; color: var(--ink);
+  background: rgba(255,255,255,.9); box-shadow: inset 0 0 0 1px rgba(15,23,42,.12); transition: box-shadow .2s; }
+.np-big:focus { box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-soft); }
+.np-read { display: flex; flex-wrap: wrap; gap: 6px; min-height: 0; }
+.np-read:empty { display: none; }
+.np-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  background: #fff; box-shadow: inset 0 0 0 1px var(--line); animation: npIn .3s ease; }
+.np-chip .sw, .np-subjects .sw { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.np-chip [data-lucide] { width: 14px; height: 14px; color: var(--ink-3); }
+.np-chip button { font-size: 12px; font-weight: 500; color: var(--ink-3); text-decoration: underline; text-underline-offset: 2px; }
+.np-subjects { display: flex; flex-wrap: wrap; gap: 6px; }
+.np-subjects .tag { display: inline-flex; align-items: center; gap: 6px; height: 30px; }
+.np-subjects .tag.on .sw { background: #fff; }
+.np-more { display: grid; gap: 14px; padding-top: 14px; border-top: 1px solid var(--line); animation: npIn .35s ease; }
+.np-more .unit-chips { margin-top: 8px; }
+.np-upload summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--ink-2); }
+.np-upload summary::-webkit-details-marker { display: none; }
+.np-upload summary small { font-weight: 400; color: var(--ink-3); }
+.np-upload summary [data-lucide] { width: 15px; height: 15px; transition: transform .2s; }
+.np-upload[open] summary [data-lucide] { transform: rotate(90deg); }
+.np-upload[open] summary { margin-bottom: 10px; }
+@keyframes npIn { from { opacity: 0; transform: translateY(6px); } }
