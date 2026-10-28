@@ -26,7 +26,9 @@ src/education/
   seed.py                   개념·문제·데모 계정 적재
 migrations/                 Alembic 마이그레이션
 docker-compose.yml          개발용 PostgreSQL 17 (127.0.0.1:5433)
+Dockerfile · docker-compose.prod.yml · deploy/Caddyfile   운영 배포 (docs/DEPLOY.md)
 scripts/export_concepts.py  개념 트리 → prototype/concepts.js
+scripts/backup.sh           운영 서버 DB·업로드 백업 (+ S3)
 tests/                      API·마이그레이션 테스트 (테스트 전용 DB 사용)
 
 prototype/                  화면 — 서버(localhost:8000/app)로 열면 로그인한 계정의 DB 데이터, 파일로 열면 localStorage 샘플 데이터
@@ -45,6 +47,9 @@ uv run uvicorn education.api.main:app --reload
 ```
 - API 문서: http://127.0.0.1:8000/docs
 - 프로토타입: http://127.0.0.1:8000/app/login.html
+
+## 운영 배포
+https://eurekai.cloud — AWS EC2(서울) 한 대에 Caddy(HTTPS) + API + PostgreSQL 을 Docker Compose 로 띄우고, 백업은 S3 에 둔다. 순서는 [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## 개발
 ```bash

@@ -1,0 +1,54 @@
+# 운영 배포 — 서버 한 대에서 Caddy(HTTPS) + Eureka API + PostgreSQL 을 함께 띄운다.
+#   docker compose -f docker-compose.prod.yml up -d --build
+# 설정은 같은 폴더의 .env (.env.production.example 을 복사해서 채운다, git 에 올리지 않음)
+# 외부로 열리는 포트는 Caddy 의 80·443 뿐이고, API 와 DB 는 내부 네트워크에서만 보인다.
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: eureka
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?.env 에 POSTGRES_PASSWORD 를 설정하세요}
+      POSTGRES_DB: eureka
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eureka -d eureka"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://eureka:${POSTGRES_PASSWORD}@db:5432/eureka
+      PUBLIC_BASE_URL: https://${DOMAIN:?.env 에 DOMAIN 을 설정하세요}
+      CORS_ORIGINS: '[]'
+    volumes:
+      - ./data/uploads:/app/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

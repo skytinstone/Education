@@ -1,0 +1,11 @@
+# HTTPS 인증서(Let's Encrypt)는 Caddy 가 자동으로 받고 갱신한다.
+# 가비아 DNS 의 A 레코드(@, www)가 이 서버 IP 를 가리켜야 발급된다.
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:8000
+}
