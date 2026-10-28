@@ -109,6 +109,27 @@ def test_plan_request(db, text, concept, difficulty, count):
     assert (plan.concept_id, plan.difficulty, plan.count) == (concept, difficulty, count)
 
 
+def test_plan_reads_subject_name(db, auth, client):
+    # 개념 이름 없이 과목만 말해도 그 과목 안에서 고른다 (같은 수학이라도 다른 과목은 아님)
+    plan = generator.plan_request(db, "미적분학 5문제 만들어줘", max_count=5)
+    assert plan.concept_id.startswith("math.calculus.") and plan.count == 5
+    assert generator.plan_request(db, "수1 문제", max_count=5).concept_id.startswith("math.math1.")
+    assert generator.plan_request(db, "확통 3등급 대비 문제").concept_id.startswith("math.prob_stat.")
+    # 단원 이름이 있으면 그 단원으로 좁힌다
+    assert generator.plan_request(db, "미적분 적분법 문제").concept_id.startswith("math.calculus.int_methods.")
+    # 내 기록이 있으면 그 과목에서 가장 약한 개념
+    client.post("/api/attempts", json={"problem_id": "pb_subst", "answer": "2"}, headers=auth)
+    user = db.scalar(select(m.User).order_by(m.User.created_at.desc()))
+    assert generator.plan_request(db, "미적분 문제", user=user).concept_id == CONCEPT
+
+
+def test_subject_names_vs_numbers():
+    assert generator.detect_subject("수학 10문제") is None  # 수학1 이 아님
+    assert generator.detect_subject("수학 2등급 목표") is None  # 수학2 가 아님
+    assert generator.detect_subject("물1 3문제") == "physics.physics1"
+    assert generator.detect_subject("수학II") == "math.math2"
+
+
 def test_plan_respects_project_scope(db):
     assert generator.plan_request(db, "치환적분 문제", scope_ids=["physics.physics1"]) is None
     assert generator.plan_request(db, "아무거나 내줘") is None
@@ -134,6 +155,12 @@ def test_tutor_falls_back_to_bank(db, monkeypatch, auth, client):
     # 탈락한 AI 문제는 학생에게 나가지 않는다
     rejected = db.scalar(select(func.count()).select_from(m.Problem).where(m.Problem.verification == VerificationStatus.REJECTED))
     assert rejected == 1
+
+
+def test_tutor_bank_stays_in_requested_subject(db, monkeypatch, auth, client):
+    monkeypatch.setattr(tutor, "get_llm", lambda: None)
+    ai = client.post("/api/sessions", json={"text": "미적분학 5문제 만들어줘"}, headers=auth).json()["messages"][1]
+    assert ai["problems"] and all(c.startswith("math.calculus.") for p in ai["problems"] for c in p["concept_ids"])
 
 
 def test_tutor_without_ai_uses_bank(db, monkeypatch, auth, client):

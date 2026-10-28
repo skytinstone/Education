@@ -9,6 +9,7 @@ VERIFIED 로 저장해 학생에게 낸다. 실패한 문제도 REJECTED 로 남
 
 from __future__ import annotations
 
+import random
 import re
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -22,6 +23,7 @@ from sqlalchemy.orm import Session
 from education.config import get_settings
 from education.db import models as m
 from education.schemas import ProblemSource, ProblemType, VerificationStatus
+from education.services import learning
 from education.services.llm import LLM, LLMError, Usage
 
 DIFFICULTY_GUIDE = {
@@ -90,24 +92,77 @@ class Plan:
     count: int
 
 
-def plan_request(db: Session, text: str, *, domain=None, scope_ids: list[str] | None = None, max_count: int = 3) -> Plan | None:
-    """요청 문장에서 개념·난이도·문항 수를 읽는다. 개념 이름의 낱말이 가장 많이 겹치는 개념을 고른다."""
+# 요청 문장에 나오는 과목 이름 (화면 prototype/app.js 의 SUBJECT_ALIASES 와 같음). II 를 I 보다 먼저 본다
+SUBJECT_ALIASES: list[tuple[str, tuple[str, ...]]] = [
+    ("math.math2", ("수학ii", "수학2", "수2")), ("math.math1", ("수학i", "수학1", "수1")),
+    ("math.prob_stat", ("확률과통계", "확통", "확률", "통계")), ("math.calculus", ("미적분", "미적")), ("math.geometry", ("기하",)),
+    ("physics.physics1", ("물리학", "물리", "물1")), ("chemistry.chemistry1", ("화학", "화1")),
+    ("biology.biology1", ("생명과학", "생명", "생물", "생1", "생과")), ("earth_science.earth1", ("지구과학", "지구", "지학", "지1")),
+]
+
+
+def _norm(text: str) -> str:
+    return re.sub(r"\s+", "", text.lower().replace("Ⅱ", "ii").replace("Ⅰ", "i"))
+
+
+def _words(name: str) -> list[str]:
+    return [w for w in re.split(r"[\s·,()과와의]+", name) if len(w) >= 2]
+
+
+def detect_subject(text: str) -> str | None:
+    t = _norm(text)
+    # 숫자로 끝나는 별칭은 뒤에 숫자·등급·점·문제가 붙으면 아님 ("수학 10문제", "수학 2등급" 은 수학I·II 가 아니다)
+    # (띄어쓰기를 지우면 "물1 3문제" 가 "물13" 이 되므로 이 경우는 띄어쓰기를 남긴 글에서 본다)
+    spaced = re.sub(r"\s+", " ", text.lower().replace("Ⅱ", "ii").replace("Ⅰ", "i"))
+
+    def found(k: str) -> bool:
+        if not k[-1].isdigit():
+            return k in t
+        return bool(re.search(r"\s*".join(map(re.escape, k)) + r"(?!\d|등급|점|문제|문항|개)", spaced))
+    return next((sid for sid, keys in SUBJECT_ALIASES if any(found(k) for k in keys)), None)
+
+
+def _in_scope(concept_id: str, scope_ids: list[str]) -> bool:
+    return any(concept_id == s or concept_id.startswith(f"{s}.") for s in scope_ids)
+
+
+def resolve_scope(db: Session, text: str, scope_ids: list[str] | None = None) -> list[str] | None:
+    """요청이 가리키는 개념 트리 범위 — 문장의 과목 이름이 프로젝트 범위보다 우선하고, 단원 이름이 있으면 그 단원으로 좁힌다."""
+    subject = detect_subject(text)
+    base = [subject] if subject else scope_ids
+    units = db.scalars(select(m.Concept).where(m.Concept.level == "unit")).all()
+    named = [u.id for u in units if (not base or _in_scope(u.id, base)) and any(w in text for w in _words(u.name))]
+    return named or base
+
+
+def plan_request(db: Session, text: str, *, user: m.User | None = None, domain=None, scope_ids: list[str] | None = None,
+                 max_count: int = 3) -> Plan | None:
+    """요청 문장에서 개념·난이도·문항 수를 읽는다.
+    개념 이름의 낱말이 가장 많이 겹치는 개념을 고르고, 개념 이름은 없지만 과목·단원(또는 프로젝트 범위)이 정해지면
+    그 안에서 내가 가장 약한 개념(기록이 없으면 아무 개념)을 고른다."""
+    subject = detect_subject(text)
     q = select(m.Concept).where(m.Concept.level == "concept")
-    if domain:
+    if domain and not subject:
         q = q.where(m.Concept.domain == domain)
-    concepts = list(db.scalars(q))
-    if scope_ids:  # 프로젝트 범위(과목·단원) 안의 개념만
-        concepts = [c for c in concepts if any(c.id == s or c.id.startswith(f"{s}.") for s in scope_ids)]
+    all_concepts = list(db.scalars(q))
+    base = [subject] if subject else scope_ids
+    concepts = [c for c in all_concepts if _in_scope(c.id, base)] if base else all_concepts
     if not concepts:
         return None
 
     def score(c: m.Concept) -> int:
-        words = [w for w in re.split(r"[\s·,()과와의]+", c.name) if len(w) >= 2]
-        return sum(len(w) for w in words if w in text)
+        return sum(len(w) for w in _words(c.name) if w in text)
 
     best = max(concepts, key=score)
     if score(best) == 0:
-        return None
+        # 개념 이름은 없다. 범위가 전혀 없거나, 프로젝트 범위 밖의 개념을 콕 집어 말했으면(물리 프로젝트에서 '치환적분') 고르지 않는다
+        if not base or (not subject and any(score(c) for c in all_concepts)):
+            return None
+        scope = resolve_scope(db, text, scope_ids)  # 단원 이름이 있으면 그 단원으로 좁힌다
+        pool = [c for c in concepts if _in_scope(c.id, scope)] or concepts
+        ids = {c.id for c in pool}
+        weak = [w.concept_id for w in learning.concept_stats(db, user) if w.concept_id in ids] if user else []
+        best = db.get(m.Concept, weak[0]) if weak else random.choice(pool)
 
     difficulty = 3
     if re.search(r"킬러|최고난도", text):

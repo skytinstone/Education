@@ -1440,7 +1440,12 @@
   const nameWords = (s) => s.split(/[\s·,()과와의]+/).filter((x) => x.length >= 2);
   function readExam(text) {
     const t = norm(text);
-    const subjectId = SUBJECT_ALIASES.find(([, keys]) => keys.some((k) => t.includes(k)))?.[0] ?? null;
+    // 숫자로 끝나는 별칭은 뒤에 숫자·등급·점·문제가 붙으면 아님 ("수학 10문제", "수학 2등급" 은 수학I·II 가 아니다)
+    // (띄어쓰기를 지우면 "물1 3문제" 가 "물13" 이 되므로 이 경우는 띄어쓰기를 남긴 글에서 본다)
+    const spaced = text.toLowerCase().replace(/Ⅱ/g, "ii").replace(/Ⅰ/g, "i").replace(/\s+/g, " ");
+    const found = (k) => (/\d$/.test(k)
+      ? new RegExp(`${[...k].join("\\s*")}(?!\\d|등급|점|문제|문항|개)`).test(spaced) : t.includes(k));
+    const subjectId = SUBJECT_ALIASES.find(([, keys]) => keys.some(found))?.[0] ?? null;
     const grade = text.match(/([1-9])\s*등급/), score = text.match(/(\d{2,3})\s*점/);
     const goal = grade ? `${grade[1]}등급` : score ? `${score[1]}점` : "";
     let examDate = null;

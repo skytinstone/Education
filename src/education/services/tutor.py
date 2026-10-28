@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import re
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from education.db import models as m
@@ -26,7 +26,7 @@ KEYWORDS: list[tuple[Domain, re.Pattern]] = [
     (Domain.BIOLOGY, re.compile(r"생명|생물|염색체|유전|세포")),
     (Domain.EARTH_SCIENCE, re.compile(r"지구|별|H-R|반감기|지층|은하")),
 ]
-MAX_PROBLEMS = 3
+MAX_PROBLEMS = 5
 
 
 def detect_domain(text: str, fallback: Domain | None = None) -> Domain | None:
@@ -41,9 +41,13 @@ def requested_count(text: str) -> int:
     return max(1, min(int(match.group(1)) if match else 2, MAX_PROBLEMS))
 
 
-def _from_bank(db: Session, user: m.User, text: str, domain: Domain | None) -> list[str]:
+def _from_bank(db: Session, user: m.User, text: str, domain: Domain | None, scope: list[str] | None) -> list[str]:
+    """검증된 문제 중에서 고른다. 과목·단원 범위가 정해지면 그 안에서만 (같은 수학이라도 다른 과목은 섞지 않음)."""
     q = select(m.Problem.id).where(m.Problem.verification == VerificationStatus.VERIFIED, learning.visible_to(user))
-    if domain:
+    if scope:
+        q = q.where(m.Problem.id.in_(select(m.ProblemConcept.problem_id).where(
+            or_(*(or_(m.ProblemConcept.concept_id == s, m.ProblemConcept.concept_id.startswith(f"{s}.")) for s in scope)))))
+    elif domain:
         q = q.where(m.Problem.domain == domain)
     return list(db.scalars(q.order_by(func.random()).limit(requested_count(text))))
 
@@ -61,12 +65,13 @@ def reply(db: Session, user: m.User, text: str, project: m.Project | None) -> tu
     """(답변 문장, 문제 id 목록)"""
     project_domain = db.get(m.Concept, project.subject_id).domain if project else None
     domain = detect_domain(text, project_domain)
-    scope = (project.unit_ids or [project.subject_id]) if project else None
+    project_scope = (project.unit_ids or [project.subject_id]) if project else None
+    scope = generator.resolve_scope(db, text, project_scope)  # 문장의 과목·단원 이름 > 프로젝트 범위
 
     llm = get_llm()
     note = ""
     if llm:
-        plan = generator.plan_request(db, text, domain=domain, scope_ids=scope, max_count=MAX_PROBLEMS)
+        plan = generator.plan_request(db, text, user=user, domain=domain, scope_ids=project_scope, max_count=MAX_PROBLEMS)
         if plan:
             # 프로젝트에 올린 기출 중 같은 개념의 문제가 있으면 본보기로 쓴다
             exemplars = project_past_problems(db, user, project, plan.concept_id) if project else []
@@ -87,8 +92,9 @@ def reply(db: Session, user: m.User, text: str, project: m.Project | None) -> tu
         else:
             note = "어떤 개념의 문제인지 찾지 못해서, "
 
-    ids = _from_bank(db, user, text, domain)
+    ids = _from_bank(db, user, text, domain, scope)
     if not ids:
-        return "아직 이 과목의 문제가 없어요. 원하는 개념을 조금 더 구체적으로 말해 주세요 (예: 치환적분 3문제).", []
+        where = f"'{db.get(m.Concept, scope[0]).name}' " if scope and len(scope) == 1 else "이 범위의 "
+        return f"문제 은행에 아직 {where}문제가 없어요. 잠시 후 다시 요청하거나 개념을 구체적으로 말해 주세요 (예: 치환적분 3문제).", []
     prefix = note or "AI 연결 전이라 "
     return f"{prefix}문제 은행의 검증된 문제 {len(ids)}개를 보여드려요. 틀린 문제는 오답노트에 자동으로 저장돼요.", ids
