@@ -80,6 +80,8 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 | 기출 | `POST /projects/{id}/materials` (PDF·사진 업로드 → AI 분석) · `GET /projects/{id}/materials` · `GET /projects/{id}/past-problems` · `DELETE /materials/{id}` |
 | 기출 기반 생성 | `POST /projects/{id}/generate` `{level: easier\|same\|harder, count}` → 결과를 프로젝트의 새 대화로 |
 | 계정 | `PATCH /me` (생년월일·학교·전공·주소·캐릭터) · `POST /me/avatar` (사진) · `GET /users/{id}/avatar` · `GET /search/schools?q=` (나이스 학교 검색) |
+| 피드백 | `POST /feedback` (의견·문제 신고, 같은 문제를 두 사람이 신고하면 숨김) · `GET /feedback/mine` |
+| 운영 (`ADMIN_EMAILS`) | `GET /admin/feedback` · `PATCH /admin/feedback/{id}` (상태·답변) · `POST /admin/problems/{id}/restore` |
 | 화면 동기화 | `GET /sync` — 로그인한 화면이 처음 열릴 때 내 데이터를 한 번에 |
 
 - 문제의 **정답과 해설은 답을 제출한 뒤에만** 응답에 들어간다

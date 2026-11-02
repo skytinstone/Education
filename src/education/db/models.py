@@ -271,6 +271,28 @@ class Card(Base):
     created_at: Mapped[datetime] = created_at()
 
 
+class Feedback(Base):
+    """사용자 의견과 문제 신고. 같은 공용 문제를 서로 다른 두 사람이 신고하면 자동으로 숨긴다 (services/feedback.py)."""
+    __tablename__ = "feedback"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    kind: Mapped[str] = mapped_column(String(16))  # problem · solution · review · feature · bug · other
+    message: Mapped[str] = mapped_column(Text)
+    problem_id: Mapped[str | None] = mapped_column(ForeignKey("problems.id", ondelete="SET NULL"), index=True)
+    page: Mapped[str | None] = mapped_column(String(200))  # 보내던 화면 (#/chat/… 등)
+    status: Mapped[str] = mapped_column(String(12), server_default="open")  # open · reviewing · resolved
+    reply: Mapped[str | None] = mapped_column(Text)
+    replied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (
+        CheckConstraint("kind IN ('problem', 'solution', 'review', 'feature', 'bug', 'other')", name="feedback_kind"),
+        CheckConstraint("status IN ('open', 'reviewing', 'resolved')", name="feedback_status"),
+        Index("ix_feedback_status_created", "status", "created_at"),
+    )
+
+
 class ConceptNote(Base):
     """사용자마다 따로 만드는 AI 개념 정리 — 그 사람의 풀이·오답 기록에 맞춘다.
     검증 에이전트를 통과한 것만 저장하고, 다시 만들면 덮어쓴다."""

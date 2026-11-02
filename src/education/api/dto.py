@@ -330,6 +330,39 @@ class CardPatch(BaseModel):
     known: bool | None
 
 
+FeedbackKind = Literal["problem", "solution", "review", "feature", "bug", "other"]
+
+
+class FeedbackIn(BaseModel):
+    kind: FeedbackKind
+    message: str = Field(min_length=2, max_length=2000)
+    problem_id: str | None = None
+    page: str | None = Field(default=None, max_length=200)
+
+
+class FeedbackOut(Out):
+    id: UUID
+    kind: FeedbackKind
+    message: str
+    problem_id: str | None
+    page: str | None
+    status: Literal["open", "reviewing", "resolved"]
+    reply: str | None
+    replied_at: datetime | None
+    created_at: datetime
+
+
+class AdminFeedbackOut(FeedbackOut):
+    user_email: str
+    problem_hidden: bool = False  # 신고로 숨겨진 문제인지
+    problem_stem: str | None = None
+
+
+class AdminFeedbackPatch(BaseModel):
+    status: Literal["open", "reviewing", "resolved"] | None = None
+    reply: str | None = Field(default=None, max_length=2000)
+
+
 class SolutionReviewIn(BaseModel):
     """서술형 풀이 — 타이핑한 글, 손글씨 캔버스(PNG data URL) 중 하나 이상."""
     text: str | None = Field(default=None, max_length=4000)

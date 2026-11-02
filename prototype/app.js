@@ -146,6 +146,7 @@
     else if (page === "notes") renderNotes();
     else if (page === "library") renderLibrary(a ?? "concepts", b);
     else if (page === "settings") renderSettings(params);
+    else if (page === "admin") renderAdmin();
     else return go("/");
     renderSidebar();
     if (page !== "chat") contentEl.scrollTop = 0;
@@ -268,6 +269,7 @@
     openMenu(anchor, [
       { label: Store.state.user.name, header: true },
       { icon: "user-round-cog", label: "계정 설정", run: () => go("/settings") },
+      Store.state.user.isAdmin && { icon: "inbox", label: "피드백 관리 (운영)", run: () => go("/admin") },
       Store.mode === "local" && { icon: "rotate-ccw", label: "데모 데이터 초기화", run: () => confirmModal({
         title: "데모 데이터를 초기화할까요?", text: "직접 만든 프로젝트, 대화, 풀이 기록이 모두 지워지고 처음 샘플 데이터로 돌아가요.", action: "초기화",
         run: () => { Store.reset(); go("/"); render(); toast("처음 상태로 되돌렸어요"); },
@@ -440,6 +442,7 @@
             <span class="stars" title="난이도 ${p.difficulty}">${"★".repeat(p.difficulty)}${"☆".repeat(5 - p.difficulty)}</span>
             <button class="work-btn ${work ? "on" : ""}" data-work="${pid}" title="풀이를 쓰면 AI가 어디서 틀렸는지 알려줘요"><i data-lucide="pencil-line"></i>서술형 풀이</button>
             <button class="icon-btn save ${saved ? "on" : ""}" data-save="${pid}" title="${saved ? "저장 취소" : "저장"}"><i data-lucide="bookmark"></i></button>
+            <button class="icon-btn" data-report="${pid}" title="문제·정답이 이상하면 알려 주세요"><i data-lucide="flag"></i></button>
           </div>
           <p class="stem" data-math>${index ? `<b>${index}.</b> ` : ""}${esc(p.stem)}</p>
           ${answerArea}
@@ -473,14 +476,14 @@
         </div>
         <div class="work-foot"><span class="mini">${attempted ? "정답과 비교해서 알려줘요" : "답을 내기 전이라 정답 대신 틀린 곳과 힌트만 알려줘요"}</span>
           <button type="button" class="btn-primary" data-work-submit ${w.busy ? "disabled" : ""}>${w.busy ? '<i data-lucide="loader-circle" class="spin"></i>확인하는 중…' : '<i data-lucide="scan-search"></i>풀이 확인'}</button></div>
-        <div data-work-review>${w.review ? reviewHTML(w.review, w.tab) : ""}</div>
+        <div data-work-review>${w.review ? reviewHTML(w.review, w.tab, pid) : ""}</div>
       </div>`;
   }
   const VERDICT = {
     correct: ["circle-check", "풀이가 맞아요", "ok"], partial: ["circle-alert", "거의 맞았어요. 중간에 고칠 곳이 있어요", "warn"],
     wrong: ["circle-x", "접근 방법을 다시 생각해 봐요", "bad"], unreadable: ["scan-eye", "풀이를 읽지 못했어요. 조금 더 크고 또렷하게 써 주세요", "warn"],
   };
-  function reviewHTML(r, tab) {
+  function reviewHTML(r, tab, pid) {
     const [icon, title, cls] = VERDICT[r.verdict] ?? VERDICT.partial;
     return `
       <div class="work-review ${cls}">
@@ -491,6 +494,7 @@
             <div><span data-math>${esc(s.step)}</span>${r.first_error === i + 1 ? "<em>여기서부터 틀렸어요</em>" : ""}<small data-math>${esc(s.comment)}</small></div></li>`).join("")}</ol>` : ""}
         <p data-math>${esc(r.summary)}</p>
         ${r.hint ? `<p class="wr-hint" data-math><b>힌트</b> ${esc(r.hint)}</p>` : ""}
+        <button type="button" class="link-btn" data-report-review="${pid}">채점이 이상해요</button>
       </div>`;
   }
   // 손글씨 캔버스: 흰 바탕 PNG 로 저장 (지우개는 흰색으로 덧칠)
@@ -591,7 +595,7 @@
     try {
       w.review = await Store.reviewSolution(pid, w.tab === "type" ? { text } : { image });
       const box = $(`[data-work-panel="${pid}"] [data-work-review]`);
-      if (box) { box.innerHTML = reviewHTML(w.review, w.tab); icons(); }
+      if (box) { box.innerHTML = reviewHTML(w.review, w.tab, pid); icons(); }
     } catch (err) { toast(err.message); }
     w.busy = false;
     setBtn();
@@ -642,6 +646,11 @@
 
   // 문제 카드 공통 동작: 저장, 틀린 이유 표시
   function handleProblemExtras(e) {
+    const report = e.target.closest("[data-report], [data-report-review]");
+    if (report) {
+      feedbackModal(report.dataset.report ? { problemId: report.dataset.report, kind: "problem" } : { problemId: report.dataset.reportReview, kind: "review" });
+      return true;
+    }
     if (e.target.closest("[data-work], [data-work-panel]")) { handleWork(e); return true; }
     const save = e.target.closest("[data-save]");
     if (save) {
@@ -1553,6 +1562,95 @@
         } catch (err) { toast(err.message); $("#leave-submit").disabled = false; }
       });
     }
+  }
+
+  // ================= 피드백 · 문제 신고 =================
+  const FEEDBACK_KINDS = { problem: "문제·정답 오류", solution: "해설 오류", review: "서술형 채점 이상", feature: "기능 제안", bug: "버그", other: "기타" };
+  function feedbackModal({ problemId = null, kind = null } = {}) {
+    if (Store.mode !== "api") return toast("피드백은 로그인한 서버 화면에서 보낼 수 있어요");
+    const p = problemId && Store.problem(problemId);
+    const kinds = Object.keys(FEEDBACK_KINDS).filter((k) => p || !["problem", "solution", "review"].includes(k));
+    let chosen = kind && kinds.includes(kind) ? kind : kinds[0];
+    const page = location.hash || "#/";
+    const PAGE_NAME = { chat: "대화", project: "프로젝트", notes: "오답노트", library: "라이브러리", settings: "계정 설정", admin: "피드백 관리" };
+    const pageName = PAGE_NAME[route().parts[0]] ?? "새 학습";
+    formModal({
+      title: p ? "문제 신고" : "의견 보내기", submit: "보내기",
+      body: `
+        ${p ? `<div class="fb-problem"><small>${esc(conceptLabel(p))}</small><p data-math>${esc(p.stem.length > 140 ? `${p.stem.slice(0, 140)}…` : p.stem)}</p></div>` : ""}
+        <div class="field"><label>종류</label>
+          <div class="chips fb-kinds">${kinds.map((k) => `<label><input type="radio" name="fb-kind" value="${k}" ${k === chosen ? "checked" : ""} /><span>${FEEDBACK_KINDS[k]}</span></label>`).join("")}</div></div>
+        <div class="field"><label for="fb-message">내용</label>
+          <textarea id="fb-message" rows="5" maxlength="2000" placeholder="${p ? "어디가 이상한지 알려 주세요 (예: 정답이 3번이 아니라 4번 같아요)" : "불편한 점, 바라는 기능을 자유롭게 적어 주세요"}"></textarea></div>
+        <label class="check"><input type="checkbox" id="fb-page" checked /> 지금 보던 화면(${pageName}) 정보 함께 보내기</label>
+        <p class="mini">${p ? "같은 문제에 신고가 쌓이면 확인할 때까지 다른 학생에게 나가지 않아요. " : ""}답변은 ${esc(Store.state.user.email ?? "")} 계정으로 알려 드려요.</p>`,
+      onMount: (f) => {
+        f.addEventListener("change", (e) => { if (e.target.name === "fb-kind") chosen = e.target.value; });
+        setTimeout(() => $("#fb-message", f)?.focus(), 40);
+      },
+      onSubmit: (f) => {
+        const message = $("#fb-message", f).value.trim();
+        if (message.length < 2) { invalid($("#fb-message", f), "내용을 적어 주세요"); return false; }
+        const btn = $("button[type=submit]", f);
+        btn.disabled = true;
+        Store.sendFeedback({ kind: chosen, message, problem_id: p ? problemId : null, page: $("#fb-page", f).checked ? page : null })
+          .then(() => { closeOverlays(); toast(p ? "신고해 주셔서 고마워요. 확인해서 바로잡을게요" : "의견을 보냈어요. 고마워요"); })
+          .catch((err) => { toast(err.message); btn.disabled = false; });
+        return false;
+      },
+    });
+  }
+  $("#feedback-btn").addEventListener("click", () => feedbackModal());
+
+  // ================= 운영: 피드백 관리 (운영자 계정만) =================
+  const FB_STATUS = { open: "접수", reviewing: "확인 중", resolved: "해결" };
+  let adminFilter = "open";
+  async function renderAdmin() {
+    if (!Store.state.user.isAdmin) return go("/");
+    view.innerHTML = `
+      <div class="page-head"><div><h1><i data-lucide="inbox"></i>피드백 관리</h1><p>문제 신고와 의견을 확인하고 답변해요</p></div>
+        <div class="seg">${[["open", "처리할 것"], ["resolved", "해결됨"], ["all", "전체"]].map(([k, t]) => `<button data-afilter="${k}" class="${adminFilter === k ? "on" : ""}">${t}</button>`).join("")}</div></div>
+      <div id="admin-list"><p class="mini">불러오는 중…</p></div>`;
+    icons();
+    view.onclick = async (e) => {
+      const f = e.target.closest("[data-afilter]");
+      if (f) { adminFilter = f.dataset.afilter; return renderAdmin(); }
+      const card = e.target.closest("[data-fb]");
+      if (!card) return;
+      const id = card.dataset.fb;
+      try {
+        const st = e.target.closest("[data-fstatus]");
+        if (st) { await Store.adminUpdateFeedback(id, { status: st.dataset.fstatus }); toast(`'${FB_STATUS[st.dataset.fstatus]}'(으)로 바꿨어요`); return renderAdmin(); }
+        if (e.target.closest("[data-freply]")) {
+          const reply = $("textarea", card).value.trim();
+          if (!reply) return toast("답변을 적어 주세요");
+          await Store.adminUpdateFeedback(id, { reply, status: "resolved" });
+          toast("답변을 저장하고 해결로 바꿨어요");
+          return renderAdmin();
+        }
+        const restore = e.target.closest("[data-frestore]");
+        if (restore) { await Store.adminRestoreProblem(restore.dataset.frestore); toast("문제를 다시 보이게 했어요"); return renderAdmin(); }
+      } catch (err) { toast(err.message); }
+    };
+    let items;
+    try { items = await Store.adminFeedback(adminFilter); } catch (err) { $("#admin-list").innerHTML = `<p class="mini">${esc(err.message)}</p>`; return; }
+    const list = $("#admin-list");
+    if (!list) return;
+    list.innerHTML = items.length ? items.map((f) => `
+      <section class="panel fb-item" data-fb="${f.id}">
+        <div class="fb-meta"><span class="tag on">${FEEDBACK_KINDS[f.kind]}</span><span class="fb-status ${f.status}">${FB_STATUS[f.status]}</span>
+          <span>${esc(f.user_email)}</span><span>${new Date(f.created_at).toLocaleString("ko-KR")}</span>
+          ${f.page ? `<a href="${esc(f.page)}">${esc(f.page)}</a>` : ""}</div>
+        <p class="fb-msg">${esc(f.message)}</p>
+        ${f.problem_id ? `<div class="fb-problem"><small>${esc(f.problem_id)}${f.problem_hidden ? ' · <b class="bad">신고로 숨겨짐</b>' : ""}</small>
+          <p data-math>${esc(f.problem_stem ?? "")}</p>
+          ${f.problem_hidden ? `<button class="btn-ghost" data-frestore="${esc(f.problem_id)}"><i data-lucide="undo-2"></i>문제가 맞아요, 다시 보이게</button>` : ""}</div>` : ""}
+        <textarea rows="2" maxlength="2000" placeholder="답변 (저장하면 '해결'로 바뀌고, 다음 단계에서 사용자 알림으로 전달돼요)">${esc(f.reply ?? "")}</textarea>
+        <div class="fb-actions">
+          ${Object.entries(FB_STATUS).filter(([k]) => k !== f.status).map(([k, t]) => `<button class="btn-ghost" data-fstatus="${k}">${t}(으)로</button>`).join("")}
+          <button class="btn-primary" data-freply>답변 저장</button></div>
+      </section>`).join("") : '<div class="empty"><i data-lucide="inbox"></i><b>처리할 피드백이 없어요</b></div>';
+    icons();
   }
 
   // ================= 모달 =================

@@ -193,6 +193,7 @@
   kbd { font-family: inherit; font-size: 10.5px; color: var(--ink-3); min-width: 18px; height: 18px; display: grid; place-items: center; border-radius: 5px; background: rgba(15,23,42,.05); }
   .pill-btn { height: 34px; padding: 0 14px; border-radius: 999px; font-size: 13.5px; font-weight: 500; }
   .topbar .icon-btn.soft { width: 34px; height: 34px; border-radius: 50%; }
+  .dot[hidden] { display: none; }
   .dot { position: absolute; top: 7px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); border: 1.5px solid #fff; }
 
   .content { flex: 1; overflow-y: auto; padding: 48px 4px 40px; }
@@ -362,8 +363,8 @@
         <input placeholder="대화, 문제, 개념 검색" />
         <span class="keys"><kbd>⌘</kbd><kbd>K</kbd></span>
       </label>
-      <button class="pill-btn soft">피드백</button>
-      <button class="icon-btn soft" title="알림"><i data-lucide="bell"></i><span class="dot"></span></button>
+      <button class="pill-btn soft" id="feedback-btn">피드백</button>
+      <button class="icon-btn soft" id="notify-btn" title="알림"><i data-lucide="bell"></i><span class="dot" hidden></span></button>
     </header>
 
     <div class="content">
