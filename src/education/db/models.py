@@ -112,6 +112,7 @@ class Course(Base):
     level: Mapped[str] = mapped_column(String(40), server_default="")  # 고등, 대학, 자격증 …
     curriculum: Mapped[str] = mapped_column(String(60), server_default="")
     textbook: Mapped[str] = mapped_column(String(200), server_default="")
+    textbook_isbn: Mapped[str | None] = mapped_column(String(13))  # 선택
     language: Mapped[str] = mapped_column(String(8), server_default="ko")
     scope_text: Mapped[str | None] = mapped_column(Text)  # 사용자가 붙여넣은 출제 범위 원문
     aliases: Mapped[list[str]] = mapped_column(ARRAY(String(60)), server_default="{}")  # 요청 문장에서 알아들을 이름
@@ -193,6 +194,7 @@ class Project(Base):
     goal: Mapped[str] = mapped_column(String(60), server_default="")
     # 공부하는 교재 (예: "수능특강 미적분, 쎈 수학Ⅰ") — 문제 생성·개념 정리가 이 교재의 단원 순서·문제 유형을 참고한다
     textbook: Mapped[str] = mapped_column(String(120), server_default="")
+    textbook_isbn: Mapped[str | None] = mapped_column(String(13))  # 선택 — 책 검색에서 고르면 채워진다
     exam_date: Mapped[date | None] = mapped_column(Date)
     question_type: Mapped[str] = mapped_column(String(16), server_default="auto")  # schemas.QUESTION_TYPES
     pinned: Mapped[bool] = mapped_column(Boolean, server_default="false")
@@ -204,7 +206,8 @@ class Project(Base):
 
 
 class Material(Base):
-    """사용자가 올린 기출·시험지 (PDF·사진). AI 가 문제를 뽑아 내 problems 에 PAST_EXAM 으로 저장한다."""
+    """사용자가 올린 기출·시험지 또는 교재 페이지 (PDF·사진). AI 가 문제를 뽑아 problems 에 PAST_EXAM·TEXTBOOK 으로
+    저장하고 (올린 사람에게만 보임), 새 문제를 만들 때 본보기로 쓴다."""
     __tablename__ = "materials"
 
     id: Mapped[uuid.UUID] = uuid_pk()
@@ -218,9 +221,11 @@ class Material(Base):
     error: Mapped[str | None] = mapped_column(Text)
     problem_count: Mapped[int] = mapped_column(server_default="0")
     rights_confirmed: Mapped[bool] = mapped_column(Boolean)  # "학습용으로 쓸 수 있는 자료" 확인
+    kind: Mapped[str] = mapped_column(String(12), server_default="past_exam")  # past_exam | textbook
     created_at: Mapped[datetime] = created_at()
 
-    __table_args__ = (CheckConstraint("status IN ('uploaded', 'extracting', 'ready', 'failed')", name="material_status"),)
+    __table_args__ = (CheckConstraint("status IN ('uploaded', 'extracting', 'ready', 'failed')", name="material_status"),
+                      CheckConstraint("kind IN ('past_exam', 'textbook')", name="material_kind"))
 
 
 class ChatSession(Base):

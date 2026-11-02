@@ -36,6 +36,8 @@ class Settings(BaseSettings):
 
     # 학교 검색 (나이스 교육정보 개방 포털) — 없어도 되지만 키가 있으면 한 번에 더 많이 찾는다
     neis_api_key: str | None = None
+    # 책 검색 (선택) — Google Books 키가 있으면 함께 찾는다. 카카오 책 검색은 KAKAO_REST_API_KEY 를 그대로 쓴다
+    google_books_api_key: str | None = None
 
     # 운영자 — 이 이메일로 로그인한 계정만 피드백 관리·문제 복구를 할 수 있다 (쉼표로 여러 개)
     admin_emails: str = ""

@@ -79,7 +79,7 @@ def _alias(s: str) -> str:
 
 
 def create_course(db: Session, llm: LLM, user: m.User, *, title: str, scope_text: str, exam: str = "", level: str = "",
-                  textbook: str = "") -> m.Course:
+                  textbook: str = "", textbook_isbn: str | None = None) -> m.Course:
     s = get_settings()
     prompt = (f"코스 이름: {title}\n시험: {exam or '(적지 않음)'}\n수준: {level or '(적지 않음)'}\n"
               f"교재: {textbook or '(적지 않음)'}\n\n출제 범위:\n{scope_text.strip()}")
@@ -109,6 +109,7 @@ def create_course(db: Session, llm: LLM, user: m.User, *, title: str, scope_text
     aliases = list(dict.fromkeys(_alias(a) for a in [title, *draft.aliases] if a.strip()))[:8]
     course = m.Course(id=cid, title=(draft.title.strip() or title)[:120], exam=exam[:120], category=draft.category.strip()[:40],
                       domain=draft.domain, level=(level or draft.level).strip()[:40], textbook=textbook[:200],
+                      textbook_isbn=textbook_isbn or None,
                       language=draft.language, scope_text=scope_text.strip(), aliases=aliases, source="user",
                       choice_count=draft.choice_count, formats=list(dict.fromkeys(draft.formats))[:3] or ["multiple_choice"],
                       owner_user_id=user.id)

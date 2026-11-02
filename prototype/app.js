@@ -918,7 +918,7 @@
         return `
           <div class="material ${m.status}">
             <i data-lucide="${m.content_type === "application/pdf" ? "file-text" : "image"}"></i>
-            <div class="material-name"><b>${esc(m.filename)}</b><small>${fmtSize(m.size_bytes)} · ${relTime(Date.parse(m.created_at))}</small></div>
+            <div class="material-name"><b>${esc(m.filename)}</b><small>${m.kind === "textbook" ? "교재 페이지" : "기출·시험지"} · ${fmtSize(m.size_bytes)} · ${relTime(Date.parse(m.created_at))}</small></div>
             <span class="status-pill ${m.status}"><i data-lucide="${icon}"></i>${label}${m.status === "ready" ? ` · ${m.problem_count}문제` : ""}</span>
             <button class="icon-btn" data-del-material="${m.id}" aria-label="삭제" title="삭제"><i data-lucide="trash-2"></i></button>
             ${m.error ? `<p class="material-error">${esc(m.error)}</p>` : ""}
@@ -1348,20 +1348,39 @@
     document.head.append(s);
   }));
 
+  // 교재 칸: 제목·ISBN 으로 책 후보 (선택). 고르면 책 카드, 고르지 않고 이름만 적어도 된다
+  const bookSub = (b) => [b.authors.slice(0, 2).join(", "), b.publisher, b.year, b.isbn && `ISBN ${b.isbn}`].filter(Boolean).join(" · ");
+  function bindBookField(input, list, card, state) {
+    const draw = () => {
+      card.hidden = !state.book;
+      if (!state.book) return;
+      const b = state.book;
+      card.innerHTML = `${b.thumbnail ? `<img src="${esc(b.thumbnail)}" alt="" referrerpolicy="no-referrer" />` : '<i data-lucide="book"></i>'}
+        <span><b>${esc(b.title)}</b><small>${esc(bookSub(b))}</small></span>
+        <button type="button" class="icon-btn" data-book-clear aria-label="책 선택 취소"><i data-lucide="x"></i></button>`;
+      lucide.createIcons();
+    };
+    bindSuggest(input, list, async (q) => (await Store.searchBooks(q)).map((b) => ({ label: b.title, sub: bookSub(b), value: b.title, thumb: b.thumbnail, book: b })),
+      2, (it) => { state.book = it.book; state.isbn = it.book.isbn ?? null; draw(); });
+    input.addEventListener("input", () => { if (state.book && input.value.trim() !== state.book.title) { state.book = null; state.isbn = null; draw(); } });
+    card.addEventListener("click", (e) => { if (e.target.closest("[data-book-clear]")) { state.book = null; state.isbn = null; draw(); input.focus(); } });
+    draw();
+  }
+
   // 고등학생이 고르는 계열 — 대학 학과는 직접 적는다
   const MAJOR_PRESETS = ["인문계열", "자연계열", "예체능계열", "특성화고", "마이스터고"];
 
   // 입력하면 아래에 후보 목록을 띄우는 칸 (학교 검색). fetch(q) → [{ label, sub, value }]
-  function bindSuggest(input, list, fetch, minLength = 2) {
+  function bindSuggest(input, list, fetch, minLength = 2, onPick = null) {
     let items = [], active = -1, timer = 0, seq = 0;
     const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); active = -1; };
     const draw = () => {
-      list.innerHTML = items.map((x, i) => `<li role="option" data-i="${i}" class="${i === active ? "on" : ""}" aria-selected="${i === active}">
-        <b>${esc(x.label)}</b><small>${esc(x.sub)}</small></li>`).join("");
+      list.innerHTML = items.map((x, i) => `<li role="option" data-i="${i}" class="${i === active ? "on" : ""} ${x.thumb ? "has-thumb" : ""}" aria-selected="${i === active}">
+        ${x.thumb ? `<img src="${esc(x.thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" />` : ""}<span><b>${esc(x.label)}</b><small>${esc(x.sub)}</small></span></li>`).join("");
       list.hidden = !items.length;
       input.setAttribute("aria-expanded", String(!!items.length));
     };
-    const pick = (i) => { input.value = items[i].value; close(); input.dispatchEvent(new Event("change", { bubbles: true })); };
+    const pick = (i) => { input.value = items[i].value; close(); onPick?.(items[i]); input.dispatchEvent(new Event("change", { bubbles: true })); };
     input.addEventListener("input", () => {
       clearTimeout(timer);
       const q = input.value.trim();
@@ -1901,6 +1920,9 @@
       <optgroup label="${DOMAIN_NAME[d]}">
         ${SUBJECTS.filter((s) => s.domain === d).map((s) => `<option value="${s.id}" ${p?.subjectId === s.id ? "selected" : ""}>${esc(s.name)}</option>`).join("")}
       </optgroup>`).join("");
+    // ISBN 이 있으면 책 카드로 (이름만 있으면 칸만)
+    const bookState = { isbn: p?.textbookIsbn ?? null,
+      book: p?.textbookIsbn ? { title: p.textbook, authors: [], publisher: "", year: "", isbn: p.textbookIsbn } : null };
     formModal({
       title: p ? "프로젝트 수정" : "새 프로젝트", submit: p ? "저장" : "만들기",
       body: `
@@ -1914,9 +1936,12 @@
           <div class="field"><label for="f-goal">목표 <small>· 선택</small></label><input id="f-goal" placeholder="예: 1등급" value="${esc(p?.goal ?? "")}" maxlength="20" /></div>
           <div class="field"><label for="f-date">시험일 <small>· 선택</small></label><input id="f-date" type="date" value="${p?.examDate ?? ""}" /></div>
         </div>
-        <div class="field"><label for="f-textbook">시험 교재 <small>· 선택 · 이 교재의 단원 순서와 문제 유형에 맞춰 문제를 만들어요</small></label>
-          <input id="f-textbook" placeholder="예: 수능특강 미적분, 쎈 미적분" value="${esc(p?.textbook ?? "")}" maxlength="120" /></div>`,
+        <div class="field suggest"><label for="f-textbook">시험 교재 <small>· 선택 · 이름이나 ISBN 으로 찾기</small></label>
+          <input id="f-textbook" placeholder="교재 이름이나 ISBN" value="${esc(p?.textbook ?? "")}" maxlength="120" autocomplete="off" />
+          <ul class="suggest-list" id="f-book-list" role="listbox" hidden></ul>
+          <div class="book-card" id="f-book" hidden></div></div>`,
       onMount(f) {
+        bindBookField($("#f-textbook", f), $("#f-book-list", f), $("#f-book", f), bookState);
         const sel = $("#f-subject", f);
         const drawUnits = () => {
           const units = childrenOf(sel.value);
@@ -1937,6 +1962,7 @@
           unitIds: $$("#f-units input:checked", f).map((i) => i.value),
           goal: $("#f-goal", f).value.trim(),
           textbook: $("#f-textbook", f).value.trim(),
+          textbookIsbn: bookState.isbn,
           examDate: $("#f-date", f).value || null,
           questionType: $("#f-qtype", f).value,
         };
@@ -1972,10 +1998,14 @@
   // 파일 고르기 영역 (마법사·업로드 창 공용). onChange(files) 로 바뀐 목록을 알린다
   function dropzoneHTML() {
     return `
+      <div class="chips mat-kind">
+        <label><input type="radio" name="mat-kind" value="past_exam" checked /><span>기출·시험지</span></label>
+        <label><input type="radio" name="mat-kind" value="textbook" /><span>교재 페이지</span></label>
+      </div>
       <label class="dropzone" data-drop>
         <input type="file" accept=".pdf,image/png,image/jpeg,image/webp" multiple hidden />
         <i data-lucide="upload-cloud"></i>
-        <b>기출·시험지 파일을 끌어다 놓거나 눌러서 고르세요</b>
+        <b>파일을 끌어다 놓거나 눌러서 고르세요</b>
         <span>PDF(30쪽 이하) 또는 사진 · 파일당 20MB까지 · 여러 개 가능</span>
       </label>
       <ul class="file-list" data-files></ul>
@@ -2009,10 +2039,10 @@
     draw();
   }
 
-  async function uploadAll(projectId, files) {
+  async function uploadAll(projectId, files, kind = "past_exam") {
     let ok = 0;
     for (const f of files) {
-      try { await Store.uploadMaterial(projectId, f, true); ok++; } catch (e) { toast(`${f.name}: ${e.message}`); }
+      try { await Store.uploadMaterial(projectId, f, true, kind); ok++; } catch (e) { toast(`${f.name}: ${e.message}`); }
     }
     return ok;
   }
@@ -2074,7 +2104,7 @@
   function projectWizard() {
     const w = { exam: "", subjectId: null, subjectPicked: false, unitIds: [], scope: "",
       examDate: isoAfter(30), dateShown: false, dateTouched: false, goal: "", goalTouched: false, nameTouched: false,
-      questionType: "auto", textbook: "", files: [], busy: false };
+      questionType: "auto", textbook: "", files: [], busy: false, book: null, isbn: null };
     const sheet = openSheet({
       title: "새 프로젝트", wide: true,
       body: `
@@ -2090,9 +2120,12 @@
               <ul class="suggest-list" id="subject-list" role="listbox" hidden></ul>
               <p class="mini" data-subject-hint></p>
               <button type="button" class="link-btn" data-new-course>찾는 코스가 없나요? 출제 범위로 새 코스 만들기</button></div>
-            <div class="field"><label for="np-textbook">시험 교재 <small>· 선택</small></label>
-              <input id="np-textbook" autocomplete="off" maxlength="120" placeholder="예: 수능특강 미적분, 쎈 미적분" />
-              <p class="mini">적으면 이 교재의 결에 맞춰 문제를 만들어요</p></div>
+            <div class="field suggest"><label for="np-textbook">시험 교재 <small>· 선택</small></label>
+              <input id="np-textbook" autocomplete="off" maxlength="120" placeholder="교재 이름이나 ISBN (예: 수능특강 미적분)"
+                role="combobox" aria-autocomplete="list" aria-controls="book-list" aria-expanded="false" />
+              <ul class="suggest-list" id="book-list" role="listbox" hidden></ul>
+              <div class="book-card" data-book hidden></div>
+              <p class="mini">목록에서 고르면 책 정보가 함께 저장돼요. 이름만 적어도 괜찮아요</p></div>
           </div>
           <div class="np-newcourse" data-newcourse hidden>
             <h4><i data-lucide="sparkles"></i>새 코스 만들기 <small>출제 범위를 붙여넣으면 AI가 단원·개념으로 정리해요 · 만든 코스는 모두에게 공개돼요</small></h4>
@@ -2123,7 +2156,7 @@
               <div class="seg qtype">${Object.entries(QTYPE).map(([k, v]) => `<button type="button" data-qtype="${k}" class="${w.questionType === k ? "on" : ""}">${v}</button>`).join("")}</div></div>
             <div class="field"><label for="w-name">프로젝트 이름</label><input id="w-name" maxlength="30" /></div>
             ${Store.mode === "api" ? `<details class="np-upload">
-              <summary><i data-lucide="chevron-right"></i>기출·시험지 올리기 <small>선택 · 올리면 그 시험과 비슷한 결의 문제를 만들어 드려요</small></summary>
+              <summary><i data-lucide="chevron-right"></i>기출·교재 올리기 <small>선택 · 올리면 그 시험·교재와 비슷한 결의 문제를 만들어 드려요</small></summary>
               ${dropzoneHTML()}</details>` : ""}
           </div>
         </div>`,
@@ -2238,7 +2271,7 @@
       icons();
       try {
         const c = await Store.createCourse({ title, scope_text: scope, exam: $("#nc-exam").value.trim(),
-          level: $("input[name=nc-level]:checked", body)?.value ?? "", textbook: w.textbook.trim() });
+          level: $("input[name=nc-level]:checked", body)?.value ?? "", textbook: w.textbook.trim(), textbook_isbn: w.isbn });
         loadConcepts();
         panel.hidden = true;
         w.subjectPicked = true;
@@ -2260,6 +2293,7 @@
       const qt = e.target.closest("[data-qtype]");
       if (qt) { w.questionType = qt.dataset.qtype; $$("[data-qtype]", body).forEach((b) => b.classList.toggle("on", b === qt)); }
     });
+    bindBookField($("#np-textbook"), $("#book-list"), $("[data-book]", body), w);
     // 과목 칸 후보 목록 (고르면 그 과목으로)
     bindSuggest($("#np-subject"), $("#subject-list"), async (q) => matchSubjects(q).map((c) => ({
       label: c.title, sub: courseSub(c), value: c.title })), 1);
@@ -2293,8 +2327,8 @@
       btn.textContent = w.files.length ? "만들고 올리는 중…" : "만드는 중…";
       try {
         const id = await Store.createProject({ name, subjectId: w.subjectId, unitIds: w.unitIds, goal: (w.goal || "").trim(),
-          textbook: w.textbook.trim(), examDate: w.examDate, questionType: w.questionType });
-        const uploaded = w.files.length ? await uploadAll(id, w.files) : 0;
+          textbook: w.textbook.trim(), textbookIsbn: w.isbn, examDate: w.examDate, questionType: w.questionType });
+        const uploaded = w.files.length ? await uploadAll(id, w.files, $("input[name=mat-kind]:checked", body)?.value) : 0;
         closeOverlays();
         go(`/project/${id}`);
         toast(uploaded ? `프로젝트를 만들었어요. 기출 ${uploaded}개를 분석하고 있어요` : "프로젝트를 만들었어요");
@@ -2311,7 +2345,7 @@
   function uploadSheet(projectId, onDone) {
     const files = [];
     openSheet({
-      title: "기출·시험지 올리기", body: dropzoneHTML(),
+      title: "기출·교재 올리기", body: dropzoneHTML(),
       footer: `<div class="modal-foot"><button type="button" class="btn-ghost" data-close>취소</button><button type="submit" class="btn-primary" data-up disabled>올리기</button></div>`,
       onMount(f) { bindDropzone(f, files, () => { $("[data-up]", f).disabled = !files.length; $("[data-up]", f).textContent = files.length ? `${files.length}개 올리기` : "올리기"; }); },
       onSubmit(f) {
@@ -2319,7 +2353,7 @@
         const btn = $("[data-up]", f);
         btn.disabled = true;
         btn.textContent = "올리는 중…";
-        uploadAll(projectId, files).then((n) => { closeOverlays(); if (n) toast(`${n}개를 올렸어요. AI가 문제를 읽는 중이에요`); onDone(); });
+        uploadAll(projectId, files, $("input[name=mat-kind]:checked", f)?.value).then((n) => { closeOverlays(); if (n) toast(`${n}개를 올렸어요. AI가 문제를 읽는 중이에요`); onDone(); });
         return false;
       },
     });

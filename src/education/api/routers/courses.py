@@ -41,7 +41,8 @@ def create_course(body: CourseIn, user: CurrentUser, db: DB) -> CourseDetail:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 아직 설정되지 않았어요")
     try:
         course = courses.create_course(db, llm, user, title=body.title.strip(), scope_text=body.scope_text,
-                                       exam=body.exam.strip(), level=body.level.strip(), textbook=body.textbook.strip())
+                                       exam=body.exam.strip(), level=body.level.strip(), textbook=body.textbook.strip(),
+                                       textbook_isbn=body.textbook_isbn)
     except courses.CourseError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"코스를 만들지 못했어요. 잠시 후 다시 시도해 주세요 ({e})") from None
     return _detail(db, user, course)

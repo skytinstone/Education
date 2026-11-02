@@ -1,5 +1,5 @@
 from collections import Counter
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Response, UploadFile, status
@@ -65,8 +65,8 @@ def update_project(project_id: UUID, body: ProjectPatch, user: CurrentUser, db: 
     if "subject_id" in changes or "unit_ids" in changes:
         _check_scope(db, changes.get("subject_id", p.subject_id), changes.get("unit_ids", p.unit_ids))
     for k, v in changes.items():
-        if v is None and k not in ("exam_date",):
-            continue  # exam_date 만 null 로 지울 수 있다
+        if v is None and k not in ("exam_date", "textbook_isbn"):
+            continue  # exam_date·textbook_isbn 만 null 로 지울 수 있다
         setattr(p, k, v)
     db.commit()
     return ProjectOut.model_validate(p)
@@ -84,15 +84,16 @@ def delete_project(project_id: UUID, user: CurrentUser, db: DB) -> Response:
 @router.post("/{project_id}/materials", status_code=status.HTTP_201_CREATED)
 def upload_material(project_id: UUID, user: CurrentUser, db: DB, background: BackgroundTasks,
                           file: Annotated[UploadFile, File()], rights_confirmed: Annotated[bool, Form()] = False,
+                          kind: Annotated[Literal["past_exam", "textbook"], Form()] = "past_exam",
                           open_session=Depends(session_factory)) -> MaterialOut:
-    """기출·시험지(PDF·사진)를 올리면 백그라운드에서 AI 가 문제를 뽑는다. 상태는 GET 으로 확인."""
+    """기출·시험지 또는 교재 페이지(PDF·사진)를 올리면 백그라운드에서 AI 가 문제를 뽑는다. 상태는 GET 으로 확인."""
     project = owned(db, m.Project, project_id, user)
     if not rights_confirmed:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "학습용으로 쓸 수 있는 자료인지 확인해 주세요")
     data = file.file.read()
     if error := materials.validate_upload(file.content_type or "", data):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, error)
-    material = materials.save_upload(user, project, file.filename or "upload", file.content_type, data, rights_confirmed)
+    material = materials.save_upload(user, project, file.filename or "upload", file.content_type, data, rights_confirmed, kind)
     db.add(material)
     db.commit()
     background.add_task(materials.process, material.id, open_session)
@@ -164,7 +165,7 @@ def generate_from_past(project_id: UUID, body: GenerateIn, user: CurrentUser, db
         report = generator.generate_problems(
             db, llm, concept_id=concept_id, difficulty=difficulty, count=body.count, user=user,
             question_type=project.question_type, exemplars=exemplars, owner=user if exemplars else None,
-            textbook=project.textbook or None)
+            textbook=tutor.textbook_label(project))
     except LLMError:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "AI 응답이 원활하지 않아요. 잠시 후 다시 시도해 주세요") from None
     if not report.accepted:

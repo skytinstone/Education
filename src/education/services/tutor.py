@@ -61,6 +61,13 @@ def project_past_problems(db: Session, user: m.User, project: m.Project, concept
     return list(db.scalars(q.order_by(m.Problem.created_at)))
 
 
+def textbook_label(project: m.Project) -> str | None:
+    """AI 에게 줄 교재 이름 (ISBN 이 있으면 함께 — 판을 구분하는 데 도움이 된다)."""
+    if not project.textbook:
+        return None
+    return f"{project.textbook} (ISBN {project.textbook_isbn})" if project.textbook_isbn else project.textbook
+
+
 def reply(db: Session, user: m.User, text: str, project: m.Project | None) -> tuple[str, list[str]]:
     """(답변 문장, 문제 id 목록)"""
     project_domain = db.get(m.Concept, project.subject_id).domain if project else None
@@ -80,7 +87,7 @@ def reply(db: Session, user: m.User, text: str, project: m.Project | None) -> tu
                     db, llm, concept_id=plan.concept_id, difficulty=plan.difficulty, count=plan.count, user=user,
                     question_type=project.question_type if project else "multiple_choice",
                     exemplars=exemplars, owner=user if exemplars else None,
-                    textbook=(project.textbook or None) if project else None)
+                    textbook=textbook_label(project) if project else None)
             except (LLMError, ValueError) as e:
                 log.warning("AI 문제 생성 실패: %s", e)
                 report = None

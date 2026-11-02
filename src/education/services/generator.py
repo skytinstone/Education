@@ -306,7 +306,8 @@ def course_brief(db: Session, course_id: str) -> str:
     if c is None:
         return ""
     parts = [f"시험 {c.exam}" if c.exam else "", f"분야 {c.category}", f"수준 {c.level}" if c.level else "",
-             f"교육과정 {c.curriculum}" if c.curriculum else "", f"교재 {c.textbook}" if c.textbook else "",
+             f"교육과정 {c.curriculum}" if c.curriculum else "",
+             (f"교재 {c.textbook}" + (f" (ISBN {c.textbook_isbn})" if c.textbook_isbn else "")) if c.textbook else "",
              "언어 영어" if c.language == "en" else ""]
     return f"코스: {c.title} ({' · '.join(p for p in parts if p)})"
 

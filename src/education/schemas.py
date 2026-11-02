@@ -77,6 +77,7 @@ class ProblemSource(StrEnum):
     VARIANT = "variant"  # 기능 ② 오답 변형
     PAST_EXAM = "past_exam"  # 기출 원문 (내부 분석용)
     PAST_EXAM_STYLE = "past_exam_style"  # 기능 ④ 기출 기반 생성
+    TEXTBOOK = "textbook"  # 사용자가 올린 교재 페이지의 예제·연습문제 (올린 사람에게만, 본보기용)
 
 
 class VerificationStatus(StrEnum):

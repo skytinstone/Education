@@ -47,6 +47,9 @@ class Extraction(BaseModel):
     problems: list[ExtractedProblem]
 
 
+TEXTBOOK_NOTE = ("첨부한 자료는 시험지가 아니라 교재 페이지다. 개념 설명 본문은 옮기지 말고, "
+                 "예제·연습문제·확인 문제만 문항으로 옮긴다. 예제 풀이가 있으면 정답만 answer 에 쓴다.\n\n")
+
 EXTRACT_INSTRUCTIONS = r"""당신은 시험지를 디지털 문제 은행으로 옮기는 편집자입니다.
 첨부한 시험지(PDF 또는 사진)의 모든 문항을 빠짐없이 순서대로 옮깁니다.
 - 본문과 보기는 원문 그대로 옮기고, 수식은 LaTeX 로 쓰고 $ 로 감싼다 ($\dfrac{1}{2}$, $\displaystyle\int_0^1 f(x)\,dx$, $\mathrm{H_2O}$)
@@ -78,14 +81,14 @@ def validate_upload(content_type: str, data: bytes) -> str | None:
 
 
 def save_upload(user: m.User, project: m.Project, filename: str, content_type: str, data: bytes,
-                rights_confirmed: bool) -> m.Material:
+                rights_confirmed: bool, kind: str = "past_exam") -> m.Material:
     material_id = uuid.uuid4()
     folder = UPLOAD_DIR / str(user.id)
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / f"{material_id}{ALLOWED_TYPES[content_type]}"
     path.write_bytes(data)
     return m.Material(id=material_id, user_id=user.id, project_id=project.id, filename=Path(filename).name[:255],
-                      content_type=content_type, size_bytes=len(data), storage_path=str(path.relative_to(UPLOAD_DIR)),
+                      content_type=content_type, size_bytes=len(data), storage_path=str(path.relative_to(UPLOAD_DIR)), kind=kind,
                       rights_confirmed=rights_confirmed)
 
 
@@ -109,7 +112,8 @@ def _to_problem(db: Session, ex: ExtractedProblem, material: m.Material, project
         id=f"px_{uuid.uuid4().hex[:12]}", domain=domain, difficulty=min(5, max(1, ex.difficulty)),
         problem_type=ProblemType.MULTIPLE_CHOICE if mc else ProblemType.SHORT_ANSWER,
         stem=ex.stem, choices=ex.choices if mc else None, answer=answer,
-        solution="기출 문제 — 해설은 AI 연결 후 생성돼요", source=ProblemSource.PAST_EXAM,
+        solution="교재 문제 — 원문 확인용" if material.kind == "textbook" else "기출 문제 — 해설은 AI 연결 후 생성돼요",
+        source=ProblemSource.TEXTBOOK if material.kind == "textbook" else ProblemSource.PAST_EXAM,
         verification=VerificationStatus.VERIFIED if servable else VerificationStatus.PENDING,
         owner_user_id=material.user_id, material_id=material.id,
         generation_meta={"number": ex.number, "needs_figure": ex.needs_figure, "has_answer": bool(answer)},
@@ -144,7 +148,8 @@ def process(material_id: uuid.UUID, open_session: Callable[[], AbstractContextMa
         try:
             result = llm.structured(
                 model=s.openai_model_generate, effort="medium", instructions=EXTRACT_INSTRUCTIONS,
-                prompt=f"과목: {db.get(m.Concept, project.subject_id).name}\n개념 목록:\n{concept_list}",
+                prompt=(TEXTBOOK_NOTE if material.kind == "textbook" else "")
+                       + f"과목: {db.get(m.Concept, project.subject_id).name}\n개념 목록:\n{concept_list}",
                 schema=Extraction, max_output_tokens=32000,
                 files=[Attachment(data=data, mime=material.content_type, filename=material.filename)],
             )
@@ -171,8 +176,9 @@ def process(material_id: uuid.UUID, open_session: Callable[[], AbstractContextMa
 
 def _notify_done(db: Session, material: m.Material) -> None:
     ok = material.status == "ready"
+    what = "교재" if material.kind == "textbook" else "기출"
     notifications.notify(
         db, material.user_id, "material",
-        f"기출 분석 완료 · {material.filename[:60]}" if ok else f"기출 분석 실패 · {material.filename[:60]}",
-        body=f"문제 {material.problem_count}개를 읽었어요. 이 시험과 비슷한 결의 문제를 만들 수 있어요" if ok else material.error,
+        f"{what} 분석 완료 · {material.filename[:60]}" if ok else f"{what} 분석 실패 · {material.filename[:60]}",
+        body=f"문제 {material.problem_count}개를 읽었어요. 이 {what}과 비슷한 결의 문제를 만들 수 있어요" if ok else material.error,
         link=f"#/project/{material.project_id}")

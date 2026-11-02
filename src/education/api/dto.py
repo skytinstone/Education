@@ -166,6 +166,7 @@ class CourseOut(Out):
     level: str
     curriculum: str
     textbook: str
+    textbook_isbn: str | None = None
     language: str
     aliases: list[str]
     choice_count: int = 5
@@ -188,6 +189,7 @@ class CourseIn(BaseModel):
     exam: str = Field(default="", max_length=120)
     level: str = Field(default="", max_length=40)
     textbook: str = Field(default="", max_length=200)
+    textbook_isbn: str | None = Field(default=None, max_length=13)
 
 
 class ProblemOut(Out):
@@ -244,6 +246,7 @@ class ProjectIn(BaseModel):
     unit_ids: list[str] = []
     goal: str = Field(default="", max_length=60)
     textbook: str = Field(default="", max_length=120)
+    textbook_isbn: str | None = Field(default=None, max_length=13)
     exam_date: date | None = None
     question_type: QuestionType = "auto"
 
@@ -254,6 +257,7 @@ class ProjectPatch(BaseModel):
     unit_ids: list[str] | None = None
     goal: str | None = Field(default=None, max_length=60)
     textbook: str | None = Field(default=None, max_length=120)
+    textbook_isbn: str | None = Field(default=None, max_length=13)
     exam_date: date | None = None
     question_type: QuestionType | None = None
     pinned: bool | None = None
@@ -266,6 +270,7 @@ class ProjectOut(Out):
     unit_ids: list[str]
     goal: str
     textbook: str
+    textbook_isbn: str | None = None
     exam_date: date | None
     question_type: str
     pinned: bool
@@ -278,6 +283,7 @@ class MaterialOut(Out):
     content_type: str
     size_bytes: int
     status: str  # uploaded | extracting | ready | failed
+    kind: str = "past_exam"  # past_exam | textbook
     error: str | None
     problem_count: int
     created_at: datetime

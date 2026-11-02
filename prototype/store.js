@@ -141,7 +141,7 @@ const Store = (() => {
     bank[p.id] = { ...old, ...p, answer: p.answer ?? old?.answer ?? null, solution: p.solution ?? old?.solution ?? null };
   }
   const toProject = (p) => ({
-    id: p.id, name: p.name, subjectId: p.subject_id, unitIds: p.unit_ids, goal: p.goal, textbook: p.textbook ?? "", examDate: p.exam_date,
+    id: p.id, name: p.name, subjectId: p.subject_id, unitIds: p.unit_ids, goal: p.goal, textbook: p.textbook ?? "", textbookIsbn: p.textbook_isbn ?? p.textbookIsbn ?? null, examDate: p.exam_date,
     questionType: p.question_type, pinned: p.pinned, createdAt: Date.parse(p.created_at),
   });
   function toSession(s) {
@@ -151,7 +151,7 @@ const Store = (() => {
       messages: s.messages.map((msg) => ({ role: msg.role, text: msg.text, problemIds: msg.problems.map((p) => p.id), at: Date.parse(msg.created_at) })),
     };
   }
-  const PROJECT_KEYS = { name: "name", subjectId: "subject_id", unitIds: "unit_ids", goal: "goal", textbook: "textbook", examDate: "exam_date", questionType: "question_type", pinned: "pinned" };
+  const PROJECT_KEYS = { name: "name", subjectId: "subject_id", unitIds: "unit_ids", goal: "goal", textbook: "textbook", textbookIsbn: "textbook_isbn", examDate: "exam_date", questionType: "question_type", pinned: "pinned" };
   const snake = (patch) => Object.fromEntries(Object.entries(patch).filter(([k]) => PROJECT_KEYS[k]).map(([k, v]) => [PROJECT_KEYS[k], v]));
 
   function mergeCourse({ course, concepts }) {
@@ -311,14 +311,14 @@ const Store = (() => {
   // ================= 변경 =================
   const local = MODE === "local";
   const ops = {
-    async createProject({ name, subjectId, unitIds = [], goal = "", textbook = "", examDate = null, questionType = "multiple_choice" }) {
+    async createProject({ name, subjectId, unitIds = [], goal = "", textbook = "", textbookIsbn = null, examDate = null, questionType = "auto" }) {
       if (local) {
-        const p = { id: uid("p"), name, subjectId, unitIds, goal, textbook, examDate, questionType, pinned: false, createdAt: Date.now() };
+        const p = { id: uid("p"), name, subjectId, unitIds, goal, textbook, textbookIsbn, examDate, questionType, pinned: false, createdAt: Date.now() };
         state.projects.push(p);
         commit();
         return p.id;
       }
-      const p = toProject(await api("/projects", { method: "POST", body: snake({ name, subjectId, unitIds, goal, textbook, examDate, questionType }) }));
+      const p = toProject(await api("/projects", { method: "POST", body: snake({ name, subjectId, unitIds, goal, textbook, textbookIsbn, examDate, questionType }) }));
       state.projects.push(p);
       commit();
       return p.id;
@@ -494,6 +494,10 @@ const Store = (() => {
       if (local) return Promise.reject(new Error("서술형 풀이 확인은 로그인한 서버 화면에서 쓸 수 있어요"));
       return api(`/problems/${problemId}/review`, { method: "POST", body });
     },
+    // 책 검색 (제목·ISBN, 선택 기능 — 서지 정보만) — 로컬 모드에선 빈 목록
+    searchBooks(q) {
+      return local ? Promise.resolve([]) : api(`/books/search?q=${encodeURIComponent(q)}`);
+    },
     // 학교 검색 (나이스, 서버가 대신 물음) — 로컬 모드에선 빈 목록
     searchSchools(q) {
       return local ? Promise.resolve([]) : api(`/search/schools?q=${encodeURIComponent(q)}`);
@@ -545,10 +549,12 @@ const Store = (() => {
     // ---------- 기출 업로드 · 기출 기반 생성 (서버 모드 전용) ----------
     listMaterials: (projectId) => api(`/projects/${projectId}/materials`),
     pastProblems: (projectId) => api(`/projects/${projectId}/past-problems`),
-    uploadMaterial(projectId, file, rightsConfirmed) {
+    // kind: past_exam(기출·시험지) | textbook(교재 페이지)
+    uploadMaterial(projectId, file, rightsConfirmed, kind = "past_exam") {
       const form = new FormData();
       form.append("file", file);
       form.append("rights_confirmed", rightsConfirmed ? "true" : "false");
+      form.append("kind", kind);
       return api(`/projects/${projectId}/materials`, { method: "POST", form });
     },
     deleteMaterial: (id) => api(`/materials/${id}`, { method: "DELETE" }),
