@@ -1583,7 +1583,7 @@
         <div class="field"><label for="fb-message">내용</label>
           <textarea id="fb-message" rows="5" maxlength="2000" placeholder="${p ? "어디가 이상한지 알려 주세요 (예: 정답이 3번이 아니라 4번 같아요)" : "불편한 점, 바라는 기능을 자유롭게 적어 주세요"}"></textarea></div>
         <label class="check"><input type="checkbox" id="fb-page" checked /> 지금 보던 화면(${pageName}) 정보 함께 보내기</label>
-        <p class="mini">${p ? "같은 문제에 신고가 쌓이면 확인할 때까지 다른 학생에게 나가지 않아요. " : ""}답변은 ${esc(Store.state.user.email ?? "")} 계정으로 알려 드려요.</p>`,
+        <p class="mini">${p ? "같은 문제에 신고가 쌓이면 확인할 때까지 다른 학생에게 나가지 않아요. " : ""}답변은 로그인하신 계정으로 안내드립니다.</p>`,
       onMount: (f) => {
         f.addEventListener("change", (e) => { if (e.target.name === "fb-kind") chosen = e.target.value; });
         setTimeout(() => $("#fb-message", f)?.focus(), 40);
