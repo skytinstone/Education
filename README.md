@@ -12,7 +12,7 @@ Horcrux Technologies의 시험 준비 AI 학습 에이전트. MVP는 **고등 / 
 
 ## 구조
 ```
-data/concepts/*.yaml        개념 트리 (과목 > 단원 > 개념, 선수 개념 포함)
+data/concepts/*.yaml        공식 템플릿 코스 (수능 9과목: 과목 > 단원 > 개념, 별칭·시험·수준) — 사용자 코스는 DB 에서 AI 가 만든다
 data/problems/sample.yaml   샘플 문제 은행 (직접 만들고 검증한 12문제, 초기 시드)
 
 src/education/
@@ -77,6 +77,7 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 | 대화 | `GET/POST /sessions` · `GET/PATCH/DELETE /sessions/{id}` · `POST /sessions/{id}/messages` |
 | 문제·풀이 | `GET /problems` · `GET /problems/{id}` · `POST /attempts` · `POST /problems/{id}/review` (서술형 풀이 확인, 글 또는 손글씨 PNG) |
 | 오답노트 | `GET /wrong-notes` (과목·이유·안 푼 것만·프로젝트 필터) · `PATCH/DELETE /wrong-notes/{id}` |
+| 코스 | `GET /courses` (공식 템플릿 + 사용자 코스, 모두 공개) · `GET /courses/{id}` (개념 트리) · `POST /courses` (출제 범위 → AI 가 단원·개념 트리) |
 | 라이브러리 | `GET /concepts` · `GET /concepts/{id}` · `GET/POST /concepts/{id}/note` (내 맞춤 개념 정리, 만들 때 카드도 덱에) · `GET /saved` · `PUT/DELETE /saved/{problem_id}` · `GET /cards` · `PATCH /cards/{id}` · `POST /cards/reset` |
 | 통계 | `GET /stats` (오늘 푼 문제, 연속 학습일, 과목별 정답률, 약점) |
 | 기출 | `POST /projects/{id}/materials` (PDF·사진 업로드 → AI 분석) · `GET /projects/{id}/materials` · `GET /projects/{id}/past-problems` · `DELETE /materials/{id}` |

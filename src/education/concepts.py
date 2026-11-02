@@ -19,7 +19,7 @@ from pathlib import Path
 
 import yaml
 
-from education.schemas import Concept, ConceptLevel, Domain
+from education.schemas import Concept, ConceptLevel, CourseMeta, Domain
 
 DEFAULT_DIR = Path(__file__).resolve().parents[2] / "data" / "concepts"
 
@@ -55,12 +55,8 @@ class ConceptTree:
     def children(self, concept_id: str) -> list[Concept]:
         return [c for c in self._by_id.values() if c.parent_id == concept_id]
 
-    def by_level(self, level: ConceptLevel, domain: Domain | None = None) -> list[Concept]:
-        return [
-            c
-            for c in self._by_id.values()
-            if c.level is level and (domain is None or c.domain is domain)
-        ]
+    def by_level(self, level: ConceptLevel, domain: str | None = None) -> list[Concept]:
+        return [c for c in self._by_id.values() if c.level is level and (domain is None or c.domain == domain)]
 
     def path(self, concept_id: str) -> list[Concept]:
         """루트(과목)부터 해당 개념까지의 경로."""
@@ -72,34 +68,39 @@ class ConceptTree:
         return chain[::-1]
 
 
-def _parse_file(path: Path) -> list[Concept]:
+def _parse_file(path: Path) -> tuple[list[CourseMeta], list[Concept]]:
+    """YAML 한 파일 → (공식 템플릿 코스, 개념). 과목 하나가 코스 하나이고, 순서(position)는 YAML 순서."""
     data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    domain = Domain(data["domain"])
+    domain = Domain(data["domain"]).value
+    courses: list[CourseMeta] = []
     out: list[Concept] = []
     for subject in data["subjects"]:
         sid = f"{domain}.{subject['key']}"
-        out.append(Concept(id=sid, name=subject["name"], domain=domain, level=ConceptLevel.SUBJECT))
-        for unit in subject["units"]:
+        courses.append(CourseMeta(
+            id=sid, title=subject["name"], exam=data.get("exam", ""), category=data.get("category", domain), domain=domain,
+            level=data.get("level", ""), curriculum=data.get("curriculum", ""), aliases=subject.get("aliases", [])))
+        out.append(Concept(id=sid, name=subject["name"], domain=domain, level=ConceptLevel.SUBJECT, course_id=sid))
+        for ui, unit in enumerate(subject["units"]):
             uid = f"{sid}.{unit['key']}"
-            out.append(
-                Concept(id=uid, name=unit["name"], domain=domain, level=ConceptLevel.UNIT, parent_id=sid)
-            )
-            for concept in unit.get("concepts", []):
-                out.append(
-                    Concept(
-                        id=f"{uid}.{concept['key']}",
-                        name=concept["name"],
-                        domain=domain,
-                        level=ConceptLevel.CONCEPT,
-                        parent_id=uid,
-                        prerequisites=concept.get("prerequisites", []),
-                    )
-                )
-    return out
+            out.append(Concept(id=uid, name=unit["name"], domain=domain, level=ConceptLevel.UNIT, parent_id=sid,
+                               course_id=sid, position=ui))
+            for ci, concept in enumerate(unit.get("concepts", [])):
+                out.append(Concept(
+                    id=f"{uid}.{concept['key']}", name=concept["name"], domain=domain, level=ConceptLevel.CONCEPT,
+                    parent_id=uid, prerequisites=concept.get("prerequisites", []), course_id=sid, position=ci))
+    return courses, out
+
+
+def load_template_courses(directory: Path = DEFAULT_DIR) -> tuple[list[CourseMeta], ConceptTree]:
+    """공식 템플릿 코스(data/concepts/*.yaml)와 그 개념 트리."""
+    courses: list[CourseMeta] = []
+    concepts: list[Concept] = []
+    for path in sorted(directory.glob("*.yaml")):
+        cs, out = _parse_file(path)
+        courses.extend(cs)
+        concepts.extend(out)
+    return courses, ConceptTree(concepts)
 
 
 def load_concept_tree(directory: Path = DEFAULT_DIR) -> ConceptTree:
-    concepts: list[Concept] = []
-    for path in sorted(directory.glob("*.yaml")):
-        concepts.extend(_parse_file(path))
-    return ConceptTree(concepts)
+    return load_template_courses(directory)[1]

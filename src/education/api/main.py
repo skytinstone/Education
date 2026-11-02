@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from education.api.deps import DB
-from education.api.routers import auth, feedback, learning, notifications, projects, sessions, sync
+from education.api.routers import auth, courses, feedback, learning, notifications, projects, sessions, sync
 from education.config import ROOT, get_settings
 
 app = FastAPI(title="Eureka API", version="0.1.0", description="Horcrux Technologies · Eureka — 시험 준비 AI 학습 에이전트")
@@ -23,7 +23,7 @@ app.add_middleware(
 
 api = APIRouter(prefix="/api")
 for r in (auth.router, projects.router, projects.material_router, sessions.router, learning.router, sync.router,
-          feedback.router, feedback.admin, notifications.router):
+          feedback.router, feedback.admin, notifications.router, courses.router):
     api.include_router(r)
 
 

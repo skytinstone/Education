@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from education.config import get_settings
 from education.db import models as m
+from education.services import generator
 from education.services.llm import LLM, Attachment, LLMError
 
 
@@ -33,7 +34,7 @@ class Review(BaseModel):
     hint: str = Field(description="다음에 무엇을 고치면 되는지 힌트 한두 문장")
 
 
-REVIEW_INSTRUCTIONS = r"""당신은 수능 수학·과학 서술형 채점 경험이 많은 선생님입니다. 학생이 쓴 풀이를 한 단계씩 확인합니다.
+REVIEW_INSTRUCTIONS = r"""당신은 서술형 채점 경험이 많은 선생님입니다. 학생이 쓴 풀이를 한 단계씩 확인합니다.
 - 먼저 학생 풀이를 그대로 transcription 에 옮긴다. 손글씨 사진이면 수식을 정확히 읽어 LaTeX 로 쓴다. 읽을 수 없으면 verdict 를 unreadable 로
 - 풀이를 단계로 나눠 각 단계의 수식 변형·계산·논리가 맞는지 스스로 확인한다. 기준 답과 해설은 참고만 하고, 학생의 다른 풀이 방법도 맞으면 맞다고 한다
 - 처음 틀린 단계 번호를 first_error 에, 무엇이 왜 틀렸는지 그 단계의 comment 에 구체적으로 쓴다 (예: "$(x+1)^2$ 를 전개할 때 $2x$ 항이 빠졌어요")
@@ -70,7 +71,8 @@ def review_solution(db: Session, llm: LLM, user: m.User, problem: m.Problem, *, 
                     attempted: bool) -> Review:
     files = [decode_image(image)] if image else []
     choices = "\n".join(f"{i}) {c}" for i, c in enumerate(problem.choices or [], 1))
-    prompt = (f"[문제]\n{problem.stem}\n{choices}\n\n[기준 답] {problem.answer}\n[검증된 해설]\n{problem.solution}\n\n"
+    course = generator.course_brief(db, problem.concepts[0].course_id) if problem.concepts else ""
+    prompt = (f"{course}\n\n[문제]\n{problem.stem}\n{choices}\n\n[기준 답] {problem.answer}\n[검증된 해설]\n{problem.solution}\n\n"
               f"[학생 풀이]\n{text.strip() if text and text.strip() else '(손글씨 사진으로 제출)'}")
     s = get_settings()
     usage = error = None

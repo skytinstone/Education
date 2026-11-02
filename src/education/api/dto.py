@@ -14,7 +14,7 @@ from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator
 
-from education.schemas import ConceptLevel, Domain, ErrorType
+from education.schemas import ConceptLevel, ErrorType
 
 
 class Out(BaseModel):
@@ -148,16 +148,50 @@ class UserPatch(BaseModel):
 class ConceptOut(Out):
     id: str
     name: str
-    domain: Domain
+    domain: str
     level: ConceptLevel
     parent_id: str | None
     prerequisites: list[str]
+    course_id: str
+    position: int
+
+
+class CourseOut(Out):
+    """코스 — 시험·과목·교재·범위. id 는 개념 트리 뿌리 개념 id 와 같다 (프로젝트의 subject_id)."""
+    id: str
+    title: str
+    exam: str
+    category: str
+    domain: str
+    level: str
+    curriculum: str
+    textbook: str
+    language: str
+    aliases: list[str]
+    source: Literal["template", "user"]
+    units: int = 0
+    concepts: int = 0
+    mine: bool = False
+
+
+class CourseDetail(BaseModel):
+    course: CourseOut
+    concepts: list[ConceptOut]  # 뿌리·단원·개념 (순서대로)
+
+
+class CourseIn(BaseModel):
+    """출제 범위로 새 코스 만들기 — AI 가 단원·개념 트리로 정리한다."""
+    title: str = Field(min_length=2, max_length=120)
+    scope_text: str = Field(min_length=2, max_length=8000)  # 목차·출제 범위 붙여넣기
+    exam: str = Field(default="", max_length=120)
+    level: str = Field(default="", max_length=40)
+    textbook: str = Field(default="", max_length=200)
 
 
 class ProblemOut(Out):
     """정답·해설을 뺀 문제."""
     id: str
-    domain: Domain
+    domain: str
     concept_ids: list[str]
     difficulty: int
     problem_type: str
@@ -422,7 +456,7 @@ class StatsOut(BaseModel):
     daily_goal: int
     streak: int
     open_notes: int
-    accuracy_by_domain: dict[Domain, float | None]
+    accuracy_by_domain: dict[str, float | None]
     weak_concepts: list[WeakConcept]
 
 

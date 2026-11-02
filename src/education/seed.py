@@ -15,7 +15,7 @@ from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from education.concepts import load_concept_tree
+from education.concepts import load_template_courses
 from education.db import models as m
 from education.schemas import ConceptLevel, ErrorType, Problem, ProblemSource, VerificationStatus
 from education.security import hash_password
@@ -26,10 +26,15 @@ LEVEL_ORDER = {ConceptLevel.SUBJECT: 0, ConceptLevel.UNIT: 1, ConceptLevel.CONCE
 
 
 def seed_concepts(db: Session) -> int:
-    concepts = sorted(load_concept_tree(), key=lambda c: (LEVEL_ORDER[c.level], c.id))  # 부모 먼저
+    """공식 템플릿 코스와 개념 (여러 번 실행해도 안전 — 이름·순서·별칭을 YAML 대로 갱신)."""
+    courses, tree = load_template_courses()
+    for c in courses:
+        row = c.model_dump() | {"source": "template"}
+        db.execute(insert(m.Course).values(row).on_conflict_do_update(index_elements=["id"], set_=row))
+    concepts = sorted(tree, key=lambda c: (LEVEL_ORDER[c.level], c.id))  # 부모 먼저
     for c in concepts:
-        row = {"id": c.id, "name": c.name, "domain": c.domain, "level": c.level,
-               "parent_id": c.parent_id, "prerequisites": c.prerequisites}
+        row = {"id": c.id, "name": c.name, "domain": c.domain, "level": c.level, "parent_id": c.parent_id,
+               "prerequisites": c.prerequisites, "course_id": c.course_id, "position": c.position}
         db.execute(insert(m.Concept).values(row).on_conflict_do_update(index_elements=["id"], set_=row))
     return len(concepts)
 

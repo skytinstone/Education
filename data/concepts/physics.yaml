@@ -1,9 +1,13 @@
 # 물리학I 개념 트리 (2015 개정 교육과정 기준) — MVP 시드
 domain: physics
-curriculum: 2015-revised
+curriculum: 2015 개정
+exam: 수능
+level: 고등
+category: 물리
 subjects:
   - key: physics1
     name: 물리학I
+    aliases: [물리학, 물리, 물1]
     units:
       - key: mechanics_energy
         name: 역학과 에너지

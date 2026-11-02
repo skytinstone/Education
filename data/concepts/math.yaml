@@ -1,9 +1,13 @@
 # 수학 개념 트리 (고등 / 수능, 2015 개정 교육과정 기준) — MVP 시드, 계속 세분화 예정
 domain: math
-curriculum: 2015-revised
+curriculum: 2015 개정
+exam: 수능
+level: 고등
+category: 수학
 subjects:
   - key: math1
     name: 수학I
+    aliases: [수학i, 수학1, 수1]
     units:
       - key: exp_log
         name: 지수함수와 로그함수
@@ -44,6 +48,7 @@ subjects:
 
   - key: math2
     name: 수학II
+    aliases: [수학ii, 수학2, 수2]
     units:
       - key: limit_continuity
         name: 함수의 극한과 연속
@@ -83,6 +88,7 @@ subjects:
 
   - key: prob_stat
     name: 확률과 통계
+    aliases: [확률과통계, 확통, 확률, 통계]
     units:
       - key: counting
         name: 경우의 수
@@ -116,6 +122,7 @@ subjects:
 
   - key: calculus
     name: 미적분
+    aliases: [미적분, 미적]
     units:
       - key: seq_limit
         name: 수열의 극한
@@ -153,6 +160,7 @@ subjects:
 
   - key: geometry
     name: 기하
+    aliases: [기하]
     units:
       - key: conic
         name: 이차곡선

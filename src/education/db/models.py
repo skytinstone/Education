@@ -30,7 +30,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from education.schemas import ConceptLevel, Domain, ErrorType, ProblemSource, ProblemType, VerificationStatus
+from education.schemas import ConceptLevel, ErrorType, ProblemSource, ProblemType, VerificationStatus
 
 
 class Base(DeclarativeBase):
@@ -99,16 +99,41 @@ class OAuthAccount(Base):
 
 
 # ---------- 개념 트리 (data/concepts/*.yaml 에서 적재) ----------
+class Course(Base):
+    """코스 — 시험·과목·교재·범위를 묶은 학습 단위. id 는 개념 트리 뿌리(level=subject) 개념의 id 와 같다.
+    공식 템플릿(source=template, data/concepts 시드)과 사용자가 출제 범위로 만든 코스(source=user)가 있고 모두 공개."""
+    __tablename__ = "courses"
+
+    id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    title: Mapped[str] = mapped_column(String(120))
+    exam: Mapped[str] = mapped_column(String(120), server_default="")  # 수능, 편입, CPA 1차 …
+    category: Mapped[str] = mapped_column(String(40))  # 분야 표시 이름 (수학, 회계 …)
+    domain: Mapped[str] = mapped_column(String(32))  # 분야 키 (math … / general) — 색·분류용
+    level: Mapped[str] = mapped_column(String(40), server_default="")  # 고등, 대학, 자격증 …
+    curriculum: Mapped[str] = mapped_column(String(60), server_default="")
+    textbook: Mapped[str] = mapped_column(String(200), server_default="")
+    language: Mapped[str] = mapped_column(String(8), server_default="ko")
+    scope_text: Mapped[str | None] = mapped_column(Text)  # 사용자가 붙여넣은 출제 범위 원문
+    aliases: Mapped[list[str]] = mapped_column(ARRAY(String(60)), server_default="{}")  # 요청 문장에서 알아들을 이름
+    source: Mapped[str] = mapped_column(String(12), server_default="user")
+    owner_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (CheckConstraint("source IN ('template', 'user')", name="course_source"),)
+
+
 class Concept(Base):
     __tablename__ = "concepts"
 
     id: Mapped[str] = mapped_column(String(120), primary_key=True)  # 예: math.math1.exp_log.log_properties
     name: Mapped[str] = mapped_column(String(120))
-    domain: Mapped[Domain] = mapped_column(str_enum(Domain, "domain"))
+    domain: Mapped[str] = mapped_column(String(32))  # 코스의 분야 키
     level: Mapped[ConceptLevel] = mapped_column(str_enum(ConceptLevel, "concept_level"))
     parent_id: Mapped[str | None] = mapped_column(ForeignKey("concepts.id", ondelete="CASCADE"), index=True)
     prerequisites: Mapped[list[str]] = mapped_column(ARRAY(String(120)), server_default="{}")
     curriculum: Mapped[str] = mapped_column(String(32), server_default="2015-revised")
+    course_id: Mapped[str] = mapped_column(ForeignKey("courses.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(server_default="0")  # 형제 사이 순서
 
 
 # ---------- 문제 은행 ----------
@@ -116,7 +141,7 @@ class Problem(Base):
     __tablename__ = "problems"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True, server_default=text("gen_random_uuid()::text"))
-    domain: Mapped[Domain] = mapped_column(str_enum(Domain, "domain"), index=True)
+    domain: Mapped[str] = mapped_column(String(32), index=True)
     difficulty: Mapped[int] = mapped_column(SmallInteger)
     problem_type: Mapped[ProblemType] = mapped_column(str_enum(ProblemType, "problem_type"))
     stem: Mapped[str] = mapped_column(Text)

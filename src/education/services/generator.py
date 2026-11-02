@@ -12,6 +12,7 @@ from __future__ import annotations
 import random
 import re
 import uuid
+from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from typing import Literal
@@ -20,18 +21,20 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from education.concepts import load_template_courses
 from education.config import get_settings
 from education.db import models as m
 from education.schemas import ProblemSource, ProblemType, VerificationStatus
 from education.services import learning
 from education.services.llm import LLM, LLMError, Usage
 
+# 어느 시험에나 쓰는 난이도 (수능이면 괄호 안 배점에 맞춘다)
 DIFFICULTY_GUIDE = {
-    1: "2점 수준 — 개념·공식을 바로 적용하는 기본 문제",
-    2: "쉬운 3점 수준 — 한두 단계 계산",
-    3: "3점 수준 — 개념 두 개를 연결하거나 여러 단계 계산",
-    4: "4점 수준 — 조건 해석과 여러 개념의 결합, 흔한 실수를 노리는 함정 포함",
-    5: "4점 고난도(킬러) — 조건을 깊게 해석해야 하고 풀이 방향을 스스로 찾아야 함",
+    1: "기본 — 개념·공식을 바로 적용 (수능 2점)",
+    2: "쉬움 — 한두 단계 적용 (수능 쉬운 3점)",
+    3: "보통 — 개념 두 개를 연결하거나 여러 단계 (수능 3점)",
+    4: "어려움 — 조건 해석과 여러 개념의 결합, 흔한 실수를 노리는 함정 (수능 4점)",
+    5: "최고난도 — 조건을 깊게 해석하고 풀이 방향을 스스로 찾아야 함 (수능 킬러)",
 }
 
 
@@ -55,22 +58,23 @@ class Verdict(BaseModel):
     answer: Literal["1", "2", "3", "4", "5", "none"] = Field(description="스스로 풀어서 고른 보기 번호, 정답이 없으면 none")
     work: str = Field(description="풀이 과정 요약")
     well_posed: bool = Field(description="정답이 정확히 하나이고 조건에 모순·누락이 없으면 true")
-    issues: list[str] = Field(description="발견한 문제점 (복수 정답, 조건 누락, 계산 오류, 교육과정 범위 밖, 난이도 불일치 등)")
+    issues: list[str] = Field(description="발견한 문제점 (복수 정답, 조건 누락, 계산 오류, 코스 범위·수준 밖, 난이도 불일치 등)")
 
 
 class ShortVerdict(BaseModel):
     answer: int | None = Field(description="스스로 풀어서 구한 답 (정수), 구할 수 없으면 null")
     work: str = Field(description="풀이 과정 요약")
     well_posed: bool = Field(description="답이 정확히 하나로 정해지고 조건에 모순·누락이 없으면 true")
-    issues: list[str] = Field(description="발견한 문제점 (답이 여러 개, 조건 누락, 계산 오류, 교육과정 범위 밖 등)")
+    issues: list[str] = Field(description="발견한 문제점 (답이 여러 개, 조건 누락, 계산 오류, 코스 범위·수준 밖 등)")
 
 
-GENERATOR_INSTRUCTIONS = r"""당신은 한국 대학수학능력시험 출제 경험이 많은 출제위원입니다.
-고등학교 2015 개정 교육과정 범위 안에서, 요청한 개념·난이도·문제 형태에 맞는 문제를 하나 만듭니다.
+GENERATOR_INSTRUCTIONS = r"""당신은 여러 시험(수능·대학·자격증·공무원·어학 등)의 출제 경험이 많은 출제위원입니다.
+주어진 코스(시험·과목·수준·교육과정·교재)의 범위와 수준 안에서, 요청한 개념·난이도·문제 형태에 맞는 문제를 하나 만듭니다.
 
 반드시 지킬 것
 - 5지선다: 정답은 정확히 하나. 나머지 4개 보기는 그럴듯하지만 분명히 틀려야 하고, 흔한 실수로 나오는 값을 오답으로 넣는다
-- 단답형: 수능 단답형처럼 답이 0 이상 999 이하의 정수 하나로 정해지게 만든다
+- 단답형: 답이 0 이상 999 이하의 정수 하나로 정해지게 만든다 (자동 채점용)
+- 그 시험이 실제로 묻는 방식과 용어를 쓴다. 코스 언어가 영어면 문제와 보기는 영어로, 해설은 한국어로 쓴다
 - 참고할 기출 문제가 주어지면 형식·어투·소재의 결을 따르되, 문장과 수치는 그대로 베끼지 말고 새로 만든다
 - 모든 수치는 직접 끝까지 계산해서 검산한다. 근삿값이 아닌 정확한 값을 쓴다
 - 문제에 필요한 조건은 모두 문제 안에 쓴다 (그림 없이 글만으로 풀 수 있게)
@@ -78,9 +82,9 @@ GENERATOR_INSTRUCTIONS = r"""당신은 한국 대학수학능력시험 출제 �
 - 해설은 학생이 혼자 따라갈 수 있게 단계별로, 한국어로 쓴다. 이모지는 쓰지 않는다
 - 이미 있는 문제와 소재·수치가 겹치지 않게 새로 만든다"""
 
-VERIFIER_INSTRUCTIONS = """당신은 수능 문제 검토위원입니다. 출제자가 만든 문제를 정답을 모르는 상태에서 직접 풉니다.
+VERIFIER_INSTRUCTIONS = """당신은 시험 문제 검토위원입니다. 출제자가 만든 문제를 정답을 모르는 상태에서 직접 풉니다.
 - 처음부터 끝까지 스스로 계산해서 답을 구한다. 5지선다는 보기 번호를 고르고(정답이 없으면 none), 단답형은 정수로 답한다
-- 정답이 둘 이상이거나, 조건이 모순되거나 빠졌거나, 문제 문장이 모호하거나, 고등학교 교육과정을 벗어나면 well_posed 를 false 로 하고 issues 에 구체적으로 쓴다
+- 정답이 둘 이상이거나, 조건이 모순되거나 빠졌거나, 문제 문장이 모호하거나, 주어진 코스의 범위·수준을 벗어나면 well_posed 를 false 로 하고 issues 에 구체적으로 쓴다
 - 사소한 표현 개선 의견은 issues 에 넣지 않는다 (정답 판정에 영향을 주는 것만)"""
 
 
@@ -92,13 +96,18 @@ class Plan:
     count: int
 
 
-# 요청 문장에 나오는 과목 이름 (화면 prototype/app.js 의 SUBJECT_ALIASES 와 같음). II 를 I 보다 먼저 본다
-SUBJECT_ALIASES: list[tuple[str, tuple[str, ...]]] = [
-    ("math.math2", ("수학ii", "수학2", "수2")), ("math.math1", ("수학i", "수학1", "수1")),
-    ("math.prob_stat", ("확률과통계", "확통", "확률", "통계")), ("math.calculus", ("미적분", "미적")), ("math.geometry", ("기하",)),
-    ("physics.physics1", ("물리학", "물리", "물1")), ("chemistry.chemistry1", ("화학", "화1")),
-    ("biology.biology1", ("생명과학", "생명", "생물", "생1", "생과")), ("earth_science.earth1", ("지구과학", "지구", "지학", "지1")),
-]
+@lru_cache
+def _template_aliases() -> list[tuple[str, tuple[str, ...]]]:
+    """DB 없이 쓸 때 (공식 템플릿 YAML 의 별칭)."""
+    return [(c.id, tuple(c.aliases)) for c in load_template_courses()[0]]
+
+
+def course_aliases(db: Session) -> list[tuple[str, tuple[str, ...]]]:
+    """모든 코스의 (id, 별칭들) — 코스 이름도 별칭으로 친다."""
+    return [(cid, tuple(dict.fromkeys([*aliases, _norm(title)]))) for cid, aliases, title in
+            db.execute(select(m.Course.id, m.Course.aliases, m.Course.title))]
+
+
 
 
 def _norm(text: str) -> str:
@@ -109,7 +118,8 @@ def _words(name: str) -> list[str]:
     return [w for w in re.split(r"[\s·,()과와의]+", name) if len(w) >= 2]
 
 
-def detect_subject(text: str) -> str | None:
+def detect_subject(text: str, db: Session | None = None, prefer: list[str] | None = None) -> str | None:
+    """요청 문장에 나오는 코스. 가장 길게 맞는 별칭이 이기고 (수학II > 수학I), 같으면 prefer(내 프로젝트 코스) 먼저."""
     t = _norm(text)
     # 숫자로 끝나는 별칭은 뒤에 숫자·등급·점·문제가 붙으면 아님 ("수학 10문제", "수학 2등급" 은 수학I·II 가 아니다)
     # (띄어쓰기를 지우면 "물1 3문제" 가 "물13" 이 되므로 이 경우는 띄어쓰기를 남긴 글에서 본다)
@@ -119,7 +129,9 @@ def detect_subject(text: str) -> str | None:
         if not k[-1].isdigit():
             return k in t
         return bool(re.search(r"\s*".join(map(re.escape, k)) + r"(?!\d|등급|점|문제|문항|개)", spaced))
-    return next((sid for sid, keys in SUBJECT_ALIASES if any(found(k) for k in keys)), None)
+    hits = [(len(k), sid in (prefer or []), sid) for sid, keys in (course_aliases(db) if db else _template_aliases())
+            for k in keys if k and found(k)]
+    return max(hits)[2] if hits else None
 
 
 def _in_scope(concept_id: str, scope_ids: list[str]) -> bool:
@@ -128,7 +140,7 @@ def _in_scope(concept_id: str, scope_ids: list[str]) -> bool:
 
 def resolve_scope(db: Session, text: str, scope_ids: list[str] | None = None) -> list[str] | None:
     """요청이 가리키는 개념 트리 범위 — 문장의 과목 이름이 프로젝트 범위보다 우선하고, 단원 이름이 있으면 그 단원으로 좁힌다."""
-    subject = detect_subject(text)
+    subject = detect_subject(text, db, prefer=scope_ids)
     base = [subject] if subject else scope_ids
     units = db.scalars(select(m.Concept).where(m.Concept.level == "unit")).all()
     named = [u.id for u in units if (not base or _in_scope(u.id, base)) and any(w in text for w in _words(u.name))]
@@ -140,10 +152,13 @@ def plan_request(db: Session, text: str, *, user: m.User | None = None, domain=N
     """요청 문장에서 개념·난이도·문항 수를 읽는다.
     개념 이름의 낱말이 가장 많이 겹치는 개념을 고르고, 개념 이름은 없지만 과목·단원(또는 프로젝트 범위)이 정해지면
     그 안에서 내가 가장 약한 개념(기록이 없으면 아무 개념)을 고른다."""
-    subject = detect_subject(text)
+    subject = detect_subject(text, db, prefer=scope_ids)
     q = select(m.Concept).where(m.Concept.level == "concept")
     if domain and not subject:
         q = q.where(m.Concept.domain == domain)
+    if not subject and not scope_ids:  # 범위가 없으면 공식 코스와 내 코스에서만 개념 이름을 찾는다
+        mine = select(m.Course.id).where((m.Course.source == "template") | (m.Course.owner_user_id == (user.id if user else None)))
+        q = q.where(m.Concept.course_id.in_(mine))
     all_concepts = list(db.scalars(q))
     base = [subject] if subject else scope_ids
     concepts = [c for c in all_concepts if _in_scope(c.id, base)] if base else all_concepts
@@ -218,7 +233,18 @@ def _concept_brief(db: Session, concept_id: str) -> str:
         path.insert(0, node.name)
         node = db.get(m.Concept, node.parent_id) if node.parent_id else None
     pre = [db.get(m.Concept, p).name for p in target.prerequisites if db.get(m.Concept, p)]
-    return f"개념: {' > '.join(path)}" + (f"\n선수 개념: {', '.join(pre)}" if pre else "")
+    return course_brief(db, target.course_id) + f"\n개념: {' > '.join(path)}" + (f"\n선수 개념: {', '.join(pre)}" if pre else "")
+
+
+def course_brief(db: Session, course_id: str) -> str:
+    """AI 에게 줄 코스 설명 — 시험·과목·수준·교육과정·교재·언어."""
+    c = db.get(m.Course, course_id)
+    if c is None:
+        return ""
+    parts = [f"시험 {c.exam}" if c.exam else "", f"분야 {c.category}", f"수준 {c.level}" if c.level else "",
+             f"교육과정 {c.curriculum}" if c.curriculum else "", f"교재 {c.textbook}" if c.textbook else "",
+             "언어 영어" if c.language == "en" else ""]
+    return f"코스: {c.title} ({' · '.join(p for p in parts if p)})"
 
 
 def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multiple_choice") -> Candidate:

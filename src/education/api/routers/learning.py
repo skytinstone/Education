@@ -12,7 +12,7 @@ from education.api.dto import (
     ProblemOut, ProblemView, SolutionReviewIn, StatsOut, WrongNoteOut, WrongNotePatch,
 )
 from education.db import models as m
-from education.schemas import Domain, ErrorType
+from education.schemas import ErrorType
 from education.services import learning, notes, review
 from education.services.llm import get_llm
 
@@ -22,7 +22,8 @@ router = APIRouter(tags=["학습"])
 # ---------- 개념 ----------
 @router.get("/concepts", tags=["개념"])
 def list_concepts(db: DB) -> list[ConceptOut]:
-    return [ConceptOut.model_validate(c) for c in db.scalars(select(m.Concept).order_by(m.Concept.id))]
+    q = select(m.Concept).order_by(m.Concept.course_id, m.Concept.level != "subject", m.Concept.position, m.Concept.id)
+    return [ConceptOut.model_validate(c) for c in db.scalars(q)]
 
 
 @router.get("/concepts/{concept_id}", tags=["개념"])
@@ -71,7 +72,7 @@ def create_note(concept_id: str, user: CurrentUser, db: DB) -> ConceptNoteCreate
 
 # ---------- 문제 · 풀이 ----------
 @router.get("/problems", tags=["문제"])
-def list_problems(db: DB, user: CurrentUser, domain: Domain | None = None, concept_id: str | None = None) -> list[ProblemOut]:
+def list_problems(db: DB, user: CurrentUser, domain: str | None = None, concept_id: str | None = None) -> list[ProblemOut]:
     q = select(m.Problem).where(learning.visible_to(user)).order_by(m.Problem.id)
     if domain:
         q = q.where(m.Problem.domain == domain)
@@ -115,7 +116,7 @@ def submit_attempt(body: AttemptIn, user: CurrentUser, db: DB) -> AttemptResult:
 
 # ---------- 오답노트 ----------
 @router.get("/wrong-notes", tags=["오답노트"])
-def list_wrong_notes(user: CurrentUser, db: DB, domain: Domain | None = None, error_type: ErrorType | None = None,
+def list_wrong_notes(user: CurrentUser, db: DB, domain: str | None = None, error_type: ErrorType | None = None,
                      open_only: bool = True, project_id: UUID | None = None) -> list[WrongNoteOut]:
     q = (select(m.WrongNote, m.Problem).join(m.Problem, m.Problem.id == m.WrongNote.problem_id)
          .where(m.WrongNote.user_id == user.id)
@@ -200,6 +201,6 @@ def stats(user: CurrentUser, db: DB) -> StatsOut:
     return StatsOut(
         today_count=learning.today_count(db, user), daily_goal=user.daily_goal, streak=learning.streak(db, user),
         open_notes=db.scalar(select(func.count()).where(m.WrongNote.user_id == user.id, m.WrongNote.resolved_at.is_(None))),
-        accuracy_by_domain={d: learning.accuracy(db, user, domain=d) for d in Domain},
+        accuracy_by_domain={d: learning.accuracy(db, user, domain=d) for d in learning.my_domains(db, user)},
         weak_concepts=learning.concept_stats(db, user, min_attempts=3)[:5],
     )

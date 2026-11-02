@@ -39,7 +39,7 @@ class ExtractedProblem(BaseModel):
     choices: list[str] = Field(description="보기 내용 (번호 없이). 단답형·서술형이면 빈 목록")
     answer: str | None = Field(description="시험지·정답표에 정답이 있으면 — 객관식은 보기 번호 1~5, 단답형은 값. 없으면 null (추측 금지)")
     concept_id: str = Field(description="주어진 개념 목록 중 가장 알맞은 id, 없으면 빈 문자열")
-    difficulty: int = Field(description="수능 기준 난이도 1(2점 기본)~5(4점 킬러) 추정")
+    difficulty: int = Field(description="난이도 1(기본)~5(최고난도) 추정 — 수능이면 2점=1, 4점 킬러=5")
     needs_figure: bool = Field(description="그림·그래프·표가 있어야 풀 수 있으면 true")
 
 

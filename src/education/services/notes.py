@@ -57,15 +57,16 @@ class NoteDraft(NoteContent):
 
 
 class NoteVerdict(BaseModel):
-    accurate: bool = Field(description="정의·공식·설명에 틀린 내용이 없고 고등학교 교육과정 범위 안이면 true")
+    accurate: bool = Field(description="정의·공식·설명에 틀린 내용이 없고 코스의 범위·수준 안이면 true")
     example_answer: str = Field(description="예제를 스스로 풀어서 구한 최종 답")
     example_correct: bool = Field(description="스스로 구한 답이 출제자 풀이의 최종 답과 같으면 true")
-    issues: list[str] = Field(description="발견한 오류 (틀린 공식, 잘못된 설명, 교육과정 밖, 예제 오류 등)")
+    issues: list[str] = Field(description="발견한 오류 (틀린 공식, 잘못된 설명, 코스 범위 밖, 예제 오류 등)")
     card_issues: list[str] = Field(description="뒷면 답이 틀렸거나 앞면 질문과 맞지 않는 카드 (앞면을 함께 적기)")
 
 
-NOTE_INSTRUCTIONS = r"""당신은 한국 수능 대비 학원의 베테랑 강사입니다. 학생 한 명을 위한 개념 정리 노트와 암기 카드를 만듭니다.
-- 고등학교 2015 개정 교육과정 범위 안에서 정확하게 쓴다. 교과서에 없는 용어는 쓰지 않는다
+NOTE_INSTRUCTIONS = r"""당신은 시험 대비 학원의 베테랑 강사입니다. 학생 한 명을 위한 개념 정리 노트와 암기 카드를 만듭니다.
+- 주어진 코스(시험·수준·교육과정·교재)의 범위 안에서 정확하게 쓴다. 그 수준에서 쓰지 않는 용어는 피한다
+- 코스 언어가 영어면 핵심 용어는 영어를 함께 적는다 (예: 부분적분 (Integration by Parts))
 - 학습자 기록이 주어지면 그 학생이 틀린 유형·약한 부분을 더 자세히 설명하고, 자주 틀리는 점에 그 학생의 실수를 먼저 적는다
 - 학습자 기록이 없으면 처음 배우는 학생 기준으로 쓴다
 - 예제는 이 개념을 바로 쓰는 짧은 문제 하나, 풀이는 끝까지 계산해서 검산한다
@@ -73,8 +74,8 @@ NOTE_INSTRUCTIONS = r"""당신은 한국 수능 대비 학원의 베테랑 강�
 - 수식은 LaTeX 로 쓰고 $ 로 감싼다 (예: $\log_a b = \dfrac{\log_c b}{\log_c a}$). 화학식은 $\mathrm{H_2O}$ 처럼 쓴다
 - 한국어로, 학생에게 직접 말하듯 쉽게 쓴다. 이모지는 쓰지 않는다"""
 
-NOTE_VERIFIER_INSTRUCTIONS = """당신은 수능 교재 감수위원입니다. 강사가 만든 개념 정리와 암기 카드를 검토합니다.
-- 모든 정의·공식·법칙을 스스로 확인한다. 틀리거나 오해를 부르는 설명, 고등학교 교육과정 밖의 내용이 있으면 accurate 를 false 로 하고 issues 에 구체적으로 쓴다
+NOTE_VERIFIER_INSTRUCTIONS = """당신은 교재 감수위원입니다. 강사가 만든 개념 정리와 암기 카드를 검토합니다.
+- 모든 정의·공식·법칙을 스스로 확인한다. 틀리거나 오해를 부르는 설명, 코스의 범위·수준 밖의 내용이 있으면 accurate 를 false 로 하고 issues 에 구체적으로 쓴다
 - 예제는 풀이를 보지 말고 문제만 보고 처음부터 스스로 풀어 example_answer 에 쓴 뒤, 출제자의 최종 답과 비교한다
 - 암기 카드마다 앞면 질문에 대한 뒷면 답이 정확한지 확인하고, 틀린 카드는 card_issues 에 쓴다
 - 사소한 표현 개선 의견은 쓰지 않는다 (내용이 틀린 것만)"""

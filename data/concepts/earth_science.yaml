@@ -1,9 +1,13 @@
 # 지구과학I 개념 트리 (2015 개정 교육과정 기준) — MVP 시드
 domain: earth_science
-curriculum: 2015-revised
+curriculum: 2015 개정
+exam: 수능
+level: 고등
+category: 지구과학
 subjects:
   - key: earth1
     name: 지구과학I
+    aliases: [지구과학, 지구, 지학, 지1]
     units:
       - key: solid_earth
         name: 고체 지구

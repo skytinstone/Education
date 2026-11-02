@@ -15,7 +15,7 @@ from education.api.dto import UserOut
 from education.config import get_settings
 from education.db import models as m
 from education.schemas import VerificationStatus
-from education.services import learning, notifications
+from education.services import courses, learning, notifications
 
 router = APIRouter(tags=["동기화"])
 
@@ -60,6 +60,11 @@ def sync(user: CurrentUser, db: DB) -> dict:
         "cards": [{"id": str(c.id), "conceptId": c.concept_id, "front": c.front, "back": c.back, "known": c.known}
                   for c in db.scalars(select(m.Card).where(m.Card.user_id == user.id).order_by(m.Card.created_at))],
         "savedProblemIds": list(db.scalars(select(m.SavedProblem.problem_id).where(m.SavedProblem.user_id == user.id))),
+        "courses": [c.model_dump() for c in courses.list_courses(db, user)],
+        "concepts": [{
+            "id": c.id, "name": c.name, "domain": c.domain, "level": c.level, "parent_id": c.parent_id,
+            "prerequisites": c.prerequisites, "course_id": c.course_id, "position": c.position,
+        } for c in courses.my_concepts(db, user)],
         "problems": [{
             "id": p.id, "domain": p.domain, "conceptIds": p.concept_ids, "difficulty": p.difficulty,
             "problemType": p.problem_type, "stem": p.stem, "choices": p.choices, "source": p.source,

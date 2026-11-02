@@ -1,9 +1,13 @@
 # 화학I 개념 트리 (2015 개정 교육과정 기준) — MVP 시드
 domain: chemistry
-curriculum: 2015-revised
+curriculum: 2015 개정
+exam: 수능
+level: 고등
+category: 화학
 subjects:
   - key: chemistry1
     name: 화학I
+    aliases: [화학, 화1]
     units:
       - key: first_steps
         name: 화학의 첫걸음

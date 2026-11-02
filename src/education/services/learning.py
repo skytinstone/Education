@@ -111,6 +111,14 @@ def concept_stats(db: Session, user: m.User, *, project_id: UUID | None = None, 
     return sorted(rows, key=lambda w: (w.accuracy, -w.attempts))
 
 
+def my_domains(db: Session, user: m.User) -> list[str]:
+    """내가 공부하는 분야 — 풀어 본 문제와 프로젝트 코스의 분야. 하나도 없으면 공식 코스 분야."""
+    tried = select(m.Problem.domain).join(m.Attempt, m.Attempt.problem_id == m.Problem.id).where(m.Attempt.user_id == user.id)
+    projects = select(m.Course.domain).join(m.Project, m.Project.subject_id == m.Course.id).where(m.Project.user_id == user.id)
+    found = set(db.scalars(tried.distinct())) | set(db.scalars(projects.distinct()))
+    return sorted(found) if found else sorted(set(db.scalars(select(m.Course.domain).where(m.Course.source == "template"))))
+
+
 def accuracy(db: Session, user: m.User, *, project_id: UUID | None = None, domain: str | None = None) -> float | None:
     q = select(func.avg(cast(m.Attempt.correct, Integer))).where(m.Attempt.user_id == user.id)
     if project_id:

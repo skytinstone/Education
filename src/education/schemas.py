@@ -35,10 +35,26 @@ class ConceptLevel(StrEnum):
 class Concept(BaseModel):
     id: str  # 점 표기 경로, 예: "math.math1.exp_log.log_properties"
     name: str
-    domain: Domain
+    domain: str  # 분야 키 (공식 코스는 Domain 값, 사용자 코스는 general 등 자유)
     level: ConceptLevel
     parent_id: str | None = None
     prerequisites: list[str] = Field(default_factory=list)  # 선수 개념 id
+    course_id: str | None = None  # 이 개념이 속한 코스 (뿌리 개념 id 와 같음)
+    position: int = 0  # 형제 사이 순서 (교재·교육과정 순서)
+
+
+class CourseMeta(BaseModel):
+    """코스 — 시험·과목·교재·범위를 묶은 학습 단위. id 는 뿌리(level=subject) 개념 id 와 같다."""
+    id: str
+    title: str
+    exam: str = ""
+    category: str  # 분야 표시 이름 (수학, 회계 …)
+    domain: str  # 분야 키 (색·분류용)
+    level: str = ""  # 고등, 대학, 자격증 …
+    curriculum: str = ""
+    textbook: str = ""
+    language: str = "ko"
+    aliases: list[str] = Field(default_factory=list)
 
 
 class ProblemType(StrEnum):
@@ -62,7 +78,7 @@ class VerificationStatus(StrEnum):
 
 class Problem(BaseModel):
     id: str
-    domain: Domain
+    domain: str
     concept_ids: list[str] = Field(min_length=1)
     difficulty: int = Field(ge=1, le=5)  # 1 쉬움 ~ 5 킬러
     problem_type: ProblemType
