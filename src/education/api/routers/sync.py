@@ -30,6 +30,10 @@ def sync(user: CurrentUser, db: DB) -> dict:
     tried = {a.problem_id for a in attempts}
     problems = db.scalars(select(m.Problem).where(learning.visible_to(user), m.Problem.verification != VerificationStatus.REJECTED))
     sessions = db.scalars(select(m.ChatSession).where(m.ChatSession.user_id == user.id))
+    concepts = courses.my_concepts(db, user)
+    loaded = {c.id for c in concepts}
+    # 화면이 받은 코스의 문제만 (다른 코스는 개념이 없어 표시할 수 없다). 풀어 본 문제는 언제나
+    problems = [p for p in problems if p.id in tried or any(c in loaded for c in p.concept_ids)]
     return {
         "user": {
             "id": str(user.id), "name": user.name, "email": user.email, "dailyGoal": user.daily_goal,
@@ -64,7 +68,7 @@ def sync(user: CurrentUser, db: DB) -> dict:
         "concepts": [{
             "id": c.id, "name": c.name, "domain": c.domain, "level": c.level, "parent_id": c.parent_id,
             "prerequisites": c.prerequisites, "course_id": c.course_id, "position": c.position,
-        } for c in courses.my_concepts(db, user)],
+        } for c in concepts],
         "problems": [{
             "id": p.id, "domain": p.domain, "conceptIds": p.concept_ids, "difficulty": p.difficulty,
             "problemType": p.problem_type, "stem": p.stem, "choices": p.choices, "source": p.source,

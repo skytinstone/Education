@@ -21,17 +21,44 @@
     .replace(/[{}\\]/g, "").replace(/\s+/g, " ").trim());
   const DAY = 864e5;
 
-  const DOMAINS = ["math", "physics", "chemistry", "biology", "earth_science"];
-  const COLOR = { math: "var(--math)", physics: "var(--physics)", chemistry: "var(--chemistry)", biology: "var(--biology)", earth_science: "var(--earth)" };
-  const DOMAIN_NAME = { math: "수학", physics: "물리", chemistry: "화학", biology: "생명과학", earth_science: "지구과학" };
+  // 분야(domain) 색·이름 — 공식 5개 + 사용자 코스 분야 (없는 키는 회색, 이름은 코스의 분야 이름)
+  const TEMPLATE_DOMAINS = ["math", "physics", "chemistry", "biology", "earth_science"];
+  const EXTRA_COLOR = { english: "#0ea5e9", korean: "#e11d48", social: "#d97706", history: "#a16207", economics: "#059669",
+    accounting: "#4f46e5", law: "#475569", computer: "#0d9488", medicine: "#dc2626", language: "#7c3aed", general: "#64748b" };
+  const COLOR = new Proxy({ math: "var(--math)", physics: "var(--physics)", chemistry: "var(--chemistry)", biology: "var(--biology)", earth_science: "var(--earth)" },
+    { get: (t, k) => t[k] ?? EXTRA_COLOR[k] ?? EXTRA_COLOR.general });
+  const DOMAIN_NAME = new Proxy({ math: "수학", physics: "물리", chemistry: "화학", biology: "생명과학", earth_science: "지구과학" },
+    { get: (t, k) => t[k] ?? COURSES.find((c) => c.domain === k)?.category ?? "기타" });
 
-  const conceptMap = Object.fromEntries(CONCEPTS.map((c) => [c.id, c]));
+  // 코스와 개념 트리 — 서버 모드는 /api/sync 로 받은 것 (공식 코스 + 내 코스), 로컬 모드는 concepts.js
+  let CONCEPTS = [], COURSES = [], SUBJECTS = [], DOMAINS = [...TEMPLATE_DOMAINS];
+  let conceptMap = {}, kidsMap = {}, courseMap = {};
+  const domainOrder = (d) => (TEMPLATE_DOMAINS.includes(d) ? TEMPLATE_DOMAINS.indexOf(d) : 99);
+  function loadConcepts() {
+    CONCEPTS = Store.state?.concepts ?? window.CONCEPTS ?? [];
+    COURSES = Store.state?.courses ?? window.COURSES ?? [];
+    conceptMap = Object.fromEntries(CONCEPTS.map((c) => [c.id, c]));
+    courseMap = Object.fromEntries(COURSES.map((c) => [c.id, c]));
+    kidsMap = {};
+    for (const c of CONCEPTS) if (c.parent_id) (kidsMap[c.parent_id] ??= []).push(c);
+    for (const list of Object.values(kidsMap)) list.sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+    const official = (c) => (courseMap[c.id]?.source === "user" ? 1 : 0);
+    // 공식 코스는 교육과정 순서 (concepts.js 의 YAML 순서), 사용자 코스는 그 뒤
+    const yamlOrder = Object.fromEntries((window.COURSES ?? []).map((c, i) => [c.id, i]));
+    SUBJECTS = CONCEPTS.filter((c) => c.level === "subject")
+      .sort((a, b) => domainOrder(a.domain) - domainOrder(b.domain) || official(a) - official(b) || (yamlOrder[a.id] ?? 999) - (yamlOrder[b.id] ?? 999));
+    DOMAINS = [...new Set(SUBJECTS.map((s) => s.domain))].sort((a, b) => domainOrder(a) - domainOrder(b));
+  }
   const concept = (id) => conceptMap[id];
-  const childrenOf = (id) => CONCEPTS.filter((c) => c.parent_id === id);
+  const childrenOf = (id) => kidsMap[id] ?? [];
   const pathOf = (id) => { const out = []; for (let c = concept(id); c; c = concept(c.parent_id)) out.unshift(c); return out; };
   const subjectOf = (id) => pathOf(id)[0];
-  const SUBJECTS = CONCEPTS.filter((c) => c.level === "subject").sort((a, b) => DOMAINS.indexOf(a.domain) - DOMAINS.indexOf(b.domain));
   const projectDomain = (p) => concept(p?.subjectId)?.domain;
+  // 내가 공부하는 분야 — 프로젝트 코스와 풀어 본 문제. 없으면 공식 코스 분야
+  function myDomains() {
+    const ds = new Set([...Store.state.projects.map((p) => projectDomain(p)), ...Store.state.attempts.map((a) => Store.problem(a.problemId)?.domain)].filter(Boolean));
+    return ds.size ? [...ds].sort((a, b) => domainOrder(a) - domainOrder(b)) : TEMPLATE_DOMAINS;
+  }
 
   const startOfToday = () => new Date(new Date().toDateString()).getTime();
   const daysLeft = (examDate) => (examDate ? Math.round((new Date(`${examDate}T00:00:00`) - startOfToday()) / DAY) : null);
@@ -296,7 +323,7 @@
     const weak = Store.conceptStats().find((s) => s.attempts >= 3);
     if (weak) {
       const c = concept(weak.conceptId);
-      $("#banner-eyebrow").textContent = `이번 주 약점 · ${subjectOf(c.id).name}`;
+      $("#banner-eyebrow").textContent = `이번 주 약점 · ${subjectOf(c.id)?.name ?? ""}`;
       $("#banner-title").textContent = c.name;
       $("#banner-desc").textContent = `최근 ${weak.attempts}문제 중 ${weak.attempts - weak.correct}문제 오답 · 정답률 ${pct(weak.accuracy)}`;
       $("#banner-concept").dataset.href = `#/library/concept/${c.id}`;
@@ -322,7 +349,7 @@
     if (unknownCards) recs.push({ href: "#/library/cards", c: "var(--accent)", kind: "암기", title: `암기 카드 ${unknownCards}장`, meta: `예상 ${Math.max(1, Math.round(unknownCards / 2))}분` });
     $("#cards-recommend").innerHTML = recs.map(card).join("") || '<p class="empty">추천할 학습이 없어요. 잘하고 있어요!</p>';
 
-    $("#subjects").innerHTML = DOMAINS.map((d) => {
+    $("#subjects").innerHTML = myDomains().map((d) => {
       const acc = Store.accuracy({ domain: d });
       const w = Store.conceptStats({ domain: d })[0];
       return `
@@ -404,7 +431,7 @@
   const isShort = (p) => p.problemType === "short_answer" || !p.choices;
   const conceptLabel = (p) => {
     const c = concept(p.conceptIds?.[0]);
-    return c ? `${subjectOf(c.id).name} · ${c.name}` : DOMAIN_NAME[p.domain] ?? "";
+    return c ? `${subjectOf(c.id)?.name ?? ""} · ${c.name}` : DOMAIN_NAME[p.domain] ?? "";
   };
 
   function problemHTML(pid, { attempt = null, index = null } = {}) {
@@ -931,7 +958,9 @@
       <div class="toolbar glass-bar">
         <div class="seg" id="note-domains">
           <button data-domain="all">전체</button>
-          ${DOMAINS.map((d) => `<button data-domain="${d}" style="--c:${COLOR[d]}"><span class="sw"></span>${DOMAIN_NAME[d]}</button>`).join("")}
+          ${(() => { const ds = [...new Set(Store.state.wrongNotes.map((w) => Store.problem(w.problemId)?.domain).filter(Boolean))];
+            return (ds.length ? ds.sort((a, b) => domainOrder(a) - domainOrder(b)) : myDomains()); })()
+            .map((d) => `<button data-domain="${d}" style="--c:${COLOR[d]}"><span class="sw"></span>${DOMAIN_NAME[d]}</button>`).join("")}
         </div>
         <select class="select" id="note-error" aria-label="틀린 이유">
           <option value="all">틀린 이유: 전체</option>
@@ -1085,13 +1114,27 @@
         const count = childrenOf(s.id).reduce((n, u) => n + childrenOf(u.id).length, 0);
         return units ? `
           <details ${qy ? "open" : ""}>
-            <summary><i data-lucide="chevron-right"></i>${esc(s.name)}<span>${count}개 개념</span></summary>
+            <summary><i data-lucide="chevron-right"></i>${esc(s.name)}${courseMap[s.id]?.exam ? `<small class="course-exam">${esc(courseMap[s.id].exam)}${courseMap[s.id].level ? ` · ${esc(courseMap[s.id].level)}` : ""}</small>` : ""}<span>${count}개 개념</span></summary>
             ${units}
           </details>` : "";
       }).join("");
       return subjects ? `<section class="tree-domain" style="--c:${COLOR[d]}"><h2><span class="sw"></span>${DOMAIN_NAME[d]}</h2>${subjects}</section>` : "";
     }).join("");
-    $("#lib-body").innerHTML = `<div class="tree">${html || `<div class="empty"><i data-lucide="search-x"></i><b>찾는 개념이 없어요</b>다른 단어로 검색해 보세요</div>`}</div>`;
+    // 아직 받지 않은 공개 코스 (다른 사람이 만든 코스) — 누르면 개념 트리를 받아 온다
+    const others = COURSES.filter((c) => !conceptMap[c.id] && (!qy || `${c.title} ${c.exam} ${c.category}`.toLowerCase().includes(qy)));
+    const browse = others.length ? `
+      <section class="tree-domain other-courses"><h2><i data-lucide="compass"></i>다른 코스 둘러보기 <small>다른 사람들이 출제 범위로 만든 코스예요</small></h2>
+        <div class="course-list">${others.slice(0, 30).map((c) => `
+          <button type="button" class="course-item" data-load-course="${esc(c.id)}" style="--c:${COLOR[c.domain]}">
+            <b><span class="sw"></span>${esc(c.title)}</b><small>${esc([c.exam, c.category, c.level, `${c.units}개 단원`].filter(Boolean).join(" · "))}</small></button>`).join("")}</div>
+      </section>` : "";
+    $("#lib-body").innerHTML = `<div class="tree">${html || (browse ? "" : `<div class="empty"><i data-lucide="search-x"></i><b>찾는 개념이 없어요</b>다른 단어로 검색해 보세요</div>`)}${browse}</div>`;
+    $("#lib-body .tree").onclick = async (e) => {
+      const b = e.target.closest("[data-load-course]");
+      if (!b) return;
+      b.disabled = true;
+      try { await Store.loadCourse(b.dataset.loadCourse); loadConcepts(); renderTree(); } catch (err) { toast(err.message); b.disabled = false; }
+    };
     icons();
   }
 
@@ -1208,7 +1251,7 @@
         <div class="deck-progress"><span>외운 카드 ${known} / ${all.length}</span><div class="bar"><i style="width:${(known / all.length) * 100}%"></i></div></div>
         <div class="flash ${flipped ? "flipped" : ""}" id="flash" style="--c:${COLOR[c.domain]}" tabindex="0" role="button" aria-label="카드 뒤집기">
           <div class="flash-inner">
-            <div class="flash-face"><small>${esc(subjectOf(c.id).name)} · ${esc(c.name)}</small><p class="${cardLen(card.front)}" data-math>${esc(card.front)}</p><small>눌러서 정답 보기</small></div>
+            <div class="flash-face"><small>${esc(subjectOf(c.id)?.name ?? "")} · ${esc(c.name)}</small><p class="${cardLen(card.front)}" data-math>${esc(card.front)}</p><small>눌러서 정답 보기</small></div>
             <div class="flash-face flash-back"><small>정답</small><p class="${cardLen(card.back)}" data-math>${esc(card.back)}</p></div>
           </div>
         </div>
@@ -1928,12 +1971,8 @@
   }
 
   // 글로 적으면 알아듣는 부분 — 과목·목표·시험일·범위
-  const SUBJECT_ALIASES = [ // II 를 먼저 (수학II 가 수학I 로 잡히지 않게)
-    ["math.math2", ["수학ii", "수학2", "수2"]], ["math.math1", ["수학i", "수학1", "수1"]],
-    ["math.prob_stat", ["확률과통계", "확통", "확률", "통계"]], ["math.calculus", ["미적분", "미적"]], ["math.geometry", ["기하"]],
-    ["physics.physics1", ["물리학", "물리", "물1"]], ["chemistry.chemistry1", ["화학", "화1"]],
-    ["biology.biology1", ["생명과학", "생명", "생물", "생1", "생과"]], ["earth_science.earth1", ["지구과학", "지구", "지학", "지1"]],
-  ];
+  // 코스 별칭 = 서버 코스의 aliases + 코스 이름 (가장 길게 맞는 것이 이긴다 — 수학II > 수학I)
+  const courseKeys = () => COURSES.map((c) => [c.id, [...new Set([...(c.aliases ?? []), norm(c.title)])]]);
   const norm = (s) => s.toLowerCase().replace(/Ⅱ/g, "ii").replace(/Ⅰ/g, "i").replace(/\s+/g, "");
   const nameWords = (s) => s.split(/[\s·,()과와의]+/).filter((x) => x.length >= 2);
   function readExam(text) {
@@ -1943,7 +1982,13 @@
     const spaced = text.toLowerCase().replace(/Ⅱ/g, "ii").replace(/Ⅰ/g, "i").replace(/\s+/g, " ");
     const found = (k) => (/\d$/.test(k)
       ? new RegExp(`${[...k].join("\\s*")}(?!\\d|등급|점|문제|문항|개)`).test(spaced) : t.includes(k));
-    const subjectId = SUBJECT_ALIASES.find(([, keys]) => keys.some(found))?.[0] ?? null;
+    let best = null; // [코스 id, 맞은 길이, 공식 코스인지]
+    for (const [id, keys] of courseKeys()) for (const k of keys) {
+      if (!k || !found(k)) continue;
+      const cand = [id, k.length, courseMap[id]?.source === "template"];
+      if (!best || cand[1] > best[1] || (cand[1] === best[1] && cand[2] && !best[2])) best = cand;
+    }
+    const subjectId = best?.[0] ?? null;
     const grade = text.match(/([1-9])\s*등급/), score = text.match(/(\d{2,3})\s*점/);
     const goal = grade ? `${grade[1]}등급` : score ? `${score[1]}점` : "";
     let examDate = null;
@@ -1956,13 +2001,16 @@
     }
     return { subjectId, goal, examDate };
   }
-  // 과목 칸에 적은 글 → 과목 id. 정확한 이름이 먼저, 아니면 별칭(수1·확통·물리 …)
-  const subjectFromText = (text) => SUBJECTS.find((x) => norm(x.name) === norm(text))?.id ?? readExam(text).subjectId;
-  // 과목 칸 후보: 이름에 들어 있거나 별칭으로 시작하면
+  // 과목 칸에 적은 글 → 코스 id. 정확한 이름이 먼저, 아니면 별칭(수1·확통·편입수학 …)
+  const subjectFromText = (text) => COURSES.find((c) => norm(c.title) === norm(text))?.id ?? readExam(text).subjectId;
+  // 과목 칸 후보: 모든 공개 코스에서 이름·시험·별칭으로 (공식 코스 먼저)
   const matchSubjects = (q) => {
     const t = norm(q);
-    return SUBJECTS.filter((x) => norm(x.name).includes(t) || SUBJECT_ALIASES.some(([id, keys]) => id === x.id && keys.some((k) => k.startsWith(t) || t.startsWith(k))));
+    return COURSES.filter((c) => norm(c.title).includes(t) || (c.exam && norm(c.exam).includes(t))
+      || (c.aliases ?? []).some((k) => k.startsWith(t) || t.startsWith(k)))
+      .sort((a, b) => (a.source === "user") - (b.source === "user")).slice(0, 8);
   };
+  const courseSub = (c) => [c.exam, c.category, c.level, `${c.units}개 단원`, c.source === "user" ? "사용자 코스" : "공식"].filter(Boolean).join(" · ");
   // "적분법까지", "수열 빼고", "전 범위" → 단원 id 목록 ([] 이면 과목 전체, null 이면 못 알아들음)
   function readScope(text, subjectId) {
     const units = childrenOf(subjectId), t = norm(text);
@@ -1993,10 +2041,25 @@
               <input id="np-subject" autocomplete="off" maxlength="30" placeholder="예: 미적분, 수학I, 화학I"
                 role="combobox" aria-autocomplete="list" aria-controls="subject-list" aria-expanded="false" />
               <ul class="suggest-list" id="subject-list" role="listbox" hidden></ul>
-              <p class="mini" data-subject-hint>${SUBJECTS.map((x) => x.name).join(" · ")}</p></div>
+              <p class="mini" data-subject-hint></p>
+              <button type="button" class="link-btn" data-new-course>찾는 코스가 없나요? 출제 범위로 새 코스 만들기</button></div>
             <div class="field"><label for="np-textbook">시험 교재 <small>· 선택</small></label>
               <input id="np-textbook" autocomplete="off" maxlength="120" placeholder="예: 수능특강 미적분, 쎈 미적분" />
               <p class="mini">적으면 이 교재의 결에 맞춰 문제를 만들어요</p></div>
+          </div>
+          <div class="np-newcourse" data-newcourse hidden>
+            <h4><i data-lucide="sparkles"></i>새 코스 만들기 <small>출제 범위를 붙여넣으면 AI가 단원·개념으로 정리해요 · 만든 코스는 모두에게 공개돼요</small></h4>
+            <div class="two">
+              <div class="field"><label for="nc-title">코스 이름</label><input id="nc-title" maxlength="120" placeholder="예: 편입 수학 (미적분학)" /></div>
+              <div class="field"><label for="nc-exam">시험 <small>· 선택</small></label><input id="nc-exam" maxlength="120" placeholder="예: 편입, CPA 1차, 토익" /></div>
+            </div>
+            <div class="field"><label for="nc-level">수준 <small>· 선택</small></label>
+              <div class="chips nc-levels">${["중학", "고등", "대학", "자격증", "공무원", "어학"].map((x) => `<label><input type="radio" name="nc-level" value="${x}" /><span>${x}</span></label>`).join("")}</div></div>
+            <div class="field"><label for="nc-scope">출제 범위 <small>· 교재 목차나 시험 공고의 범위를 그대로 붙여넣어 주세요</small></label>
+              <textarea id="nc-scope" rows="7" maxlength="8000" placeholder="예)&#10;2. Limits and Derivatives&#10;3. Differentiation Rules&#10;7. Techniques of Integration"></textarea></div>
+            <p class="mini">교재는 위 '시험 교재' 칸을 함께 써요. 책 내용은 읽지 않고, 범위의 주제로 새 문제를 만들어요.</p>
+            <div class="fb-actions"><button type="button" class="btn-ghost" data-newcourse-cancel>닫기</button>
+              <button type="button" class="btn-primary" data-newcourse-make><i data-lucide="sparkles"></i>AI로 코스 만들기</button></div>
           </div>
           <div class="np-more" data-more hidden>
             <div class="field"><label for="np-scope">시험 범위</label>
@@ -2025,9 +2088,13 @@
     const subjectName = () => concept(w.subjectId)?.name ?? "";
     // 이름 기본값: 첫 칸에서 날짜·목표를 빼고 과목을 붙인다 ("2027 수능 1등급, 11월 19일" + 확통 → "2027 수능 확률과 통계")
     const defaultName = () => {
-      const base = w.exam.replace(/\d{1,2}\s*월\s*\d{1,2}\s*일|[1-9]\s*등급|\d{2,3}\s*점|[,·]/g, " ").replace(/\s+/g, " ").trim();
+      const exam = courseMap[w.subjectId]?.exam;
+      // 날짜·목표·'시험' 같은 말을 빼고, 코스 이름에 이미 있는 시험 이름도 뺀다 ("2027 편입 시험" + 편입 수학 → "2027 편입 수학")
+      let base = w.exam.replace(/\d{1,2}\s*월\s*\d{1,2}\s*일|[1-9]\s*등급|\d{2,3}\s*점|[,·]|시험|준비|대비/g, " ");
+      if (exam && subjectName().includes(exam)) base = base.replace(exam, " ");
+      base = base.replace(/\s+/g, " ").trim();
       const subj = subjectName();
-      const name = !base ? `${subj} 시험 준비` : SUBJECT_ALIASES.some(([id, keys]) => id === w.subjectId && keys.some((k) => norm(base).includes(k))) || norm(base).includes(norm(subj)) ? base : `${base} ${subj}`;
+      const name = !base ? `${subj} 시험 준비` : courseKeys().some(([id, keys]) => id === w.subjectId && keys.some((k) => norm(base).includes(k))) || norm(base).includes(norm(subj)) ? base : `${base} ${subj}`;
       return name.slice(0, 30);
     };
 
@@ -2044,8 +2111,11 @@
       const typing = typed && !w.subjectId && matchSubjects(typed).length; // 아직 적는 중 (후보가 있음)
       const unknown = !w.subjectId && !typing && (typed || w.exam.trim());
       hint.classList.toggle("bad", !!unknown);
-      hint.textContent = typing ? "목록에서 고르거나 과목 이름을 끝까지 적어 주세요" : unknown ? `${typed ? `'${typed}'은(는) 아직 지원하지 않는 과목이에요. ` : "준비 과목을 적어 주세요. "}지금은 ${SUBJECTS.map((x) => x.name).join(" · ")}`
-        : w.subjectId ? `${DOMAIN_NAME[concept(w.subjectId).domain]} · ${childrenOf(w.subjectId).length}개 단원` : SUBJECTS.map((x) => x.name).join(" · ");
+      const official = COURSES.filter((c) => c.source === "template").length;
+      hint.textContent = typing ? "목록에서 고르거나 코스 이름을 끝까지 적어 주세요"
+        : unknown ? (typed ? `'${typed}'에 맞는 코스가 아직 없어요. 아래 '새 코스 만들기'로 만들 수 있어요` : "준비 과목을 적어 주세요")
+        : w.subjectId ? courseSub(courseMap[w.subjectId] ?? { category: DOMAIN_NAME[concept(w.subjectId)?.domain], units: childrenOf(w.subjectId).length })
+        : `공식 코스 ${official}개 · 사용자 코스 ${COURSES.length - official}개 — 과목·시험·교재 이름으로 찾아보세요`;
       $("[data-more]", body).hidden = !w.subjectId;
       $("[data-next]", sheet).disabled = !w.subjectId;
       icons();
@@ -2065,6 +2135,10 @@
       if (!w.nameTouched) $("#w-name").value = defaultName();
     }
     function setSubject(id) {
+      if (id && !concept(id)) {
+        Store.loadCourse(id).then(() => { loadConcepts(); setSubject(id); }).catch((err) => toast(err.message));
+        return;
+      }
       if (id !== w.subjectId) {
         w.subjectId = id;
         w.unitIds = (id && w.scope && readScope(w.scope, id)) || [];
@@ -2098,20 +2172,55 @@
         w.nameTouched = true;
       }
     });
+    const panel = $("[data-newcourse]", body);
+    function openNewCourse() {
+      panel.hidden = false;
+      const typed = $("#np-subject").value.trim();
+      if (!$("#nc-title").value) $("#nc-title").value = typed || w.exam.replace(/\d{1,2}\s*월\s*\d{1,2}\s*일|[1-9]\s*등급|\d{2,3}\s*점|[,·]/g, " ").replace(/\s+/g, " ").trim();
+      icons();
+      panel.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      $(typed ? "#nc-scope" : "#nc-title").focus();
+    }
+    async function makeCourse(btn) {
+      const title = $("#nc-title").value.trim(), scope = $("#nc-scope").value.trim();
+      if (title.length < 2) return invalid($("#nc-title"), "코스 이름을 적어 주세요");
+      if (scope.length < 2) return invalid($("#nc-scope"), "출제 범위를 붙여넣어 주세요");
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader-circle" class="spin"></i>AI가 단원·개념을 정리하는 중… (30초~1분)';
+      icons();
+      try {
+        const c = await Store.createCourse({ title, scope_text: scope, exam: $("#nc-exam").value.trim(),
+          level: $("input[name=nc-level]:checked", body)?.value ?? "", textbook: w.textbook.trim() });
+        loadConcepts();
+        panel.hidden = true;
+        w.subjectPicked = true;
+        $("#np-subject").value = c.title;
+        setSubject(c.id);
+        toast(`'${c.title}' 코스를 만들었어요 · 단원 ${c.units}개, 개념 ${c.concepts}개`);
+      } catch (err) { toast(err.message); }
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="sparkles"></i>AI로 코스 만들기';
+      icons();
+    }
     body.addEventListener("click", (e) => {
+      if (e.target.closest("[data-new-course]")) return openNewCourse();
+      if (e.target.closest("[data-newcourse-cancel]")) { panel.hidden = true; return; }
+      const make = e.target.closest("[data-newcourse-make]");
+      if (make) return makeCourse(make);
       const days = e.target.closest("[data-days]");
       if (days) { w.examDate = isoAfter(Number(days.dataset.days)); w.dateTouched = w.dateShown = true; drawFields(); drawRead(); }
       const qt = e.target.closest("[data-qtype]");
       if (qt) { w.questionType = qt.dataset.qtype; $$("[data-qtype]", body).forEach((b) => b.classList.toggle("on", b === qt)); }
     });
     // 과목 칸 후보 목록 (고르면 그 과목으로)
-    bindSuggest($("#np-subject"), $("#subject-list"), async (q) => matchSubjects(q).map((x) => ({
-      label: x.name, sub: `${DOMAIN_NAME[x.domain]} · ${childrenOf(x.id).length}개 단원`, value: x.name })), 1);
+    bindSuggest($("#np-subject"), $("#subject-list"), async (q) => matchSubjects(q).map((c) => ({
+      label: c.title, sub: courseSub(c), value: c.title })), 1);
     body.addEventListener("change", (e) => {
       if (e.target.id === "np-subject") {
         const typed = e.target.value.trim();
         w.subjectPicked = !!typed;
         setSubject(typed ? subjectFromText(typed) : readExam(w.exam).subjectId);
+        if (typed && !subjectFromText(typed) && !matchSubjects(typed).length && panel.hidden) openNewCourse();
       }
       if (e.target.closest("[data-units]")) { w.unitIds = $$("[data-units] input:checked", body).map((i) => i.value); drawUnits(); }
       if (e.target.id === "w-date") { w.examDate = e.target.value || null; w.dateTouched = w.dateShown = true; drawFields(); drawRead(); }
@@ -2243,7 +2352,7 @@
         groups.push(["오답", Store.state.wrongNotes.filter((w) => has(Store.problem(w.problemId).stem) || has(concept(Store.problem(w.problemId).conceptIds[0]).name))
           .map((w) => ({ icon: "circle-x", t: plainMath(Store.problem(w.problemId).stem), go: "/notes", sub: w.resolvedAt ? "극복" : "안 품" }))]);
         groups.push(["개념", CONCEPTS.filter((c) => c.level === "concept" && has(c.name)).slice(0, 8)
-          .map((c) => ({ icon: "book-open", t: c.name, go: `/library/concept/${c.id}`, sub: subjectOf(c.id).name }))]);
+          .map((c) => ({ icon: "book-open", t: c.name, go: `/library/concept/${c.id}`, sub: subjectOf(c.id)?.name ?? "" }))]);
       }
       items = groups.flatMap(([, list]) => list);
       active = Math.min(active, Math.max(0, items.length - 1));
@@ -2313,6 +2422,7 @@
 
   // 첫 화면 표시 — 서버 모드면 내 데이터를 받아 온 뒤에 그린다
   Store.ready.then(() => {
+  loadConcepts();
   render();
   setUnread(Store.state.user?.unreadNotifications ?? 0);
 

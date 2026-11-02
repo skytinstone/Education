@@ -154,10 +154,19 @@ const Store = (() => {
   const PROJECT_KEYS = { name: "name", subjectId: "subject_id", unitIds: "unit_ids", goal: "goal", textbook: "textbook", examDate: "exam_date", questionType: "question_type", pinned: "pinned" };
   const snake = (patch) => Object.fromEntries(Object.entries(patch).filter(([k]) => PROJECT_KEYS[k]).map(([k, v]) => [PROJECT_KEYS[k], v]));
 
+  function mergeCourse({ course, concepts }) {
+    state.courses = [...state.courses.filter((c) => c.id !== course.id), course];
+    const have = new Set(state.concepts.map((c) => c.id));
+    state.concepts.push(...concepts.filter((c) => !have.has(c.id)));
+    commit();
+  }
+
   async function boot() {
     if (MODE === "local") {
       try { state = JSON.parse(localStorage.getItem(KEY)); } catch { state = null; }
       state ??= seed();
+      state.courses = window.COURSES ?? [];
+      state.concepts = window.CONCEPTS ?? [];
       bank = Object.fromEntries(PROBLEM_BANK.map((p) => [p.id, { problemType: "multiple_choice", ...p }]));
       return;
     }
@@ -455,6 +464,16 @@ const Store = (() => {
       state.cards.push(...r.added_cards.map((c) => ({ id: c.id, conceptId: c.concept_id, front: c.front, back: c.back, known: c.known })));
       commit();
       return r;
+    },
+    // 코스: 다른 사람이 만든 코스의 개념 트리 받아 오기 / 출제 범위로 새 코스 만들기 (AI, 30초~1분)
+    async loadCourse(id) {
+      if (local || state.concepts.some((c) => c.id === id)) return;
+      mergeCourse(await api(`/courses/${encodeURIComponent(id)}`));
+    },
+    async createCourse(body) {
+      const d = await api("/courses", { method: "POST", body });
+      mergeCourse(d);
+      return d.course;
     },
     // 알림 — { unread, items } / 읽음 처리 (ids 를 비우면 모두)
     notifications() { return local ? Promise.resolve({ unread: 0, items: [] }) : api("/notifications"); },
