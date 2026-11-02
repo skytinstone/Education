@@ -1,3 +1,4 @@
+import logging
 from collections import Counter
 from typing import Annotated, Literal
 from uuid import UUID
@@ -18,6 +19,7 @@ from education.services import generator, learning, materials, tutor
 from education.services.llm import LLMError, get_llm
 
 router = APIRouter(prefix="/projects", tags=["프로젝트"])
+log = logging.getLogger(__name__)
 
 
 def _check_scope(db: Session, subject_id: str, unit_ids: list[str]) -> None:
@@ -161,15 +163,21 @@ def generate_from_past(project_id: UUID, body: GenerateIn, user: CurrentUser, db
     exemplars = [p for p in past if concept_id in p.concept_ids] or past
     base = round(sum(p.difficulty for p in exemplars[:3]) / len(exemplars[:3])) if exemplars else 3
     difficulty = min(5, max(1, base + LEVEL_SHIFT[body.level]))
+    # 형식·보기 개수는 코스가 아니라 올린 기출대로 (예: 고등 미적분 코스에 편입 4지선다 기출)
+    formats, choice_count = generator.past_format(past)
     try:
         report = generator.generate_problems(
             db, llm, concept_id=concept_id, difficulty=difficulty, count=body.count, user=user,
             question_type=project.question_type, exemplars=exemplars, owner=user if exemplars else None,
-            textbook=tutor.textbook_label(project))
+            textbook=tutor.textbook_label(project), choice_count=choice_count,
+            formats=formats if project.question_type == "auto" else None)
     except LLMError:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "AI 응답이 원활하지 않아요. 잠시 후 다시 시도해 주세요") from None
     if not report.accepted:
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "만든 문제가 모두 검증을 통과하지 못했어요. 다시 시도해 주세요")
+        log.warning("기출 기반 생성 전부 탈락 (project %s): %s", project.id, report.reasons)
+        why = Counter(r.split(":")[0] for r in report.reasons).most_common(1)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "만든 문제가 모두 검증을 통과하지 못했어요"
+                            + (f" (주된 이유: {why[0][0]})" if why else "") + ". 다시 시도해 주세요")
 
     concept = db.get(m.Concept, concept_id)
     label = LEVEL_LABEL[body.level]

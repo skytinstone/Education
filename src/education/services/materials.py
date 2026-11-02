@@ -37,7 +37,7 @@ class ExtractedProblem(BaseModel):
     number: int | None = Field(description="시험지에 적힌 문항 번호, 없으면 null")
     stem: str = Field(description="문제 본문 (수식은 LaTeX 를 $ 로 감쌈)")
     choices: list[str] = Field(description="보기 내용 (번호 없이). 단답형·서술형이면 빈 목록")
-    answer: str | None = Field(description="시험지·정답표에 정답이 있으면 — 객관식은 보기 번호 1~5, 단답형은 값. 없으면 null (추측 금지)")
+    answer: str | None = Field(description="시험지·정답표에 정답이 있으면 — 객관식은 보기 번호 (1부터), 단답형은 값. 없으면 null (추측 금지)")
     concept_id: str = Field(description="주어진 개념 목록 중 가장 알맞은 id, 없으면 빈 문자열")
     difficulty: int = Field(description="난이도 1(기본)~5(최고난도) 추정 — 수능이면 2점=1, 4점 킬러=5")
     needs_figure: bool = Field(description="그림·그래프·표가 있어야 풀 수 있으면 true")
@@ -100,17 +100,20 @@ def scope_concepts(db: Session, project: m.Project) -> list[m.Concept]:
 
 def _to_problem(db: Session, ex: ExtractedProblem, material: m.Material, project: m.Project,
                 concept_ids: set[str]) -> m.Problem:
-    mc = len(ex.choices) == 5
+    mc = 2 <= len(ex.choices) <= 6  # 수능 5지선다뿐 아니라 편입·공무원 4지선다 등
     answer = (ex.answer or "").strip()
-    if mc and answer not in {"1", "2", "3", "4", "5"}:
+    if mc and answer not in {str(i) for i in range(1, len(ex.choices) + 1)}:
         answer = ""  # 정답을 보기 번호로 못 옮기면 정답 없음으로 둔다
     concept = db.get(m.Concept, ex.concept_id) if ex.concept_id in concept_ids else None
     domain = concept.domain if concept else db.get(m.Concept, project.subject_id).domain
     # 정답이 있고 그림 없이 풀 수 있는 문항만 학생에게 낼 수 있다. 나머지는 본보기로만 쓴다
     servable = bool(answer) and not ex.needs_figure
+    # 답이 0~999 정수가 아니면 (√2, π/4 …) 글자 주관식으로
+    integer = answer.isdigit() and int(answer) <= 999
+    kind = ProblemType.MULTIPLE_CHOICE if mc else ProblemType.SHORT_ANSWER if integer or not answer else ProblemType.TEXT
     p = m.Problem(
         id=f"px_{uuid.uuid4().hex[:12]}", domain=domain, difficulty=min(5, max(1, ex.difficulty)),
-        problem_type=ProblemType.MULTIPLE_CHOICE if mc else ProblemType.SHORT_ANSWER,
+        problem_type=kind,
         stem=ex.stem, choices=ex.choices if mc else None, answer=answer,
         solution="교재 문제 — 원문 확인용" if material.kind == "textbook" else "기출 문제 — 해설은 AI 연결 후 생성돼요",
         source=ProblemSource.TEXTBOOK if material.kind == "textbook" else ProblemSource.PAST_EXAM,

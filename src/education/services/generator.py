@@ -12,6 +12,7 @@ from __future__ import annotations
 import random
 import re
 import uuid
+from collections import Counter
 from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
@@ -408,13 +409,28 @@ def _exemplar_text(p: m.Problem) -> str:
     return "\n".join(lines)
 
 
+def past_format(exemplars: list[m.Problem]) -> tuple[list[str], int | None]:
+    """올린 기출의 문제 형식(많이 나온 순)과 객관식 보기 개수.
+    코스(예: 고등 미적분 5지선다)와 기출(예: 편입 4지선다)이 다르면 기출대로 만들어야 형식 검사를 통과한다."""
+    kinds: Counter[str] = Counter()
+    for p in exemplars:
+        if p.choices:
+            kinds["multiple_choice"] += 1
+        elif p.answer:
+            kinds["short_answer" if p.answer.strip().isdigit() and int(p.answer) <= 999 else "text"] += 1
+    sizes = Counter(len(p.choices) for p in exemplars if p.choices and 3 <= len(p.choices) <= 6)
+    return [k for k, _ in kinds.most_common()], (sizes.most_common(1)[0][0] if sizes else None)
+
+
 def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int, count: int,
                       user: m.User | None = None, question_type: str = "multiple_choice",
                       exemplars: list[m.Problem] | None = None, owner: m.User | None = None,
-                      textbook: str | None = None) -> GenerationReport:
+                      textbook: str | None = None, formats: list[str] | None = None,
+                      choice_count: int | None = None) -> GenerationReport:
     """question_type: multiple_choice · short_answer · mixed(번갈아).
     exemplars: 본보기로 삼을 기출 문제. owner: 만든 문제를 그 사용자만 보게 할 때 (기출 기반 문제).
-    textbook: 학생이 공부하는 교재 — 그 교재의 단원 구성·문제 유형·난이도 결을 따르게 한다 (문제를 베끼지는 않음)."""
+    textbook: 학생이 공부하는 교재 — 그 교재의 단원 구성·문제 유형·난이도 결을 따르게 한다 (문제를 베끼지는 않음).
+    formats·choice_count: 코스 대신 쓸 문제 형식·보기 개수 (기출 기반 문제는 올린 기출을 따른다 — past_format)."""
     concept = db.get(m.Concept, concept_id)
     if concept is None or concept.level != "concept":
         raise ValueError(f"개념이 아님: {concept_id}")
@@ -426,11 +442,13 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
               + (f"\n학생이 공부하는 교재: {textbook} — 이 교재의 단원 구성·자주 나오는 문제 유형·난이도의 결을 따르되, "
                  "교재에 실린 문제를 그대로 옮기지 말고 새로 만든다" if textbook else "")
               + ("\n이미 있는 문제 (겹치지 않게):\n" + "\n".join(f"- {r[:120]}" for r in recent) if recent else "")
-              + ("\n\n참고할 기출 문제 (이 결을 따르되 베끼지 말 것):\n\n" + "\n\n---\n\n".join(_exemplar_text(e) for e in exemplars[:3])
-                 if exemplars else ""))
+              + ("\n\n참고할 기출 문제 (이 결을 따르되 베끼지 말 것 · 수준과 표기는 코스보다 기출을 따른다):\n\n"
+                 + "\n\n---\n\n".join(_exemplar_text(e) for e in exemplars[:3]) if exemplars else ""))
     course = db.get(m.Course, concept.course_id)
-    choice_count = course.choice_count if course else 5
-    if question_type == "mixed":
+    choice_count = choice_count or (course.choice_count if course else 5)
+    if formats:
+        types = [t for t in formats if t in FORMATS] or ["multiple_choice"]
+    elif question_type == "mixed":
         types = ["multiple_choice", "short_answer"]
     elif question_type == "auto":  # 코스(시험) 형식대로 번갈아
         types = [t for t in (course.formats if course else []) if t in FORMATS] or ["multiple_choice"]

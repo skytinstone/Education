@@ -167,6 +167,36 @@ def test_generate_from_past_uses_exemplars_and_level(client, auth, uploaded, mon
     assert client.get(f"/api/problems/{row.id}", headers=other).status_code == 404
 
 
+def test_non_integer_answer_becomes_text(client, auth, monkeypatch, background_db, db):
+    ext = QueueLLM(Extraction=[Extraction(problems=[extracted(choices=[], answer="\\sqrt{2}"), extracted(number=2, choices=[], answer="12")])])
+    monkeypatch.setattr(materials, "get_llm", lambda: ext)
+    pid = make_project(client, auth)
+    mid = upload(client, auth, pid).json()["id"]
+    rows = db.scalars(select(m.Problem).where(m.Problem.material_id == __import__("uuid").UUID(mid)))
+    assert {(p.problem_type, p.answer) for p in rows} == {("short_answer", "12"), ("text", "\\sqrt{2}")}
+
+
+def test_generate_follows_past_format(client, auth, monkeypatch, background_db, db):
+    """5지선다 코스에 4지선다 기출(편입 등)을 올리면 기출대로 4지선다를 만든다. 다 떨어지면 이유를 알려 준다."""
+    four = ["1", "2", "3", "4"]
+    ext = QueueLLM(Extraction=[Extraction(problems=[extracted(choices=four), extracted(number=2, choices=four)])])
+    monkeypatch.setattr(materials, "get_llm", lambda: ext)
+    pid = make_project(client, auth, question_type="auto")  # 수학I 은 5지선다·단답형 코스
+    upload(client, auth, pid)
+    past = {p.problem_type: p for p in db.scalars(select(m.Problem).where(m.Problem.material_id.is_not(None)))}
+    assert len(past["multiple_choice"].choices) == 4 and past["multiple_choice"].answer == "3"  # 4지선다도 객관식
+    gen4 =GeneratedProblem(stem="새 문제", choices=four, answer="2", solution="풀이", traps=[])
+    llm = QueueLLM(GeneratedProblem=[gen4, gen4], Verdict=[Verdict(answer="2", work="", well_posed=True, issues=[])] * 2)
+    monkeypatch.setattr(projects_router, "get_llm", lambda: llm)
+    s = client.post(f"/api/projects/{pid}/generate", json={"count": 2}, headers=auth).json()
+    assert [len(p["choices"]) for p in s["messages"][1]["problems"]] == [4, 4]  # 단답형 없이 기출 형식대로
+
+    bad = QueueLLM(GeneratedProblem=[gen4] * 3, Verdict=[Verdict(answer="3", work="", well_posed=True, issues=[])] * 3)
+    monkeypatch.setattr(projects_router, "get_llm", lambda: bad)
+    r = client.post(f"/api/projects/{pid}/generate", json={"count": 1}, headers=auth)
+    assert r.status_code == 502 and "정답 불일치" in r.json()["detail"]
+
+
 def test_generate_without_ai(client, auth, monkeypatch):
     monkeypatch.setattr(projects_router, "get_llm", lambda: None)
     pid = make_project(client, auth)
