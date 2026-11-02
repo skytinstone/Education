@@ -69,7 +69,8 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 | 영역 | 엔드포인트 |
 |---|---|
 | 인증 | `POST /auth/signup` · `POST /auth/login` · `GET/PATCH /me` · `DELETE /me` (회원 탈퇴, `{confirm_email}`) |
-| 간편 로그인 | `GET /auth/providers` · `GET /auth/{google\|kakao}/start` → `/callback` · `POST /auth/social/exchange` · `POST /auth/social/complete` |
+| 간편 로그인 | `GET /auth/providers` · `GET /auth/{google\|kakao}/start` → `/callback` · `POST /auth/social/exchange` · `POST /auth/social/complete` · `POST /auth/social/link` (같은 이메일 계정에 비밀번호 확인 후 연결) |
+| 로그인 방법 | `GET /me/connections` · `POST /me/connections/{provider}/start` → 콜백 → 설정 화면 · `DELETE /me/connections/{provider}` · `PUT /me/password` (만들기·바꾸기) |
 | 프로젝트 | `GET/POST /projects` · `GET/PATCH/DELETE /projects/{id}` (GET 은 정답률·약점 요약 포함) |
 | 대화 | `GET/POST /sessions` · `GET/PATCH/DELETE /sessions/{id}` · `POST /sessions/{id}/messages` |
 | 문제·풀이 | `GET /problems` · `GET /problems/{id}` · `POST /attempts` · `POST /problems/{id}/review` (서술형 풀이 확인, 글 또는 손글씨 PNG) |
@@ -102,7 +103,9 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 동작 방식
 - 처음 온 사용자는 약관 동의 화면을 한 번 거쳐 가입되고, 다음부터는 버튼 하나로 로그인된다
 - 카카오에서 이메일을 못 받으면 동의 화면에서 이메일을 입력받는다
-- 같은 이메일의 기존 계정에는 **양쪽 모두 인증된 이메일일 때만** 자동 연결한다 (남의 이메일로 미리 가입한 계정 가로채기 방지). 이메일로 가입한 계정은 인증 메일 기능 전까지 자동 연결하지 않고 '이메일로 로그인' 안내를 한다
+- 같은 이메일의 기존 계정에는 **양쪽 모두 인증된 이메일일 때만** 자동 연결한다 (남의 이메일로 미리 가입한 계정 가로채기 방지)
+- 그 밖의 경우(이메일로 가입해 아직 미인증) 그 계정의 **비밀번호를 한 번 확인**하고 연결한다. 확인이 끝나면 계정 이메일을 인증된 것으로 표시해, 이후 다른 간편 로그인은 자동 연결된다. 비밀번호가 없는(다른 간편 로그인으로만 가입한) 계정이면 그쪽으로 로그인한 뒤 설정에서 연결하라고 안내한다
+- 계정 설정 → 로그인 방법: Google·카카오 연결·해제, 비밀번호 만들기·바꾸기. 마지막 남은 로그인 방법은 해제할 수 없다. 설정에서 시작한 연결은 누가 시작했는지를 서명된 쿠키(10분)에 담아 콜백에서 확인한다
 - 위조 방지: 로그인 시작 시 state 쿠키를 발급해 콜백에서 확인하고, 로그인 결과는 2분짜리 일회성 티켓으로만 화면에 전달한다
 - 실제 서비스 공개 전: Google 은 앱 게시(그전엔 테스트 사용자 100명), 카카오는 실제 도메인 등록·검수, 둘 다 개인정보처리방침 URL 필요
 

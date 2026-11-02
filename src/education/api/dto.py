@@ -31,20 +31,22 @@ def _must_agree(v: bool) -> bool:
 RequiredAgree = Annotated[bool, AfterValidator(_must_agree)]
 
 
+def _strong(v: str) -> str:
+    if not (re.search(r"[A-Za-z]", v) and re.search(r"\d", v)):
+        raise ValueError("비밀번호는 영문과 숫자를 함께 써야 해요")
+    return v
+
+
+Password = Annotated[str, Field(min_length=8, max_length=128), AfterValidator(_strong)]
+
+
 class SignupIn(BaseModel):
     name: str = Field(min_length=1, max_length=40)
     email: EmailStr
-    password: str = Field(min_length=8, max_length=128)
+    password: Password
     over_14: RequiredAgree  # 만 14세 이상
     agreed_terms: RequiredAgree  # 이용약관 + 개인정보 수집·이용
     agreed_marketing: bool = False
-
-    @field_validator("password")
-    @classmethod
-    def _strength(cls, v: str) -> str:
-        if not (re.search(r"[A-Za-z]", v) and re.search(r"\d", v)):
-            raise ValueError("비밀번호는 영문과 숫자를 함께 써야 해요")
-        return v
 
 
 class LoginIn(BaseModel):
@@ -79,6 +81,35 @@ class TokenOut(BaseModel):
 
 class TicketIn(BaseModel):
     ticket: str
+
+
+class SocialLinkIn(BaseModel):
+    """간편 로그인을 이미 있는 이메일 계정에 연결 — 그 계정의 비밀번호로 본인임을 확인한다."""
+    link_token: str
+    password: str
+
+
+class ConnectionOut(Out):
+    provider: str
+    email: str | None
+    created_at: datetime
+
+
+class ConnectionsOut(BaseModel):
+    """계정 설정의 '로그인 방법'. 마지막 남은 방법은 해제할 수 없다."""
+    has_password: bool
+    accounts: list[ConnectionOut]
+    available: dict[str, bool]  # 서버에 키가 설정된 간편 로그인
+
+
+class LinkStartOut(BaseModel):
+    url: str  # 이 주소로 이동하면 제공자 로그인 화면이 열린다
+
+
+class PasswordIn(BaseModel):
+    """비밀번호 만들기(간편 로그인으로만 가입한 경우) 또는 바꾸기(현재 비밀번호 필요)."""
+    current_password: str | None = None
+    new_password: Password
 
 
 class SocialSignupIn(BaseModel):

@@ -582,3 +582,18 @@ a.nav-item { text-decoration: none; }
 .wr-steps small { font-size: 12.5px; color: var(--ink-2); }
 .wr-hint { padding: 8px 10px; border-radius: 10px; background: rgba(79,107,255,.07); }
 .wr-hint b { margin-right: 4px; color: var(--accent); }
+
+/* 계정 설정 — 로그인 방법 */
+#login-methods { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.method-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+.method-row + .method-row { border-top: 1px solid rgba(15,23,42,.06); }
+.method-icon { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0;
+  background: #fff; box-shadow: inset 0 0 0 1px rgba(15,23,42,.08); color: var(--ink-2); }
+.method-icon svg { width: 17px; height: 17px; }
+.method-icon.kakao { background: #fee500; box-shadow: none; }
+.method-text { flex: 1; min-width: 0; }
+.method-text b { display: block; font-size: 14px; font-weight: 600; }
+.method-text small { display: block; font-size: 12.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.method-row .btn-primary, .method-row .btn-ghost { height: 34px; border-radius: 10px; padding: 0 13px; flex-shrink: 0; font-size: 13px; }
+.method-row button:disabled { opacity: .5; cursor: not-allowed; }
+#login-methods .mini { margin-top: 6px; }

@@ -7,12 +7,15 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from education.api.deps import DB, CurrentUser
-from education.api.dto import AccountDeleteIn, LoginIn, SignupIn, SocialSignupIn, TicketIn, TokenOut, UserOut, UserPatch
+from education.api.dto import (
+    AccountDeleteIn, ConnectionOut, ConnectionsOut, LinkStartOut, LoginIn, PasswordIn, SignupIn, SocialLinkIn, SocialSignupIn, TicketIn,
+    TokenOut, UserOut, UserPatch,
+)
 from education.config import get_settings
 from education.db import models as m
 from education.security import create_ticket, create_token, hash_password, read_ticket, verify_password
@@ -22,7 +25,11 @@ from education.services.oauth import OAuthError, Provider, SocialProfile
 router = APIRouter(tags=["인증 · 사용자"])
 
 LOGIN_PAGE = "/app/login.html"
+SETTINGS_PAGE = "/app/index.html#/settings"
 STATE_COOKIE = "eureka_oauth_state"
+# 계정 설정에서 '연결하기'로 시작한 경우: 누가 시작했는지를 서명된 티켓으로 담아 둔다 (콜백은 브라우저 이동이라 로그인 토큰이 없다)
+LINK_COOKIE = "eureka_oauth_link"
+COOKIE_PATH = "/api/auth"
 
 
 def _token(user: m.User) -> TokenOut:
@@ -52,17 +59,46 @@ def login(body: LoginIn, db: DB) -> TokenOut:
 
 
 # ---------- 간편 로그인 (Google · 카카오) ----------
-def _to_login_page(**params: str) -> RedirectResponse:
-    """결과를 로그인 화면의 주소 # 뒤에 담아 돌려보낸다 (# 뒤는 서버로 전송되지 않는다)."""
-    res = RedirectResponse(f"{LOGIN_PAGE}#{urlencode(params)}", status_code=status.HTTP_302_FOUND)
-    res.delete_cookie(STATE_COOKIE, path="/api/auth")
+def _redirect(url: str) -> RedirectResponse:
+    res = RedirectResponse(url, status_code=status.HTTP_302_FOUND)
+    res.delete_cookie(STATE_COOKIE, path=COOKIE_PATH)
+    res.delete_cookie(LINK_COOKIE, path=COOKIE_PATH)
     return res
 
 
+def _to_login_page(**params: str) -> RedirectResponse:
+    """결과를 로그인 화면의 주소 # 뒤에 담아 돌려보낸다 (# 뒤는 서버로 전송되지 않는다)."""
+    return _redirect(f"{LOGIN_PAGE}#{urlencode(params)}")
+
+
+def _to_settings(**params: str) -> RedirectResponse:
+    """계정 설정에서 시작한 연결의 결과 — 설정 화면 주소의 ? 뒤에 담는다 (앱은 # 뒤를 경로로 쓴다)."""
+    return _redirect(f"{SETTINGS_PAGE}?{urlencode(params)}")
+
+
+def _set_cookie(res: Response, key: str, value: str) -> None:
+    res.set_cookie(key, value, max_age=600, httponly=True, samesite="lax", path=COOKIE_PATH,
+                   secure=get_settings().public_base_url.startswith("https"))
+
+
+def _account(db: Session, provider: str, provider_user_id: str) -> m.OAuthAccount | None:
+    return db.scalar(select(m.OAuthAccount).where(
+        m.OAuthAccount.provider == provider, m.OAuthAccount.provider_user_id == provider_user_id))
+
+
+def _connect(db: Session, user: m.User, provider: str, provider_user_id: str, email: str | None,
+             email_verified: bool) -> None:
+    """간편 로그인 계정을 user 에 붙인다. 제공자가 인증한 이메일이 계정 이메일과 같으면 계정 이메일도 인증된 것으로 본다."""
+    db.add(m.OAuthAccount(user_id=user.id, provider=provider, provider_user_id=provider_user_id, email=email))
+    if email_verified and email == user.email:
+        user.email_verified = True
+    db.commit()
+
+
 def _find_user(db: Session, profile: SocialProfile) -> tuple[m.User | None, str]:
-    """(사용자, 결과) — 결과: login(연결된 계정) · linked(같은 이메일 계정에 새로 연결) · email_taken · new"""
-    account = db.scalar(select(m.OAuthAccount).where(
-        m.OAuthAccount.provider == profile.provider, m.OAuthAccount.provider_user_id == profile.provider_user_id))
+    """(사용자, 결과) — 결과: login(연결된 계정) · linked(같은 이메일 계정에 새로 연결) · new
+    · email_taken(같은 이메일 계정이 있지만 자동 연결할 수 없음 — 그 계정을 함께 돌려준다)"""
+    account = _account(db, profile.provider, profile.provider_user_id)
     if account:
         return db.get(m.User, account.user_id), "login"
     email = profile.email.lower() if profile.email else None
@@ -71,11 +107,9 @@ def _find_user(db: Session, profile: SocialProfile) -> tuple[m.User | None, str]
         return None, "new"
     # 양쪽 모두 이메일 주인이 확인된 경우에만 자동 연결 — 남의 이메일로 미리 가입해 둔 계정을 가로채는 것을 막는다
     if profile.email_verified and existing.email_verified:
-        db.add(m.OAuthAccount(user_id=existing.id, provider=profile.provider,
-                              provider_user_id=profile.provider_user_id, email=email))
-        db.commit()
+        _connect(db, existing, profile.provider, profile.provider_user_id, email, True)
         return existing, "linked"
-    return None, "email_taken"
+    return existing, "email_taken"
 
 
 @router.get("/auth/providers")
@@ -90,31 +124,58 @@ def social_start(provider: Provider) -> RedirectResponse:
         return _to_login_page(error="not_configured", provider=provider)
     state = secrets.token_urlsafe(32)  # 다른 사이트가 로그인 과정을 위조하지 못하게 (CSRF)
     res = RedirectResponse(oauth.authorize_url(provider, state), status_code=status.HTTP_302_FOUND)
-    res.set_cookie(STATE_COOKIE, state, max_age=600, httponly=True, samesite="lax", path="/api/auth",
-                   secure=get_settings().public_base_url.startswith("https"))
+    _set_cookie(res, STATE_COOKIE, state)
+    res.delete_cookie(LINK_COOKIE, path=COOKIE_PATH)  # 예전에 시작하다 만 '연결하기'가 이번 로그인에 섞이지 않게
     return res
+
+
+def _link_callback(db: Session, provider: Provider, user_id: UUID, profile: SocialProfile) -> RedirectResponse:
+    """계정 설정에서 시작한 연결: 로그인한 사용자에게 이 간편 로그인 계정을 붙인다."""
+    user = db.get(m.User, user_id)
+    if user is None:
+        return _to_login_page(error="state", provider=provider)
+    account = _account(db, provider, profile.provider_user_id)
+    if account:
+        return _to_settings(linked=provider) if account.user_id == user.id else _to_settings(link_error="taken", provider=provider)
+    if db.scalar(select(m.OAuthAccount.id).where(m.OAuthAccount.user_id == user.id, m.OAuthAccount.provider == provider)):
+        return _to_settings(link_error="duplicate", provider=provider)  # 다른 Google 계정이 이미 연결돼 있음
+    email = profile.email.lower() if profile.email else None
+    _connect(db, user, provider, profile.provider_user_id, email, profile.email_verified)
+    return _to_settings(linked=provider)
 
 
 @router.get("/auth/{provider}/callback", include_in_schema=False)
 def social_callback(provider: Provider, request: Request, db: DB, code: str | None = None,
                     state: str | None = None, error: str | None = None) -> RedirectResponse:
+    link = read_ticket(request.cookies.get(LINK_COOKIE, ""), "link_start")
+    fail = (lambda e: _to_settings(link_error=e, provider=provider)) if link else (lambda e: _to_login_page(error=e, provider=provider))
     if error:  # 사용자가 동의 화면에서 취소
-        return _to_login_page(error="cancelled", provider=provider)
+        return fail("cancelled")
     expected = request.cookies.get(STATE_COOKIE)
     if not (code and state and expected and secrets.compare_digest(state, expected)):
         return _to_login_page(error="state", provider=provider)
+    if link and link.get("state") != state:
+        return _to_login_page(error="state", provider=provider)
     if oauth.client_credentials(provider) is None:
-        return _to_login_page(error="not_configured", provider=provider)
+        return fail("not_configured")
     try:
         profile = oauth.fetch_profile(provider, code)
     except OAuthError:
-        return _to_login_page(error="provider", provider=provider)
+        return fail("provider")
+    if link:
+        return _link_callback(db, provider, UUID(link["sub"]), profile)
 
     user, outcome = _find_user(db, profile)
+    if outcome == "email_taken":
+        if user.password_hash is None:  # 다른 간편 로그인으로만 가입한 계정 — 그쪽으로 로그인한 뒤 설정에서 연결
+            via = db.scalars(select(m.OAuthAccount.provider).where(m.OAuthAccount.user_id == user.id))
+            return _to_login_page(error="email_taken_social", provider=provider, via=",".join(sorted(set(via))))
+        # 이메일로 가입한 계정 — 그 계정의 비밀번호를 한 번 확인하고 연결한다 (프로필은 서명된 티켓에 담아 둔다)
+        ticket = create_ticket("link", {"sub": str(user.id), "provider": provider, "pid": profile.provider_user_id,
+                                        "email": user.email, "ev": profile.email_verified}, timedelta(minutes=10))
+        return _to_login_page(social_link=ticket, provider=provider, email=user.email)
     if user:
         return _to_login_page(login_ticket=create_ticket("login", {"sub": str(user.id)}, timedelta(minutes=2)))
-    if outcome == "email_taken":
-        return _to_login_page(error="email_taken", provider=provider)
     # 처음 온 사용자 → 약관 동의 화면으로 (프로필은 서명된 티켓에 담아 둔다)
     email = profile.email.lower() if profile.email else None
     ticket = create_ticket("signup", {"provider": profile.provider, "pid": profile.provider_user_id, "email": email,
@@ -129,6 +190,28 @@ def social_exchange(body: TicketIn, db: DB) -> TokenOut:
     user = db.get(m.User, UUID(claims["sub"])) if claims else None
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "로그인 시간이 지났어요. 다시 시도해 주세요")
+    return _token(user)
+
+
+@router.post("/auth/social/link")
+def social_link(body: SocialLinkIn, db: DB) -> TokenOut:
+    """같은 이메일로 이미 가입한 계정에 간편 로그인을 연결한다 — 그 계정의 비밀번호로 본인 확인."""
+    c = read_ticket(body.link_token, "link")
+    user = db.get(m.User, UUID(c["sub"])) if c else None
+    if user is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "연결 시간이 지났어요. 간편 로그인을 다시 시도해 주세요")
+    if not verify_password(body.password, user.password_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "비밀번호가 맞지 않아요")
+    account = _account(db, c["provider"], c["pid"])
+    if account and account.user_id != user.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "이 간편 로그인 계정은 이미 다른 Eureka 계정에 연결돼 있어요")
+    if account is None:
+        try:
+            _connect(db, user, c["provider"], c["pid"], c["email"], c["ev"])
+        except IntegrityError:  # 버튼을 두 번 누른 경우 등
+            db.rollback()
+            if _account(db, c["provider"], c["pid"]) is None:
+                raise
     return _token(user)
 
 
@@ -205,6 +288,49 @@ def delete_me(body: AccountDeleteIn, user: CurrentUser, db: DB) -> Response:
     avatars.delete_photo(user_id)
     materials.delete_user_files(user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------- 로그인 방법 (계정 설정) ----------
+def _connections(db: Session, user: m.User) -> ConnectionsOut:
+    rows = db.scalars(select(m.OAuthAccount).where(m.OAuthAccount.user_id == user.id).order_by(m.OAuthAccount.created_at))
+    return ConnectionsOut(has_password=user.password_hash is not None,
+                          accounts=[ConnectionOut.model_validate(a) for a in rows], available=providers())
+
+
+@router.get("/me/connections")
+def list_connections(user: CurrentUser, db: DB) -> ConnectionsOut:
+    return _connections(db, user)
+
+
+@router.post("/me/connections/{provider}/start")
+def start_connection(provider: Provider, user: CurrentUser, response: Response) -> LinkStartOut:
+    """연결 시작 — 화면은 돌려받은 url 로 이동한다. 콜백이 누구에게 붙일지 알 수 있게 서명된 쿠키를 함께 심는다."""
+    if oauth.client_credentials(provider) is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "이 간편 로그인은 아직 준비 중이에요")
+    state = secrets.token_urlsafe(32)
+    _set_cookie(response, STATE_COOKIE, state)
+    _set_cookie(response, LINK_COOKIE, create_ticket("link_start", {"sub": str(user.id), "state": state}, timedelta(minutes=10)))
+    return LinkStartOut(url=oauth.authorize_url(provider, state))
+
+
+@router.delete("/me/connections/{provider}")
+def remove_connection(provider: Provider, user: CurrentUser, db: DB) -> ConnectionsOut:
+    count = db.scalar(select(func.count()).where(m.OAuthAccount.user_id == user.id))
+    if user.password_hash is None and count <= 1:
+        raise HTTPException(status.HTTP_409_CONFLICT, "로그인 방법이 하나뿐이라 해제할 수 없어요. 비밀번호를 먼저 만들어 주세요")
+    db.execute(delete(m.OAuthAccount).where(m.OAuthAccount.user_id == user.id, m.OAuthAccount.provider == provider))
+    db.commit()
+    return _connections(db, user)
+
+
+@router.put("/me/password")
+def set_password(body: PasswordIn, user: CurrentUser, db: DB) -> ConnectionsOut:
+    """간편 로그인으로만 가입했으면 새로 만들고, 이미 있으면 현재 비밀번호를 확인하고 바꾼다."""
+    if user.password_hash is not None and not verify_password(body.current_password or "", user.password_hash):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "현재 비밀번호가 맞지 않아요")
+    user.password_hash = hash_password(body.new_password)
+    db.commit()
+    return _connections(db, user)
 
 
 @router.post("/me/avatar")

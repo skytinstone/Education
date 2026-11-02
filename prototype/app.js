@@ -145,7 +145,7 @@
     else if (page === "project") renderProject(a);
     else if (page === "notes") renderNotes();
     else if (page === "library") renderLibrary(a ?? "concepts", b);
-    else if (page === "settings") renderSettings();
+    else if (page === "settings") renderSettings(params);
     else return go("/");
     renderSidebar();
     if (page !== "chat") contentEl.scrollTop = 0;
@@ -1295,7 +1295,95 @@
     input.addEventListener("blur", () => setTimeout(close, 100));
   }
 
-  function renderSettings() {
+  const PROVIDERS = {
+    google: { name: "Google", icon: `<svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.5-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>` },
+    kakao: { name: "카카오", icon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#000" d="M12 3C6.48 3 2 6.58 2 11c0 2.83 1.86 5.32 4.66 6.73l-.95 3.48c-.08.3.26.54.52.37l4.13-2.73c.53.06 1.08.1 1.64.1 5.52 0 10-3.58 10-8s-4.48-8-10-8z"/></svg>` },
+  };
+  const LINK_ERRORS = {
+    taken: (p) => `이 ${p} 계정은 이미 다른 Eureka 계정에 연결돼 있어요`,
+    duplicate: (p) => `이미 다른 ${p} 계정이 연결돼 있어요. 먼저 연결을 해제해 주세요`,
+    cancelled: (p) => `${p} 연결을 취소했어요`,
+    not_configured: (p) => `${p} 로그인은 아직 준비 중이에요`,
+    provider: (p) => `${p}와 연결하지 못했어요. 잠시 후 다시 시도해 주세요`,
+  };
+
+  // 로그인 방법: 이메일·비밀번호, Google, 카카오. 마지막 남은 방법은 해제할 수 없다
+  async function renderLoginMethods() {
+    const box = $("#login-methods");
+    if (!box) return;
+    let c;
+    try { c = await Store.connections(); } catch (err) { box.innerHTML = `<p class="mini">${esc(err.message)}</p>`; return; }
+    if (!document.body.contains(box)) return; // 그새 다른 화면으로 이동
+    const total = c.accounts.length + (c.has_password ? 1 : 0);
+    const row = (icon, name, desc, action) => `
+      <div class="method-row"><span class="method-icon">${icon}</span>
+        <div class="method-text"><b>${name}</b><small>${desc}</small></div>${action}</div>`;
+    box.innerHTML = [
+      row(`<i data-lucide="mail"></i>`, "이메일 · 비밀번호",
+        c.has_password ? `${esc(Store.state.user.email)} 로 로그인할 수 있어요` : "비밀번호를 만들면 이메일로도 로그인할 수 있어요",
+        `<button class="btn-ghost glassy" data-pw>${c.has_password ? "비밀번호 바꾸기" : "비밀번호 만들기"}</button>`),
+      ...Object.entries(PROVIDERS).map(([key, p]) => {
+        const acc = c.accounts.find((a) => a.provider === key);
+        const action = acc
+          ? `<button class="btn-ghost glassy" data-unlink="${key}" ${total <= 1 ? 'disabled title="로그인 방법이 하나뿐이라 해제할 수 없어요"' : ""}>연결 해제</button>`
+          : c.available[key] ? `<button class="btn-primary" data-link="${key}">연결하기</button>`
+          : `<button class="btn-ghost glassy" disabled>준비 중</button>`;
+        return row(p.icon, p.name, acc ? `${esc(acc.email ?? "연결됨")} · ${relTime(new Date(acc.created_at).getTime())} 연결` : "연결하면 버튼 하나로 로그인할 수 있어요", action)
+          .replace('class="method-icon"', `class="method-icon ${key}"`);
+      }),
+    ].join("") + (total <= 1 ? `<p class="mini">로그인 방법이 하나뿐이에요. 다른 방법을 하나 더 연결해 두면 계정을 잃어버릴 걱정이 줄어요</p>` : "");
+    icons();
+
+    box.onclick = async (e) => {
+      const link = e.target.closest("[data-link]")?.dataset.link;
+      const unlink = e.target.closest("[data-unlink]")?.dataset.unlink;
+      if (link) {
+        try { location.href = (await Store.startConnection(link)).url; } catch (err) { toast(err.message); }
+      } else if (unlink) {
+        confirmModal({
+          title: `${PROVIDERS[unlink].name} 연결 해제`, action: "해제",
+          text: `이제 ${PROVIDERS[unlink].name}로는 로그인할 수 없어요. 언제든 다시 연결할 수 있어요.`,
+          run: async () => {
+            try { await Store.removeConnection(unlink); toast(`${PROVIDERS[unlink].name} 연결을 해제했어요`); renderLoginMethods(); }
+            catch (err) { toast(err.message); }
+          },
+        });
+      } else if (e.target.closest("[data-pw]")) {
+        passwordModal(c.has_password);
+      }
+    };
+  }
+
+  function passwordModal(hasPassword) {
+    formModal({
+      title: hasPassword ? "비밀번호 바꾸기" : "비밀번호 만들기", submit: "저장",
+      body: `${hasPassword ? `<div class="field"><label for="f-pw-cur">현재 비밀번호</label><input id="f-pw-cur" type="password" autocomplete="current-password" /></div>` : ""}
+        <div class="field"><label for="f-pw-new">새 비밀번호</label><input id="f-pw-new" type="password" placeholder="8자 이상, 영문과 숫자 포함" autocomplete="new-password" /></div>
+        <div class="field"><label for="f-pw-new2">새 비밀번호 확인</label><input id="f-pw-new2" type="password" autocomplete="new-password" /></div>`,
+      onSubmit: (f) => {
+        $$(".invalid", f).forEach((x) => x.classList.remove("invalid"));
+        const cur = $("#f-pw-cur", f), pw = $("#f-pw-new", f).value, pw2 = $("#f-pw-new2", f).value;
+        if (cur && !cur.value) return invalid(cur, "현재 비밀번호를 입력해 주세요");
+        if (pw.length < 8 || !/[a-zA-Z]/.test(pw) || !/\d/.test(pw)) return invalid($("#f-pw-new", f), "8자 이상, 영문과 숫자를 함께 써 주세요");
+        if (pw !== pw2) return invalid($("#f-pw-new2", f), "비밀번호가 일치하지 않아요");
+        Store.setPassword(cur?.value, pw).then(() => {
+          closeOverlays();
+          toast(hasPassword ? "비밀번호를 바꿨어요" : "비밀번호를 만들었어요. 이제 이메일로도 로그인할 수 있어요");
+          renderLoginMethods();
+        }).catch((err) => invalid(cur && /현재/.test(err.message) ? cur : $("#f-pw-new", f), err.message));
+        return false; // 서버 응답을 받은 뒤 닫는다
+      },
+    });
+  }
+
+  function renderSettings(params = new URLSearchParams()) {
+    // 계정 설정에서 시작한 간편 로그인 연결의 결과 (#/settings?linked=google 또는 ?link_error=…)
+    const done = params.get("linked"), failed = params.get("link_error");
+    if (done || failed) {
+      const name = PROVIDERS[done ?? params.get("provider")]?.name ?? "간편 로그인";
+      toast(done ? `${name} 계정을 연결했어요. 이제 ${name}로도 로그인할 수 있어요` : (LINK_ERRORS[failed] ?? LINK_ERRORS.provider)(name));
+      history.replaceState(null, "", "#/settings");
+    }
     const u = Store.state.user;
     view.innerHTML = `
       <div class="page-head"><div><h1><i data-lucide="user-round-cog"></i>계정 설정</h1><p>프로필 사진과 내 정보를 관리해요</p></div></div>
@@ -1346,6 +1434,11 @@
           <div class="addr-embed" id="addr-embed" hidden></div></div>
         <div class="settings-foot"><button class="btn-primary" type="submit"><i data-lucide="check"></i>저장</button></div>
       </form>
+
+      ${Store.mode === "api" ? `<section class="glass-card settings-card" style="--c:#22c55e">
+        <h3><i data-lucide="key-round"></i>로그인 방법</h3>
+        <div id="login-methods"><p class="mini">불러오는 중…</p></div>
+      </section>` : ""}
 
       <section class="glass-card settings-card" style="--c:#94a3b8">
         <h3><i data-lucide="shield"></i>계정</h3>
@@ -1440,6 +1533,7 @@
         renderSidebar();
       } catch (err) { toast(err.message); }
     });
+    renderLoginMethods();
     $("#s-logout").addEventListener("click", () => {
       try { localStorage.removeItem("eureka.token"); localStorage.removeItem("eureka.user"); } catch { /* 무시 */ }
       location.href = "login.html";

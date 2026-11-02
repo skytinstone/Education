@@ -3,6 +3,7 @@
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+from sqlalchemy import func, select
 
 from education.config import get_settings
 from education.db import models as m
@@ -110,10 +111,113 @@ def test_verified_emails_link_accounts(client, configured, profile):
     assert client.post("/api/auth/social/exchange", json={"ticket": f["login_ticket"]}).json()["user"]["id"] == uid
 
 
-def test_unverified_existing_account_is_not_linked(client, configured, profile, new_user):
+def test_unverified_existing_account_needs_password_to_link(client, configured, profile, new_user, db):
     new_user(email="victim@gmail.com")  # 이메일 인증 없이 가입된 계정
     profile(provider="google", provider_user_id="g-3", email="victim@gmail.com", email_verified=True, name="V")
-    assert login_via(client, "google")["error"] == "email_taken"
+    f = login_via(client, "google")
+    assert "login_ticket" not in f and f["email"] == "victim@gmail.com"  # 자동 연결하지 않고 비밀번호 확인으로
+
+    wrong = client.post("/api/auth/social/link", json={"link_token": f["social_link"], "password": "nope1234"})
+    assert wrong.status_code == 403
+    assert db.scalar(select(func.count()).select_from(m.OAuthAccount).where(m.OAuthAccount.provider_user_id == "g-3")) == 0
+
+    r = client.post("/api/auth/social/link", json={"link_token": f["social_link"], "password": "abc12345"})
+    assert r.status_code == 200 and r.json()["user"]["email"] == "victim@gmail.com"
+    user = db.get(m.User, r.json()["user"]["id"])
+    db.refresh(user)
+    assert user.email_verified  # Google 이 인증한 이메일 + 비밀번호 확인 → 이 이메일의 주인
+    again = client.post("/api/auth/social/link", json={"link_token": f["social_link"], "password": "abc12345"})
+    assert again.status_code == 200  # 두 번 눌러도 같은 계정
+
+    # 이제 Google 로 바로 로그인되고, 이메일이 인증됐으니 카카오(인증 이메일)는 자동 연결된다
+    assert "login_ticket" in login_via(client, "google")
+    profile(provider="kakao", provider_user_id="k-3", email="victim@gmail.com", email_verified=True, name="V")
+    assert "login_ticket" in login_via(client, "kakao")
+
+
+def test_link_ticket_is_its_own_kind(client, configured, profile, new_user):
+    new_user(email="lk@gmail.com")
+    profile(provider="google", provider_user_id="g-6", email="lk@gmail.com", email_verified=True, name="L")
+    link = login_via(client, "google")["social_link"]
+    assert client.post("/api/auth/social/exchange", json={"ticket": link}).status_code == 401
+    assert client.get("/api/me", headers={"Authorization": f"Bearer {link}"}).status_code == 401
+    assert client.post("/api/auth/social/link", json={"link_token": "forged", "password": "abc12345"}).status_code == 401
+
+
+def test_social_only_account_points_to_its_provider(client, configured, profile):
+    # 카카오에서 이메일을 못 받아 직접 입력한(미인증) 계정 — 비밀번호가 없으니 카카오로 로그인 후 설정에서 연결
+    profile(provider="kakao", provider_user_id="k-7", email=None, email_verified=False, name="K")
+    f = login_via(client, "kakao")
+    client.post("/api/auth/social/complete", json={"signup_token": f["social_signup"], "email": "so@gmail.com", **CONSENT})
+    profile(provider="google", provider_user_id="g-7", email="so@gmail.com", email_verified=True, name="K")
+    f = login_via(client, "google")
+    assert f["error"] == "email_taken_social" and f["via"] == "kakao"
+
+
+# ---------- 계정 설정에서 연결 · 해제 ----------
+def connect_via(client, headers, provider: str):
+    start = client.post(f"/api/me/connections/{provider}/start", headers=headers)
+    assert start.status_code == 200, start.text
+    state = parse_qs(urlparse(start.json()["url"]).query)["state"][0]
+    res = client.get(f"/api/auth/{provider}/callback?code=abc&state={state}", follow_redirects=False)
+    assert res.status_code == 302
+    loc = urlparse(res.headers["location"])
+    assert loc.path == "/app/index.html"
+    path, _, qs = loc.fragment.partition("?")
+    assert path == "/settings"
+    return {k: v[0] for k, v in parse_qs(qs).items()}
+
+
+def test_connect_and_disconnect_from_settings(client, configured, profile, auth, new_user):
+    assert client.get("/api/me/connections", headers=auth).json()["accounts"] == []
+    profile(provider="google", provider_user_id="g-8", email="other@gmail.com", email_verified=True, name="S")
+    assert connect_via(client, auth, "google") == {"linked": "google"}
+    c = client.get("/api/me/connections", headers=auth).json()
+    assert c["has_password"] and [a["provider"] for a in c["accounts"]] == ["google"]
+    assert connect_via(client, auth, "google") == {"linked": "google"}  # 이미 연결된 같은 계정은 그대로
+
+    # 연결한 Google 로 바로 로그인된다 (이메일이 달라도)
+    assert "login_ticket" in login_via(client, "google")
+
+    # 다른 사용자가 같은 Google 계정을 연결하려 하면 막는다
+    other = new_user()
+    assert connect_via(client, other, "google") == {"link_error": "taken", "provider": "google"}
+    # 이미 Google 이 있는 사용자가 다른 Google 계정을 또 붙이려 하면 막는다
+    profile(provider="google", provider_user_id="g-9", email="x@gmail.com", email_verified=True, name="S")
+    assert connect_via(client, auth, "google") == {"link_error": "duplicate", "provider": "google"}
+
+    r = client.delete("/api/me/connections/google", headers=auth)
+    assert r.status_code == 200 and r.json()["accounts"] == []
+
+
+def test_link_cookie_does_not_leak_into_next_login(client, configured, profile, auth):
+    client.post("/api/me/connections/google/start", headers=auth)  # 시작만 하고 그만둠
+    profile(provider="google", provider_user_id="g-10", email="fresh@gmail.com", email_verified=True, name="F")
+    f = login_via(client, "google")  # 일반 로그인 시작은 연결 쿠키를 지운다
+    assert "social_signup" in f
+
+
+def test_cannot_remove_last_login_method_until_password_set(client, configured, profile):
+    profile(provider="google", provider_user_id="g-11", email="only@gmail.com", email_verified=True, name="O")
+    f = login_via(client, "google")
+    token = client.post("/api/auth/social/complete", json={"signup_token": f["social_signup"], **CONSENT}).json()["access_token"]
+    h = {"Authorization": f"Bearer {token}"}
+    assert client.delete("/api/me/connections/google", headers=h).status_code == 409
+
+    assert client.put("/api/me/password", headers=h, json={"new_password": "short"}).status_code == 422
+    r = client.put("/api/me/password", headers=h, json={"new_password": "newpass123"})
+    assert r.status_code == 200 and r.json()["has_password"]
+    assert client.post("/api/auth/login", json={"email": "only@gmail.com", "password": "newpass123"}).status_code == 200
+    # 비밀번호가 생긴 뒤에는 바꿀 때 현재 비밀번호가 필요하다
+    assert client.put("/api/me/password", headers=h, json={"new_password": "another123"}).status_code == 403
+    assert client.put("/api/me/password", headers=h, json={"current_password": "newpass123", "new_password": "another123"}).status_code == 200
+    assert client.delete("/api/me/connections/google", headers=h).status_code == 200
+
+
+def test_settings_link_cancel_returns_to_settings(client, configured, auth):
+    client.post("/api/me/connections/kakao/start", headers=auth)
+    res = client.get("/api/auth/kakao/callback?error=access_denied", follow_redirects=False)
+    assert res.headers["location"].startswith("/app/index.html#/settings?link_error=cancelled")
 
 
 def test_tickets_are_not_interchangeable(client, configured, profile, auth):

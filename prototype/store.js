@@ -501,6 +501,14 @@ const Store = (() => {
       commit();
     },
 
+    // ---------- 로그인 방법 (서버 모드 전용) ----------
+    connections: () => api("/me/connections"),
+    // 서버가 연결 쿠키를 심고 제공자 로그인 주소를 돌려준다 → 그 주소로 이동, 끝나면 #/settings?linked=… 로 돌아온다
+    startConnection: (provider) => api(`/me/connections/${provider}/start`, { method: "POST" }),
+    removeConnection: (provider) => api(`/me/connections/${provider}`, { method: "DELETE" }),
+    setPassword: (currentPassword, newPassword) =>
+      api("/me/password", { method: "PUT", body: { current_password: currentPassword || null, new_password: newPassword } }),
+
     // ---------- 기출 업로드 · 기출 기반 생성 (서버 모드 전용) ----------
     listMaterials: (projectId) => api(`/projects/${projectId}/materials`),
     pastProblems: (projectId) => api(`/projects/${projectId}/past-problems`),
