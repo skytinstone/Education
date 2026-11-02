@@ -7,10 +7,10 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 
 from education.api.deps import DB, CurrentUser
-from education.api.dto import AdminFeedbackOut, AdminFeedbackPatch, FeedbackIn, FeedbackOut
+from education.api.dto import AdminFeedbackOut, AdminFeedbackPatch, AnnouncementIn, FeedbackIn, FeedbackOut
 from education.config import get_settings
 from education.db import models as m
-from education.services import feedback
+from education.services import feedback, notifications
 
 router = APIRouter(tags=["피드백"])
 
@@ -64,10 +64,20 @@ def update_feedback(feedback_id: UUID, body: AdminFeedbackPatch, db: DB) -> Admi
         raise HTTPException(404, "피드백을 찾을 수 없어요")
     if body.status:
         fb.status = body.status
-    if body.reply is not None and body.reply.strip():
+    if body.reply is not None and body.reply.strip() and body.reply.strip() != fb.reply:
         fb.reply, fb.replied_at = body.reply.strip(), datetime.now(timezone.utc)
+        notifications.notify(db, fb.user_id, "feedback_reply", f"보내 주신 의견에 답변했어요 · {feedback.KIND_NAME[fb.kind]}",
+                             body=f"내 의견: {fb.message[:200]}\n\n답변: {fb.reply}")
     db.commit()
     return _admin_view(db, fb)
+
+
+@admin.post("/announcements", status_code=status.HTTP_201_CREATED)
+def announce(body: AnnouncementIn, db: DB) -> dict:
+    """모든 사용자에게 공지 알림."""
+    n = notifications.announce(db, body.title.strip(), body=(body.body or "").strip() or None, link=body.link or None)
+    db.commit()
+    return {"sent": n}
 
 
 @admin.post("/problems/{problem_id}/restore", status_code=status.HTTP_204_NO_CONTENT)

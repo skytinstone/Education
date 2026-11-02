@@ -363,6 +363,31 @@ class AdminFeedbackPatch(BaseModel):
     reply: str | None = Field(default=None, max_length=2000)
 
 
+class NotificationOut(Out):
+    id: UUID
+    kind: str
+    title: str
+    body: str | None
+    link: str | None
+    read_at: datetime | None
+    created_at: datetime
+
+
+class NotificationList(BaseModel):
+    unread: int
+    items: list[NotificationOut]
+
+
+class NotificationRead(BaseModel):
+    ids: list[UUID] | None = None  # 비우면 모두 읽음
+
+
+class AnnouncementIn(BaseModel):
+    title: str = Field(min_length=2, max_length=120)
+    body: str | None = Field(default=None, max_length=2000)
+    link: str | None = Field(default=None, max_length=200)
+
+
 class SolutionReviewIn(BaseModel):
     """서술형 풀이 — 타이핑한 글, 손글씨 캔버스(PNG data URL) 중 하나 이상."""
     text: str | None = Field(default=None, max_length=4000)

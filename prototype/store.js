@@ -456,6 +456,10 @@ const Store = (() => {
       commit();
       return r;
     },
+    // 알림 — { unread, items } / 읽음 처리 (ids 를 비우면 모두)
+    notifications() { return local ? Promise.resolve({ unread: 0, items: [] }) : api("/notifications"); },
+    readNotifications(ids = null) { return local ? Promise.resolve() : api("/notifications/read", { method: "POST", body: { ids } }); },
+    adminAnnounce(body) { return api("/admin/announcements", { method: "POST", body }); },
     // 피드백·문제 신고 { kind, message, problem_id, page }
     sendFeedback(body) {
       return api("/feedback", { method: "POST", body });

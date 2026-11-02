@@ -293,6 +293,29 @@ class Feedback(Base):
     )
 
 
+class Notification(Base):
+    """알림 — 기출 분석 완료·피드백 답변·공지는 일이 생길 때 바로, 복습·D-day·카드·연속 학습은 하루 한 번 계산해서 만든다.
+    key 가 있으면 사용자마다 한 번만 만든다 (예: "dday:프로젝트id:7")."""
+    __tablename__ = "notifications"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(16))
+    title: Mapped[str] = mapped_column(String(120))
+    body: Mapped[str | None] = mapped_column(Text)
+    link: Mapped[str | None] = mapped_column(String(200))  # 누르면 갈 화면 (#/project/… 등)
+    key: Mapped[str | None] = mapped_column(String(120))
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (
+        CheckConstraint("kind IN ('material', 'feedback_reply', 'announcement', 'review_due', 'exam_dday', 'cards_due', 'streak')",
+                        name="notification_kind"),
+        UniqueConstraint("user_id", "key", name="uq_notification_user_key"),
+        Index("ix_notifications_user_created", "user_id", "created_at"),
+    )
+
+
 class ConceptNote(Base):
     """사용자마다 따로 만드는 AI 개념 정리 — 그 사람의 풀이·오답 기록에 맞춘다.
     검증 에이전트를 통과한 것만 저장하고, 다시 만들면 덮어쓴다."""

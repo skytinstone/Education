@@ -15,7 +15,7 @@ from education.api.dto import UserOut
 from education.config import get_settings
 from education.db import models as m
 from education.schemas import VerificationStatus
-from education.services import learning
+from education.services import learning, notifications
 
 router = APIRouter(tags=["동기화"])
 
@@ -37,6 +37,7 @@ def sync(user: CurrentUser, db: DB) -> dict:
             "major": user.major, "address": user.address, "avatarType": user.avatar_type,
             "avatarPreset": user.avatar_preset, "avatarUrl": UserOut.model_validate(user).avatar_url,
             "isAdmin": user.email.lower() in get_settings().admins,
+            "unreadNotifications": notifications.unread_count(db, user.id),
         },
         "projects": [{
             "id": str(p.id), "name": p.name, "subjectId": p.subject_id, "unitIds": p.unit_ids, "goal": p.goal,

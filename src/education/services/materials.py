@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from education.config import ROOT, get_settings
 from education.db import models as m
 from education.schemas import ProblemSource, ProblemType, VerificationStatus
+from education.services import notifications
 from education.services.llm import LLM, Attachment, LLMError, get_llm
 
 log = logging.getLogger(__name__)
@@ -151,6 +152,7 @@ def process(material_id: uuid.UUID, open_session: Callable[[], AbstractContextMa
             log.warning("기출 분석 실패 %s: %s", material_id, e)
             db.add(m.LLMCall(purpose="extract", model=s.openai_model_generate, ok=False, error=str(e), user_id=material.user_id))
             material.status, material.error = "failed", "시험지를 읽지 못했어요. 더 선명한 파일로 다시 올려 주세요"
+            _notify_done(db, material)
             db.commit()
             return
 
@@ -163,4 +165,14 @@ def process(material_id: uuid.UUID, open_session: Callable[[], AbstractContextMa
         material.problem_count = len(problems)
         material.status = "ready" if problems else "failed"
         material.error = None if problems else "시험지에서 문제를 찾지 못했어요"
+        _notify_done(db, material)
         db.commit()
+
+
+def _notify_done(db: Session, material: m.Material) -> None:
+    ok = material.status == "ready"
+    notifications.notify(
+        db, material.user_id, "material",
+        f"기출 분석 완료 · {material.filename[:60]}" if ok else f"기출 분석 실패 · {material.filename[:60]}",
+        body=f"문제 {material.problem_count}개를 읽었어요. 이 시험과 비슷한 결의 문제를 만들 수 있어요" if ok else material.error,
+        link=f"#/project/{material.project_id}")

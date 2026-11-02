@@ -1602,6 +1602,78 @@
   }
   $("#feedback-btn").addEventListener("click", () => feedbackModal());
 
+  // ================= 알림 =================
+  // 종 버튼: 안 읽은 알림이 있을 때만 점, 누르면 목록. 화면이 보이는 동안 1분마다 새 알림 확인
+  const NOTIFY_ICON = { material: "file-check-2", feedback_reply: "message-square-reply", announcement: "megaphone",
+    review_due: "rotate-ccw", exam_dday: "calendar-clock", cards_due: "layers", streak: "flame" };
+  const bell = $("#notify-btn");
+  let notifyItems = [];
+  function setUnread(n) {
+    $(".dot", bell).hidden = !n;
+    bell.title = n ? `알림 ${n}개` : "알림";
+    bell.setAttribute("aria-label", bell.title);
+  }
+  async function refreshNotifications() {
+    if (Store.mode !== "api") return;
+    try { const r = await Store.notifications(); notifyItems = r.items; setUnread(r.unread); } catch { /* 다음 차례에 다시 */ }
+  }
+  setInterval(() => { if (document.visibilityState === "visible") refreshNotifications(); }, 60_000);
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") refreshNotifications(); });
+
+  let notifyPanel = null;
+  const closeNotify = () => { notifyPanel?.remove(); notifyPanel = null; document.removeEventListener("mousedown", notifyOutside); };
+  const notifyOutside = (e) => { if (notifyPanel && !notifyPanel.contains(e.target) && !bell.contains(e.target)) closeNotify(); };
+  function drawNotify() {
+    const unread = notifyItems.filter((n) => !n.read_at).length;
+    notifyPanel.innerHTML = `
+      <div class="np-head"><b>알림</b>${unread ? `<button type="button" data-read-all>모두 읽음</button>` : ""}</div>
+      <div class="np-list">${notifyItems.length ? notifyItems.map((n) => `
+        <button type="button" class="np-item ${n.read_at ? "" : "unread"}" data-nid="${n.id}">
+          <span class="np-icon k-${n.kind}"><i data-lucide="${NOTIFY_ICON[n.kind] ?? "bell"}"></i></span>
+          <span class="np-text"><b>${esc(n.title)}</b>${n.body ? `<small>${esc(n.body)}</small>` : ""}<em>${relTime(Date.parse(n.created_at))}</em></span>
+        </button>`).join("") : '<p class="np-empty">새 알림이 없어요</p>'}</div>`;
+    lucide.createIcons();
+  }
+  async function openNotify() {
+    if (notifyPanel) return closeNotify();
+    if (Store.mode !== "api") return toast("알림은 로그인한 서버 화면에서 볼 수 있어요");
+    closeMenu();
+    notifyPanel = document.createElement("div");
+    notifyPanel.className = "notify-panel";
+    notifyPanel.innerHTML = '<p class="np-empty">불러오는 중…</p>';
+    document.body.append(notifyPanel);
+    const r = bell.getBoundingClientRect();
+    notifyPanel.style.top = `${r.bottom + 8}px`;
+    notifyPanel.style.right = `${Math.max(8, innerWidth - r.right)}px`;
+    setTimeout(() => document.addEventListener("mousedown", notifyOutside));
+    await refreshNotifications();
+    if (!notifyPanel) return;
+    drawNotify();
+    notifyPanel.addEventListener("click", async (e) => {
+      if (e.target.closest("[data-read-all]")) {
+        notifyItems.forEach((n) => (n.read_at ??= new Date().toISOString()));
+        setUnread(0);
+        drawNotify();
+        Store.readNotifications().catch(() => {});
+        return;
+      }
+      const item = e.target.closest("[data-nid]");
+      if (!item) return;
+      const n = notifyItems.find((x) => x.id === item.dataset.nid);
+      if (!n.read_at) {
+        n.read_at = new Date().toISOString();
+        setUnread(notifyItems.filter((x) => !x.read_at).length);
+        Store.readNotifications([n.id]).catch(() => {});
+      }
+      closeNotify();
+      if (n.link) location.hash = n.link.replace(/^#/, "");
+      else openSheet({ title: n.title, body: `<p class="notice-body">${esc(n.body ?? "")}</p>`, onSubmit: () => {},
+        footer: '<div class="modal-foot"><button type="submit" class="btn-primary">확인</button></div>' });
+    });
+  }
+  bell.addEventListener("click", openNotify);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && notifyPanel) closeNotify(); });
+
   // ================= 운영: 피드백 관리 (운영자 계정만) =================
   const FB_STATUS = { open: "접수", reviewing: "확인 중", resolved: "해결" };
   let adminFilter = "open";
@@ -1610,11 +1682,29 @@
     view.innerHTML = `
       <div class="page-head"><div><h1><i data-lucide="inbox"></i>피드백 관리</h1><p>문제 신고와 의견을 확인하고 답변해요</p></div>
         <div class="seg">${[["open", "처리할 것"], ["resolved", "해결됨"], ["all", "전체"]].map(([k, t]) => `<button data-afilter="${k}" class="${adminFilter === k ? "on" : ""}">${t}</button>`).join("")}</div></div>
+      <details class="panel announce">
+        <summary><i data-lucide="megaphone"></i>모든 사용자에게 공지 보내기</summary>
+        <div class="field"><label for="an-title">제목</label><input id="an-title" maxlength="120" placeholder="예: 11월 5일 밤 10시 점검 안내" /></div>
+        <div class="field"><label for="an-body">내용 <small>· 선택</small></label><textarea id="an-body" rows="3" maxlength="2000"></textarea></div>
+        <div class="field"><label for="an-link">누르면 갈 화면 <small>· 선택 (예: #/library)</small></label><input id="an-link" maxlength="200" /></div>
+        <div class="fb-actions"><button class="btn-primary" data-announce>공지 보내기</button></div>
+      </details>
       <div id="admin-list"><p class="mini">불러오는 중…</p></div>`;
     icons();
     view.onclick = async (e) => {
       const f = e.target.closest("[data-afilter]");
       if (f) { adminFilter = f.dataset.afilter; return renderAdmin(); }
+      if (e.target.closest("[data-announce]")) {
+        const title = $("#an-title").value.trim();
+        if (title.length < 2) return invalid($("#an-title"), "제목을 적어 주세요");
+        try {
+          const r = await Store.adminAnnounce({ title, body: $("#an-body").value.trim() || null, link: $("#an-link").value.trim() || null });
+          toast(`${r.sent}명에게 공지를 보냈어요`);
+          ["#an-title", "#an-body", "#an-link"].forEach((s) => ($(s).value = ""));
+          refreshNotifications();
+        } catch (err) { toast(err.message); }
+        return;
+      }
       const card = e.target.closest("[data-fb]");
       if (!card) return;
       const id = card.dataset.fb;
@@ -1645,7 +1735,7 @@
         ${f.problem_id ? `<div class="fb-problem"><small>${esc(f.problem_id)}${f.problem_hidden ? ' · <b class="bad">신고로 숨겨짐</b>' : ""}</small>
           <p data-math>${esc(f.problem_stem ?? "")}</p>
           ${f.problem_hidden ? `<button class="btn-ghost" data-frestore="${esc(f.problem_id)}"><i data-lucide="undo-2"></i>문제가 맞아요, 다시 보이게</button>` : ""}</div>` : ""}
-        <textarea rows="2" maxlength="2000" placeholder="답변 (저장하면 '해결'로 바뀌고, 다음 단계에서 사용자 알림으로 전달돼요)">${esc(f.reply ?? "")}</textarea>
+        <textarea rows="2" maxlength="2000" placeholder="답변 (저장하면 '해결'로 바뀌고, 보낸 사람에게 알림으로 전달돼요)">${esc(f.reply ?? "")}</textarea>
         <div class="fb-actions">
           ${Object.entries(FB_STATUS).filter(([k]) => k !== f.status).map(([k, t]) => `<button class="btn-ghost" data-fstatus="${k}">${t}(으)로</button>`).join("")}
           <button class="btn-primary" data-freply>답변 저장</button></div>
@@ -2184,6 +2274,7 @@
   // 첫 화면 표시 — 서버 모드면 내 데이터를 받아 온 뒤에 그린다
   Store.ready.then(() => {
   render();
+  setUnread(Store.state.user?.unreadNotifications ?? 0);
 
   // 홈 요소: 스크롤하면 아래에서 위로 떠오름
   [[".hero h1", ".hero p", ".hero .composer"], [".action"], [".banner"], [".tabs"], ["#cards-recent .card"], ["#cards-recommend .card"], [".section-head"], [".subject"]]
