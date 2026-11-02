@@ -152,6 +152,21 @@ sudo sh scripts/harden_server.sh
 ```
 보안 업데이트 자동 설치, SSH 무차별 대입 차단(fail2ban), SSH 비밀번호 로그인 금지, Docker 로그 크기 제한.
 
+## 11. 학습 알림 (매일 자동)
+복습(틀린 지 1·3·7일), 시험 D-day(30·7·1·당일), 암기 카드(주 1회)는 아침에, 연속 학습 알림은 저녁에 만든다.
+서버 시간은 UTC 라서 한국 시간 08:00 = UTC 23:00, 20:00 = UTC 11:00.
+```bash
+crontab -e
+# 맨 아래에 추가:
+0 23 * * * cd ~/Education && docker compose -f docker-compose.prod.yml exec -T app python -m education.reminders >> backups/reminders.log 2>&1
+0 11 * * * cd ~/Education && docker compose -f docker-compose.prod.yml exec -T app python -m education.reminders --evening >> backups/reminders.log 2>&1
+```
+같은 날 여러 번 돌아도 알림은 한 번만 생긴다. 바로 한 번 돌려 보려면 위 명령의 `cd` 뒤부터 실행.
+
+## 12. 운영자·피드백 메일
+`.env` 에 `ADMIN_EMAILS=내이메일` 을 넣으면 그 계정의 프로필 메뉴에 '피드백 관리'가 보인다 (문제 신고 확인·답변·복구, 전체 공지).
+새 피드백을 메일로 받으려면 `SMTP_USER`·`SMTP_PASSWORD` (Gmail 앱 비밀번호) 를 넣는다. 바꾼 뒤 `docker compose -f docker-compose.prod.yml up -d`.
+
 ---
 
 ## 새 버전 배포

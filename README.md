@@ -25,6 +25,8 @@ src/education/
   services/tutor.py         대화 답변 (AI 연결 전 임시: 문제 은행에서 고르기)
   services/notes.py         내 맞춤 개념 정리 + 암기 카드 (생성 → 검증 에이전트)
   services/review.py        서술형 풀이 확인 (손글씨 사진도 읽음, 처음 틀린 단계 표시)
+  services/feedback.py      피드백·문제 신고 (두 사람이 신고하면 숨김), mailer.py 운영자 메일
+  services/notifications.py 알림, reminders.py 매일 학습 알림 (python -m education.reminders)
   seed.py                   개념·문제·데모 계정 적재
 migrations/                 Alembic 마이그레이션
 docker-compose.yml          개발용 PostgreSQL 17 (127.0.0.1:5433)
