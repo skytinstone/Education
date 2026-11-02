@@ -115,6 +115,8 @@ class Course(Base):
     language: Mapped[str] = mapped_column(String(8), server_default="ko")
     scope_text: Mapped[str | None] = mapped_column(Text)  # 사용자가 붙여넣은 출제 범위 원문
     aliases: Mapped[list[str]] = mapped_column(ARRAY(String(60)), server_default="{}")  # 요청 문장에서 알아들을 이름
+    choice_count: Mapped[int] = mapped_column(SmallInteger, server_default="5")  # 객관식 보기 개수 (토익 4, 수능 5)
+    formats: Mapped[list[str]] = mapped_column(ARRAY(String(16)), server_default="{}")  # 시험 문제 형식 (비면 객관식)
     source: Mapped[str] = mapped_column(String(12), server_default="user")
     owner_user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     created_at: Mapped[datetime] = created_at()
@@ -146,7 +148,9 @@ class Problem(Base):
     problem_type: Mapped[ProblemType] = mapped_column(str_enum(ProblemType, "problem_type"))
     stem: Mapped[str] = mapped_column(Text)
     choices: Mapped[list[str] | None] = mapped_column(ARRAY(Text))
-    answer: Mapped[str] = mapped_column(String(64))
+    answer: Mapped[str] = mapped_column(Text)  # 객관식은 보기 번호, 그 밖에는 값 (서술형은 모범 답안)
+    # 형식별 채점 정보 — text: {accepted}, numeric: {unit, tolerance}, essay: {rubric, max_score}
+    answer_spec: Mapped[dict | None] = mapped_column(JSONB)
     solution: Mapped[str] = mapped_column(Text)
     traps: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}")
     source: Mapped[ProblemSource] = mapped_column(str_enum(ProblemSource, "problem_source"))
@@ -190,11 +194,13 @@ class Project(Base):
     # 공부하는 교재 (예: "수능특강 미적분, 쎈 수학Ⅰ") — 문제 생성·개념 정리가 이 교재의 단원 순서·문제 유형을 참고한다
     textbook: Mapped[str] = mapped_column(String(120), server_default="")
     exam_date: Mapped[date | None] = mapped_column(Date)
-    question_type: Mapped[str] = mapped_column(String(16), server_default="multiple_choice")  # multiple_choice | short_answer | mixed
+    question_type: Mapped[str] = mapped_column(String(16), server_default="auto")  # schemas.QUESTION_TYPES
     pinned: Mapped[bool] = mapped_column(Boolean, server_default="false")
     created_at: Mapped[datetime] = created_at()
 
-    __table_args__ = (CheckConstraint("question_type IN ('multiple_choice', 'short_answer', 'mixed')", name="project_question_type"),)
+    __table_args__ = (CheckConstraint(
+        "question_type IN ('auto', 'multiple_choice', 'short_answer', 'text', 'numeric', 'essay', 'mixed')",
+        name="project_question_type"),)
 
 
 class Material(Base):
@@ -259,7 +265,9 @@ class Attempt(Base):
     # 프로젝트·대화가 지워져도 풀이 기록은 남긴다
     project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), index=True)
     session_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("chat_sessions.id", ondelete="SET NULL"), index=True)
-    answer: Mapped[str] = mapped_column(String(64))
+    answer: Mapped[str] = mapped_column(Text)
+    score: Mapped[int | None] = mapped_column(SmallInteger)  # 서술형 점수 (AI 채점)
+    feedback: Mapped[dict | None] = mapped_column(JSONB)  # 서술형 채점 결과 (기준별 점수·한마디)
     correct: Mapped[bool] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp(), nullable=False)
 
@@ -273,7 +281,7 @@ class WrongNote(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     problem_id: Mapped[str] = mapped_column(ForeignKey("problems.id", ondelete="CASCADE"))
     project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"))
-    answer: Mapped[str] = mapped_column(String(64))  # 처음 틀렸을 때 고른 답
+    answer: Mapped[str] = mapped_column(Text)  # 처음 틀렸을 때 고른 답
     error_type: Mapped[ErrorType] = mapped_column(str_enum(ErrorType, "error_type"), server_default=ErrorType.UNKNOWN.value)
     created_at: Mapped[datetime] = created_at()
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 다시 풀어 맞힌 시각

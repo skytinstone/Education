@@ -428,7 +428,10 @@
     return id;
   }
 
-  const isShort = (p) => p.problemType === "short_answer" || !p.choices;
+  // 문제 형식 — 객관식(보기 4·5개) · 단답형(정수) · 주관식(글자) · 수치형 · 서술형(AI 채점)
+  const ptype = (p) => p.problemType ?? (p.choices ? "multiple_choice" : "short_answer");
+  const isShort = (p) => ptype(p) !== "multiple_choice";
+  const TYPE_LABEL = { short_answer: "단답형", text: "주관식", numeric: "수치형", essay: "서술형" };
   const conceptLabel = (p) => {
     const c = concept(p.conceptIds?.[0]);
     return c ? `${subjectOf(c.id)?.name ?? ""} · ${c.name}` : DOMAIN_NAME[p.domain] ?? "";
@@ -439,10 +442,22 @@
     if (!p) return "";
     const saved = Store.state.savedProblemIds.includes(pid);
     let answerArea;
-    if (isShort(p)) {
+    const t = ptype(p);
+    if (t === "essay") {
+      answerArea = attempt ? essayResultHTML(p, attempt) : `
+        <div class="essay-form" data-short><textarea name="answer" rows="6" maxlength="4000" aria-label="답안"
+          placeholder="답안을 써 주세요. 제출하면 AI가 채점 기준으로 점수를 매겨요 (10~30초)"></textarea>
+          <button class="btn-primary" type="button" data-short-submit><i data-lucide="send"></i>제출하고 채점받기</button></div>`;
+    } else if (isShort(p)) {
+      const unit = t === "numeric" && p.unit ? ` <small class="unit">${esc(p.unit)}</small>` : "";
+      const input = {
+        short_answer: '<input name="answer" inputmode="numeric" placeholder="답을 정수로 입력하세요" autocomplete="off" maxlength="10" aria-label="답" />',
+        numeric: '<input name="answer" inputmode="decimal" placeholder="수로 입력 (예: 9.8, 3/4)" autocomplete="off" maxlength="40" aria-label="답" />',
+        text: '<input name="answer" placeholder="답을 입력하세요" autocomplete="off" maxlength="200" aria-label="답" />',
+      }[t] ?? '<input name="answer" placeholder="답을 입력하세요" autocomplete="off" maxlength="200" aria-label="답" />';
       answerArea = attempt
-        ? `<div class="short-result ${attempt.correct ? "ok" : "bad"}"><span>내 답 <b>${esc(attempt.answer)}</b></span>${p.answer ? `<span>정답 <b>${esc(p.answer)}</b></span>` : ""}</div>`
-        : `<div class="short-form" data-short><input name="answer" inputmode="numeric" placeholder="답을 정수로 입력하세요" autocomplete="off" maxlength="10" aria-label="답" /><button class="btn-primary" type="button" data-short-submit>제출</button></div>`;
+        ? `<div class="short-result ${attempt.correct ? "ok" : "bad"}"><span>내 답 <b>${esc(attempt.answer)}</b></span>${p.answer ? `<span>정답 <b data-math>${esc(p.answer)}</b>${unit}</span>` : ""}</div>`
+        : `<div class="short-form" data-short>${input}${unit}<button class="btn-primary" type="button" data-short-submit>제출</button></div>`;
     } else {
       answerArea = `<div class="choices">${p.choices.map((ch, i) => {
         const n = String(i + 1);
@@ -465,7 +480,7 @@
       <article class="problem ${work ? "has-work" : ""}" data-problem="${pid}" style="--c:${COLOR[p.domain]}">
         <div class="problem-main">
           <div class="problem-meta">
-            <span class="kind"><span class="sw"></span>${esc(conceptLabel(p))}${isShort(p) ? " · 단답형" : ""}</span>
+            <span class="kind"><span class="sw"></span>${esc(conceptLabel(p))}${isShort(p) ? ` · ${TYPE_LABEL[ptype(p)] ?? "단답형"}` : ""}</span>
             <span class="stars" title="난이도 ${p.difficulty}">${"★".repeat(p.difficulty)}${"☆".repeat(5 - p.difficulty)}</span>
             <button class="work-btn ${work ? "on" : ""}" data-work="${pid}" title="풀이를 쓰면 AI가 어디서 틀렸는지 알려줘요"><i data-lucide="pencil-line"></i>서술형 풀이</button>
             <button class="icon-btn save ${saved ? "on" : ""}" data-save="${pid}" title="${saved ? "저장 취소" : "저장"}"><i data-lucide="bookmark"></i></button>
@@ -477,6 +492,22 @@
         </div>
         ${work ? workHTML(pid) : ""}
       </article>`;
+  }
+
+  // 서술형 답안의 AI 채점 결과 — 점수, 기준별 점수·이유, 총평, 내 답안·모범 답안
+  function essayResultHTML(p, a) {
+    const f = a.feedback;
+    if (!f) return `<div class="short-result ${a.correct ? "ok" : "bad"}"><span>내 답안을 제출했어요</span></div>`;
+    return `
+      <div class="essay-result ${a.correct ? "ok" : "bad"}">
+        <div class="essay-score"><b>${f.score}</b><span>/ ${f.max_score}점</span></div>
+        <ul class="essay-criteria">${f.criteria.map((c) => `
+          <li class="${c.earned >= c.points ? "full" : c.earned ? "part" : "none"}"><span class="pts">${c.earned}/${c.points}</span>
+            <div><b data-math>${esc(c.criterion)}</b><small data-math>${esc(c.comment)}</small></div></li>`).join("")}</ul>
+        <p class="essay-summary" data-math>${esc(f.summary)}</p>
+        <details><summary><i data-lucide="chevron-right"></i>내 답안</summary><p class="prose" data-math>${esc(a.answer)}</p></details>
+        ${p.answer ? `<details><summary><i data-lucide="chevron-right"></i>모범 답안</summary><p class="prose" data-math>${esc(p.answer)}</p></details>` : ""}
+      </div>`;
   }
 
   // ---------- 서술형 풀이: 타이핑(수식 미리보기) 또는 손글씨 → AI 가 단계별로 확인 ----------
@@ -650,17 +681,24 @@
     } else if (shortBtn) {
       box = shortBtn.closest("[data-problem]");
       answer = $("[name=answer]", box).value.trim();
-      if (!/^-?\d[\d,]*$/.test(answer)) { toast("답을 정수로 입력해 주세요"); return true; }
+      const t = ptype(Store.problem(box.dataset.problem));
+      if (t === "short_answer" && !/^-?\d[\d,]*$/.test(answer)) { toast("답을 정수로 입력해 주세요"); return true; }
+      if (t === "numeric" && !/^\s*-?\d[\d,]*(\.\d+)?([eE]-?\d+)?(\s*\/\s*-?\d+(\.\d+)?)?/.test(answer)) { toast("답을 수로 입력해 주세요 (예: 9.8, 3/4)"); return true; }
+      if (t === "essay" && answer.length < 5) { toast("답안을 조금 더 써 주세요"); return true; }
+      if (!answer) { toast("답을 입력해 주세요"); return true; }
+      if (t === "essay") { shortBtn.innerHTML = '<i data-lucide="loader-circle" class="spin"></i>AI가 채점하는 중… (10~30초)'; lucide.createIcons(); }
     } else return false;
     if (box.classList.contains("busy")) return true;
     box.classList.add("busy");
     try {
       const r = await Store.answer({ problemId: box.dataset.problem, answer, ...ctx });
-      redraw(box, { answer, correct: r.correct });
+      redraw(box, { answer, correct: r.correct, score: r.score, feedback: r.feedback });
       if (r.resolved) toast("오답을 극복했어요");
     } catch (err) {
       toast(err.message);
       box.classList.remove("busy");
+      const sb = $("[data-short-submit]", box);
+      if (sb && ptype(Store.problem(box.dataset.problem)) === "essay") { sb.innerHTML = '<i data-lucide="send"></i>제출하고 채점받기'; lucide.createIcons(); }
     }
     return true;
   }
@@ -808,7 +846,7 @@
       <div class="page-head">
         <div>
           <h1><i data-lucide="folder" style="color:${COLOR[d]}"></i>${esc(p.name)}</h1>
-          <p>${esc(concept(p.subjectId).name)} · ${QTYPE[p.questionType ?? "multiple_choice"]}${p.goal ? ` · 목표 ${esc(p.goal)}` : ""}${p.examDate ? ` · 시험일 ${p.examDate}` : ""}${p.textbook ? ` · 교재 ${esc(p.textbook)}` : ""}</p>
+          <p>${esc(concept(p.subjectId).name)} · ${esc(qtypeLabel(p))}${p.goal ? ` · 목표 ${esc(p.goal)}` : ""}${p.examDate ? ` · 시험일 ${p.examDate}` : ""}${p.textbook ? ` · 교재 ${esc(p.textbook)}` : ""}</p>
         </div>
         <div class="page-actions">
           <a class="btn-primary" href="#/?project=${id}" style="text-decoration:none"><i data-lucide="square-pen"></i>이 프로젝트에서 새 학습</a>
@@ -1033,7 +1071,7 @@
           </header>
           <div class="note-q">
             <p class="stem" data-math>${esc(p.stem)}</p>
-            ${isShort(p) ? `<div class="note-short"><span class="pill">단답형</span>내 답 <b>${esc(w.answer || "–")}</b></div>` : `
+            ${isShort(p) ? `<div class="note-short"><span class="pill">${TYPE_LABEL[ptype(p)] ?? "단답형"}</span>내 답 <b>${esc((w.answer || "–").length > 80 ? `${w.answer.slice(0, 80)}…` : w.answer || "–")}</b></div>` : `
             <ol class="note-choices">
               ${p.choices.map((ch, i) => `<li class="${String(i + 1) === w.answer ? "mine" : ""}"><span class="n">${i + 1}</span><span data-math>${esc(ch)}</span>${String(i + 1) === w.answer ? '<em>내 답</em>' : ""}</li>`).join("")}
             </ol>`}
@@ -1871,7 +1909,7 @@
           <select id="f-subject"><option value="" disabled ${p ? "" : "selected"}>과목을 고르세요</option>${subjectOptions}</select></div>
         <div class="field" id="f-units-wrap" hidden><label>학습 범위 <small>· 고르지 않으면 과목 전체</small></label><div class="chips" id="f-units"></div></div>
         <div class="field"><label for="f-qtype">문제 형태</label>
-          <select id="f-qtype">${Object.entries(QTYPE).map(([k, v]) => `<option value="${k}" ${(p?.questionType ?? "multiple_choice") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
+          <select id="f-qtype">${Object.entries(QTYPE).map(([k, v]) => `<option value="${k}" ${(p?.questionType ?? "auto") === k ? "selected" : ""}>${v}</option>`).join("")}</select></div>
         <div class="two">
           <div class="field"><label for="f-goal">목표 <small>· 선택</small></label><input id="f-goal" placeholder="예: 1등급" value="${esc(p?.goal ?? "")}" maxlength="20" /></div>
           <div class="field"><label for="f-date">시험일 <small>· 선택</small></label><input id="f-date" type="date" value="${p?.examDate ?? ""}" /></div>
@@ -1917,7 +1955,16 @@
 
 
   // ================= 새 프로젝트 =================
-  const QTYPE = { multiple_choice: "객관식 (5지선다)", short_answer: "주관식 (단답형)", mixed: "객관식 + 주관식" };
+  const QTYPE = { auto: "코스 형식대로", multiple_choice: "객관식", text: "주관식 (글자)", numeric: "수치형", essay: "서술형",
+    short_answer: "단답형 (정수)", mixed: "객관식 + 단답형" };
+  const FORMAT_NAME = { multiple_choice: "객관식", short_answer: "단답형", text: "주관식", numeric: "수치형", essay: "서술형" };
+  // "코스 형식대로"가 실제로 무엇인지 (예: 객관식 4지선다 · 주관식)
+  const courseFormats = (courseId) => {
+    const c = courseMap[courseId];
+    const fs = c?.formats?.length ? c.formats : ["multiple_choice"];
+    return fs.map((f) => (f === "multiple_choice" ? `객관식 ${c?.choice_count ?? 5}지선다` : FORMAT_NAME[f] ?? f)).join(" · ");
+  };
+  const qtypeLabel = (p) => (p.questionType === "auto" || !p.questionType ? `코스 형식대로 (${courseFormats(p.subjectId)})` : QTYPE[p.questionType]);
   const UPLOAD_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
   const fmtSize = (n) => (n > 1048576 ? `${(n / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`);
   const isoAfter = (days) => new Date(Date.now() + days * DAY - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
@@ -2010,7 +2057,7 @@
       || (c.aliases ?? []).some((k) => k.startsWith(t) || t.startsWith(k)))
       .sort((a, b) => (a.source === "user") - (b.source === "user")).slice(0, 8);
   };
-  const courseSub = (c) => [c.exam, c.category, c.level, `${c.units}개 단원`, c.source === "user" ? "사용자 코스" : "공식"].filter(Boolean).join(" · ");
+  const courseSub = (c) => [c.exam, c.category, c.level, `${c.units}개 단원`, courseFormats(c.id), c.source === "user" ? "사용자 코스" : "공식"].filter(Boolean).join(" · ");
   // "적분법까지", "수열 빼고", "전 범위" → 단원 id 목록 ([] 이면 과목 전체, null 이면 못 알아들음)
   function readScope(text, subjectId) {
     const units = childrenOf(subjectId), t = norm(text);
@@ -2027,7 +2074,7 @@
   function projectWizard() {
     const w = { exam: "", subjectId: null, subjectPicked: false, unitIds: [], scope: "",
       examDate: isoAfter(30), dateShown: false, dateTouched: false, goal: "", goalTouched: false, nameTouched: false,
-      questionType: "multiple_choice", textbook: "", files: [], busy: false };
+      questionType: "auto", textbook: "", files: [], busy: false };
     const sheet = openSheet({
       title: "새 프로젝트", wide: true,
       body: `
@@ -2072,7 +2119,7 @@
                 <p class="mini" data-period></p></div>
               <div class="field"><label for="w-goal">목표 <small>· 선택</small></label><input id="w-goal" placeholder="예: 1등급, 90점" maxlength="20" /></div>
             </div>
-            <div class="field"><label>문제 형태</label>
+            <div class="field"><label>문제 형태 <small data-auto-formats></small></label>
               <div class="seg qtype">${Object.entries(QTYPE).map(([k, v]) => `<button type="button" data-qtype="${k}" class="${w.questionType === k ? "on" : ""}">${v}</button>`).join("")}</div></div>
             <div class="field"><label for="w-name">프로젝트 이름</label><input id="w-name" maxlength="30" /></div>
             ${Store.mode === "api" ? `<details class="np-upload">
@@ -2133,6 +2180,7 @@
       $("[data-period]", body).textContent = left != null && left >= 0 ? `준비 기간 ${left}일 · ${ddayLabel(left)}` : "";
       if (!w.goalTouched) $("#w-goal").value = w.goal;
       if (!w.nameTouched) $("#w-name").value = defaultName();
+      $("[data-auto-formats]", body).textContent = w.subjectId ? `· 코스 형식대로 = ${courseFormats(w.subjectId)}` : "";
     }
     function setSubject(id) {
       if (id && !concept(id)) {

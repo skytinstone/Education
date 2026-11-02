@@ -56,6 +56,7 @@ def sync(user: CurrentUser, db: DB) -> dict:
         "attempts": [{
             "id": str(a.id), "problemId": a.problem_id, "projectId": str(a.project_id) if a.project_id else None,
             "sessionId": str(a.session_id) if a.session_id else None, "answer": a.answer, "correct": a.correct, "at": ms(a.created_at),
+            "score": a.score, "feedback": a.feedback,
         } for a in attempts],
         "wrongNotes": [{
             "id": str(w.id), "problemId": w.problem_id, "projectId": str(w.project_id) if w.project_id else None,
@@ -72,6 +73,7 @@ def sync(user: CurrentUser, db: DB) -> dict:
         "problems": [{
             "id": p.id, "domain": p.domain, "conceptIds": p.concept_ids, "difficulty": p.difficulty,
             "problemType": p.problem_type, "stem": p.stem, "choices": p.choices, "source": p.source,
+            "unit": (p.answer_spec or {}).get("unit") or None,
             "answer": p.answer if p.id in tried else None, "solution": p.solution if p.id in tried else None,
         } for p in problems],
     }

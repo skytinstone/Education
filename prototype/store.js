@@ -133,7 +133,7 @@ const Store = (() => {
   const toProblem = (p) => ({
     id: p.id, domain: p.domain, conceptIds: p.concept_ids ?? p.conceptIds, difficulty: p.difficulty,
     problemType: p.problem_type ?? p.problemType, stem: p.stem, choices: p.choices, source: p.source,
-    answer: p.answer ?? null, solution: p.solution ?? null,
+    answer: p.answer ?? null, solution: p.solution ?? null, unit: p.unit ?? null,
   });
   function mergeProblem(raw) {
     const p = toProblem(raw);
@@ -396,7 +396,7 @@ const Store = (() => {
     // 문제 풀이 기록. 틀리면 오답노트에 넣고, 오답노트 문제를 다시 맞히면 극복 처리
     async answer({ problemId, answer, projectId = null, sessionId = null }) {
       const open = () => state.wrongNotes.find((n) => n.problemId === problemId && !n.resolvedAt);
-      let correct, noteId = null, resolved = false;
+      let correct, noteId = null, resolved = false, score = null, feedback = null;
       if (local) {
         const p = bank[problemId];
         correct = p.problemType === "short_answer" ? Number(String(answer).replace(/,/g, "")) === Number(p.answer) : p.answer === answer;
@@ -406,6 +406,8 @@ const Store = (() => {
       } else {
         const r = await api("/attempts", { method: "POST", body: { problem_id: problemId, answer, project_id: projectId, session_id: sessionId } });
         correct = r.correct;
+        score = r.score ?? null;
+        feedback = r.feedback ?? null;
         Object.assign(bank[problemId], { answer: r.answer, solution: r.solution });
         if (r.resolved && open()) { open().resolvedAt = Date.now(); resolved = true; }
         if (!correct && r.wrong_note_id && !open()) {
@@ -413,9 +415,9 @@ const Store = (() => {
         }
         noteId = r.wrong_note_id;
       }
-      state.attempts.push({ id: uid("a"), problemId, projectId, sessionId, answer, correct, at: Date.now() });
+      state.attempts.push({ id: uid("a"), problemId, projectId, sessionId, answer, correct, score, feedback, at: Date.now() });
       commit();
-      return { correct, resolved, noteId };
+      return { correct, resolved, noteId, score, feedback };
     },
     setErrorType(noteId, errorType) {
       state.wrongNotes.find((n) => n.id === noteId).errorType = errorType;

@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+import unicodedata
+
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
@@ -20,14 +23,43 @@ def visible_to(user: m.User):
     return (m.Problem.owner_user_id.is_(None)) | (m.Problem.owner_user_id == user.id)
 
 
+def norm_text(s: str) -> str:
+    """주관식 비교용 — 대소문자·띄어쓰기·문장부호 차이를 무시한다."""
+    return re.sub(r"[\s.,;:!?'\"`()\[\]{}·~_-]+", "", unicodedata.normalize("NFKC", s).lower())
+
+
+def numbers_match(given: float | None, answer: float, tolerance: float) -> bool:
+    return given is not None and abs(given - answer) <= max(tolerance, abs(answer) * 1e-6, 1e-9)
+
+
+def parse_number(text: str) -> float | None:
+    """'1,000', '3/4', '-2.5e3', '9.8 m/s' → 수. 못 읽으면 None."""
+    t = text.strip().replace(",", "").replace("−", "-")
+    m_ = re.match(r"^\s*(-?\d+(?:\.\d+)?(?:[eE]-?\d+)?)(?:\s*/\s*(-?\d+(?:\.\d+)?))?", t)
+    if not m_:
+        return None
+    num = float(m_.group(1))
+    if m_.group(2):
+        den = float(m_.group(2))
+        return num / den if den else None
+    return num
+
+
 def is_correct(problem: m.Problem, answer: str) -> bool:
-    """단답형은 '007', '1,000', ' 12 ' 같은 표기 차이를 무시하고 수로 비교한다."""
+    """형식별 채점 (서술형은 AI 채점이라 여기서 다루지 않는다).
+    단답형은 '007'·'1,000' 같은 표기 차이를 무시하고 수로, 주관식은 허용 답안과 띄어쓰기·대소문자를 무시하고,
+    수치형은 오차 범위로 비교한다."""
     given = answer.strip()
+    spec = problem.answer_spec or {}
     if problem.problem_type == "short_answer":
         try:
             return int(given.replace(",", "")) == int(problem.answer)
         except ValueError:
             return given == problem.answer
+    if problem.problem_type == "text":
+        return norm_text(given) in {norm_text(x) for x in (spec.get("accepted") or [problem.answer])}
+    if problem.problem_type == "numeric":
+        return numbers_match(parse_number(given), float(problem.answer), float(spec.get("tolerance") or 0))
     return given == problem.answer
 
 
@@ -53,14 +85,14 @@ def problem_views(db: Session, user: m.User, problem_ids: list[str], session_id:
         a = last.get(pid)
         views.append(ProblemView(
             id=p.id, domain=p.domain, concept_ids=p.concept_ids, difficulty=p.difficulty, problem_type=p.problem_type,
-            stem=p.stem, choices=p.choices, saved=pid in saved,
-            attempt=AttemptView(answer=a.answer, correct=a.correct) if a else None,
+            stem=p.stem, choices=p.choices, unit=(p.answer_spec or {}).get("unit") or None, saved=pid in saved,
+            attempt=AttemptView(answer=a.answer, correct=a.correct, score=a.score, feedback=a.feedback) if a else None,
             answer=p.answer if a else None, solution=p.solution if a else None,
         ))
     return views
 
 
-def submit_answer(db: Session, user: m.User, body: AttemptIn) -> AttemptResult:
+def submit_answer(db: Session, user: m.User, body: AttemptIn, essay: dict | None = None) -> AttemptResult:
     """풀이를 기록한다. 틀리면 오답노트에 넣고, 오답노트에 있던 문제를 맞히면 극복 처리한다."""
     problem = db.get(m.Problem, body.problem_id)
     if problem is None or problem.owner_user_id not in (None, user.id) or not problem.answer:
@@ -71,9 +103,12 @@ def submit_answer(db: Session, user: m.User, body: AttemptIn) -> AttemptResult:
             if obj is None or obj.user_id != user.id:
                 raise HTTPException(404, "찾을 수 없어요")
 
-    correct = is_correct(problem, body.answer)
-    db.add(m.Attempt(user_id=user.id, problem_id=problem.id, project_id=body.project_id,
-                     session_id=body.session_id, answer=body.answer, correct=correct))
+    if problem.problem_type == "essay":  # AI 채점 결과 (60% 이상이면 맞힘)
+        correct = essay is not None and essay["score"] * 10 >= essay["max_score"] * 6
+    else:
+        correct = is_correct(problem, body.answer)
+    db.add(m.Attempt(user_id=user.id, problem_id=problem.id, project_id=body.project_id, session_id=body.session_id,
+                     answer=body.answer, correct=correct, score=essay["score"] if essay else None, feedback=essay))
 
     note_id, resolved = None, False
     open_note = (m.WrongNote.user_id == user.id) & (m.WrongNote.problem_id == problem.id) & (m.WrongNote.resolved_at.is_(None))
@@ -90,7 +125,7 @@ def submit_answer(db: Session, user: m.User, body: AttemptIn) -> AttemptResult:
         db.execute(update(m.ChatSession).where(m.ChatSession.id == body.session_id).values(updated_at=func.now()))
     db.commit()
     return AttemptResult(correct=correct, answer=problem.answer, solution=problem.solution,
-                         wrong_note_id=note_id, resolved=resolved)
+                         wrong_note_id=note_id, resolved=resolved, score=essay["score"] if essay else None, feedback=essay)
 
 
 def concept_stats(db: Session, user: m.User, *, project_id: UUID | None = None, domain: str | None = None,

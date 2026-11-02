@@ -168,6 +168,8 @@ class CourseOut(Out):
     textbook: str
     language: str
     aliases: list[str]
+    choice_count: int = 5
+    formats: list[str] = []
     source: Literal["template", "user"]
     units: int = 0
     concepts: int = 0
@@ -197,11 +199,14 @@ class ProblemOut(Out):
     problem_type: str
     stem: str
     choices: list[str] | None
+    unit: str | None = None  # 수치형 답의 단위 (풀기 전에도 보임)
 
 
 class AttemptView(BaseModel):
     answer: str
     correct: bool
+    score: int | None = None  # 서술형 점수
+    feedback: dict | None = None  # 서술형 채점 결과
 
 
 class ProblemView(ProblemOut):
@@ -214,7 +219,7 @@ class ProblemView(ProblemOut):
 
 class AttemptIn(BaseModel):
     problem_id: str
-    answer: str = Field(min_length=1, max_length=64)
+    answer: str = Field(min_length=1, max_length=4000)  # 서술형 답안까지
     project_id: UUID | None = None
     session_id: UUID | None = None
 
@@ -225,10 +230,12 @@ class AttemptResult(BaseModel):
     solution: str
     wrong_note_id: UUID | None = None  # 틀려서 오답노트에 있으면
     resolved: bool = False  # 이번 풀이로 오답을 극복했으면
+    score: int | None = None  # 서술형: 받은 점수
+    feedback: dict | None = None  # 서술형: {score, max_score, criteria[{criterion, points, earned, comment}], summary}
 
 
 # ---------- 프로젝트 · 대화 ----------
-QuestionType = Literal["multiple_choice", "short_answer", "mixed"]
+QuestionType = Literal["auto", "multiple_choice", "short_answer", "text", "numeric", "essay", "mixed"]
 
 
 class ProjectIn(BaseModel):
@@ -238,7 +245,7 @@ class ProjectIn(BaseModel):
     goal: str = Field(default="", max_length=60)
     textbook: str = Field(default="", max_length=120)
     exam_date: date | None = None
-    question_type: QuestionType = "multiple_choice"
+    question_type: QuestionType = "auto"
 
 
 class ProjectPatch(BaseModel):

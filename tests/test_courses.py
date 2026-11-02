@@ -15,7 +15,7 @@ SCOPE = "7. Techniques of Integration\n10. Parametric Equations and Polar Coordi
 def draft(**kw) -> CourseDraft:
     base = dict(
         title="편입 수학 (미적분학)", category="수학", domain="math", level="대학", language="en",
-        aliases=["편입수학", "미적분학"],
+        aliases=["편입수학", "미적분학"], choice_count=5, formats=["multiple_choice"],
         units=[UnitDraft(name="적분 기법 (Techniques of Integration)", concepts=[
                    ConceptDraft(name="부분적분 (Integration by Parts)", prerequisites=[]),
                    ConceptDraft(name="삼각치환 (Trigonometric Substitution)", prerequisites=["부분적분 (Integration by Parts)"])]),

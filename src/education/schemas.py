@@ -55,11 +55,20 @@ class CourseMeta(BaseModel):
     textbook: str = ""
     language: str = "ko"
     aliases: list[str] = Field(default_factory=list)
+    choice_count: int = 5  # 객관식 보기 개수
+    formats: list[str] = Field(default_factory=list)  # 이 시험이 쓰는 문제 형식 (비면 객관식)
 
 
 class ProblemType(StrEnum):
-    MULTIPLE_CHOICE = "multiple_choice"  # 5지선다
-    SHORT_ANSWER = "short_answer"  # 단답형(주관식 정수 등)
+    MULTIPLE_CHOICE = "multiple_choice"  # 객관식 (보기 4개 또는 5개 — 코스의 choice_count)
+    SHORT_ANSWER = "short_answer"  # 단답형 정수 0~999 (수능 수학 형식)
+    TEXT = "text"  # 주관식 글자 — 허용 답안 목록과 비교
+    NUMERIC = "numeric"  # 수치 — 오차 범위·단위
+    ESSAY = "essay"  # 서술형 — AI 가 채점 기준표로 채점
+
+
+# 프로젝트가 고르는 문제 형식: 위 형식 + mixed(객관식+단답형) + auto(코스 형식대로)
+QUESTION_TYPES = ("auto", "multiple_choice", "short_answer", "text", "numeric", "essay", "mixed")
 
 
 class ProblemSource(StrEnum):
@@ -84,7 +93,7 @@ class Problem(BaseModel):
     problem_type: ProblemType
     stem: str  # 문제 본문 (수식은 LaTeX)
     choices: list[str] | None = None
-    answer: str  # 객관식은 "1"~"5", 단답형은 값
+    answer: str  # 객관식은 보기 번호, 그 밖에는 값 (서술형은 모범 답안)
     solution: str  # 단계별 해설
     traps: list[str] = Field(default_factory=list)  # 의도된 함정 포인트
     source: ProblemSource
@@ -94,12 +103,12 @@ class Problem(BaseModel):
     @model_validator(mode="after")
     def _check_choices(self) -> Problem:
         if self.problem_type is ProblemType.MULTIPLE_CHOICE:
-            if not self.choices or len(self.choices) != 5:
-                raise ValueError("객관식 문제는 보기 5개가 필요합니다")
-            if self.answer not in {"1", "2", "3", "4", "5"}:
-                raise ValueError("객관식 정답은 '1'~'5' 중 하나여야 합니다")
+            if not self.choices or len(self.choices) not in (4, 5):
+                raise ValueError("객관식 문제는 보기 4개 또는 5개가 필요합니다")
+            if self.answer not in {str(i) for i in range(1, len(self.choices) + 1)}:
+                raise ValueError("객관식 정답은 보기 번호 중 하나여야 합니다")
         elif self.choices is not None:
-            raise ValueError("단답형 문제에는 보기가 없어야 합니다")
+            raise ValueError("객관식이 아닌 문제에는 보기가 없어야 합니다")
         return self
 
 

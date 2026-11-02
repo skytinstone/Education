@@ -670,3 +670,32 @@ a.nav-item { text-decoration: none; }
 .course-item b { display: flex; align-items: center; gap: 6px; font-size: 13.5px; }
 .course-item .sw { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
 .course-item small { font-size: 12px; color: var(--ink-3); }
+
+/* 문제 형식: 단위·서술형 */
+.short-form .unit, .short-result .unit { align-self: center; font-size: 14px; color: var(--ink-2); }
+.essay-form { display: grid; gap: 8px; margin-top: 12px; }
+.essay-form textarea { width: 100%; min-height: 140px; resize: vertical; padding: 10px 12px; border: 0; outline: 0; border-radius: 11px; font: inherit; font-size: 14.5px; line-height: 1.65;
+  background: #fff; box-shadow: inset 0 0 0 1px rgba(15,23,42,.12); }
+.essay-form textarea:focus { box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 4px var(--accent-soft); }
+.essay-form .btn-primary { justify-self: end; display: inline-flex; align-items: center; gap: 6px; height: 40px; border-radius: 11px; padding: 0 16px; }
+.essay-result { display: grid; gap: 10px; margin-top: 12px; padding: 14px; border-radius: 14px; background: #fff; box-shadow: inset 0 0 0 1px var(--line); }
+.essay-score { display: flex; align-items: baseline; gap: 4px; }
+.essay-score b { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
+.essay-result.ok .essay-score b { color: var(--ok); }
+.essay-result.bad .essay-score b { color: var(--bad); }
+.essay-score span { color: var(--ink-3); font-size: 14px; }
+.essay-criteria { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+.essay-criteria li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; background: rgba(15,23,42,.03); }
+.essay-criteria .pts { flex-shrink: 0; min-width: 42px; text-align: center; font-size: 12.5px; font-weight: 700; padding: 2px 6px; border-radius: 999px; background: rgba(15,23,42,.06); }
+.essay-criteria li.full .pts { background: rgba(22,163,74,.12); color: var(--ok); }
+.essay-criteria li.part .pts { background: rgba(217,119,6,.12); color: #d97706; }
+.essay-criteria li.none .pts { background: rgba(225,29,72,.1); color: var(--bad); }
+.essay-criteria div { display: grid; gap: 2px; font-size: 13.5px; }
+.essay-criteria small { color: var(--ink-2); font-size: 12.5px; }
+.essay-summary { font-size: 14px; line-height: 1.65; }
+.essay-result details summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-2); }
+.essay-result details summary::-webkit-details-marker { display: none; }
+.essay-result details[open] summary [data-lucide] { transform: rotate(90deg); }
+.essay-result .prose { margin-top: 6px; white-space: pre-line; font-size: 14px; line-height: 1.7; }
+.seg.qtype { flex-wrap: wrap; }
+.seg.qtype button { flex: 0 0 auto; white-space: nowrap; }

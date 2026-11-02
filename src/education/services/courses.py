@@ -41,6 +41,9 @@ class CourseDraft(BaseModel):
     level: str = Field(description="수준 — 고등, 대학, 자격증, 공무원, 어학 중 가장 가까운 것 (또는 짧게 직접)")
     language: Literal["ko", "en"] = Field(description="교재·시험 언어")
     aliases: list[str] = Field(description="사용자가 이 코스를 부를 만한 짧은 이름 3~6개 (공백 없이 소문자, 예: 편입수학, 미적분학)")
+    choice_count: Literal[4, 5] = Field(description="이 시험 객관식의 보기 개수 (토익·공무원 4, 수능·CPA 5 …)")
+    formats: list[Literal["multiple_choice", "short_answer", "text", "numeric", "essay"]] = Field(
+        description="이 시험이 실제로 쓰는 문제 형식 (객관식, 0~999 정수 단답, 글자 주관식, 수치, 서술형). 1~3개")
     units: list[UnitDraft] = Field(description="출제 범위의 장 순서대로")
 
 
@@ -49,6 +52,7 @@ COURSE_INSTRUCTIONS = """당신은 여러 시험의 커리큘럼을 설계하는
 - 단원마다 그 시험에서 실제로 묻는 핵심 개념을 3~8개, 배우는 순서대로 적는다. 너무 넓지도(단원 이름 반복) 좁지도(공식 하나) 않게
 - 교재의 본문이나 문제를 옮겨 적지 않는다. 그 분야의 일반 지식으로 개념 이름만 붙인다
 - 선수 개념은 같은 코스 안에서 앞에 나온 개념 이름만 쓴다
+- 문제 형식과 객관식 보기 개수는 그 시험의 실제 형식을 따른다 (모르면 객관식 5지선다)
 - 이모지는 쓰지 않는다"""
 
 
@@ -106,6 +110,7 @@ def create_course(db: Session, llm: LLM, user: m.User, *, title: str, scope_text
     course = m.Course(id=cid, title=(draft.title.strip() or title)[:120], exam=exam[:120], category=draft.category.strip()[:40],
                       domain=draft.domain, level=(level or draft.level).strip()[:40], textbook=textbook[:200],
                       language=draft.language, scope_text=scope_text.strip(), aliases=aliases, source="user",
+                      choice_count=draft.choice_count, formats=list(dict.fromkeys(draft.formats))[:3] or ["multiple_choice"],
                       owner_user_id=user.id)
     db.add(course)
     db.flush()

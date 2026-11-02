@@ -56,7 +56,7 @@ def background_db(db):
 
 
 def make_project(client, auth, **kw):
-    body = {"name": "수학I 기말", "subject_id": "math.math1", **kw}
+    body = {"name": "수학I 기말", "subject_id": "math.math1", "question_type": "multiple_choice", **kw}
     r = client.post("/api/projects", json=body, headers=auth)
     assert r.status_code == 201, r.text
     return r.json()["id"]
@@ -86,7 +86,7 @@ def uploaded(client, auth, monkeypatch, background_db):
 def test_project_question_type(client, auth):
     pid = make_project(client, auth, question_type="short_answer")
     assert client.get(f"/api/projects/{pid}", headers=auth).json()["project"]["question_type"] == "short_answer"
-    bad = client.post("/api/projects", json={"name": "x", "subject_id": "math.math1", "question_type": "essay"}, headers=auth)
+    bad = client.post("/api/projects", json={"name": "x", "subject_id": "math.math1", "question_type": "oral"}, headers=auth)
     assert bad.status_code == 422
 
 

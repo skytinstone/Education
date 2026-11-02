@@ -45,6 +45,53 @@ HIDE_ANSWER = "\n- 학생은 아직 이 문제의 답을 제출하지 않았다.
 MAX_IMAGE_BYTES = 3 * 1024 * 1024
 
 
+class CriterionScore(BaseModel):
+    criterion: str = Field(description="채점 기준 (주어진 그대로)")
+    points: int = Field(description="이 기준의 배점")
+    earned: int = Field(description="받은 점수 (0 이상 배점 이하)")
+    comment: str = Field(description="왜 그 점수인지 한 문장")
+
+
+class EssayGrade(BaseModel):
+    criteria: list[CriterionScore]
+    summary: str = Field(description="전체 평가와 보완할 점 두세 문장")
+
+
+GRADER_INSTRUCTIONS = r"""당신은 서술형 채점 위원입니다. 채점 기준표로 학생 답안을 채점합니다.
+- 기준마다 답안에 그 내용이 있는지 확인해 0점부터 배점까지 점수를 준다. 표현이 달라도 내용이 맞으면 점수를 준다
+- 모범 답안은 참고용이다. 다른 방식이라도 기준을 만족하면 점수를 준다
+- 기준표에 없는 내용으로 점수를 더하거나 빼지 않는다
+- 수식은 LaTeX 로 $ 로 감싼다. 한국어로 쓴다. 이모지는 쓰지 않는다"""
+
+
+def grade_essay(db: Session, llm: LLM, user: m.User, problem: m.Problem, answer: str) -> dict:
+    """서술형 답안 채점 → {score, max_score, criteria, summary} (Attempt.feedback 에 그대로 저장)."""
+    spec = problem.answer_spec or {}
+    rubric = spec.get("rubric") or [{"criterion": "모범 답안의 핵심 내용", "points": 10}]
+    course = generator.course_brief(db, problem.concepts[0].course_id) if problem.concepts else ""
+    prompt = (f"{course}\n\n[문제]\n{problem.stem}\n\n[모범 답안]\n{problem.answer}\n\n[채점 기준]\n"
+              + "\n".join(f"- {r['criterion']} ({r['points']}점)" for r in rubric) + f"\n\n[학생 답안]\n{answer.strip()}")
+    s = get_settings()
+    usage = error = None
+    try:
+        res = llm.structured(model=s.openai_model_verify, effort="medium", instructions=GRADER_INSTRUCTIONS,
+                             prompt=prompt, schema=EssayGrade)
+        usage = res.usage
+    except LLMError as e:
+        error = str(e)
+        raise ReviewError("서술형 답안을 채점하지 못했어요. 잠시 후 다시 제출해 주세요") from e
+    finally:
+        db.add(m.LLMCall(purpose="essay_grade", model=s.openai_model_verify, ok=error is None, error=error, user_id=user.id,
+                         problem_id=problem.id, cost_usd=usage.cost_usd if usage else None,
+                         **({"input_tokens": usage.input_tokens, "output_tokens": usage.output_tokens,
+                             "reasoning_tokens": usage.reasoning_tokens, "latency_ms": usage.latency_ms} if usage else {})))
+    points = {r["criterion"]: int(r["points"]) for r in rubric}
+    criteria = [{**c.model_dump(), "earned": max(0, min(c.earned, points.get(c.criterion, c.points)))} for c in res.data.criteria]
+    max_score = int(spec.get("max_score") or sum(points.values()))
+    return {"score": min(max_score, sum(c["earned"] for c in criteria)), "max_score": max_score,
+            "criteria": criteria, "summary": res.data.summary}
+
+
 class ReviewError(Exception):
     pass
 

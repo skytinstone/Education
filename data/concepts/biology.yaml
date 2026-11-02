@@ -3,6 +3,8 @@ domain: biology
 curriculum: 2015 개정
 exam: 수능
 level: 고등
+choice_count: 5
+formats: [multiple_choice]
 category: 생명과학
 subjects:
   - key: biology1

@@ -41,7 +41,7 @@ DIFFICULTY_GUIDE = {
 # ---------- 에이전트 입출력 ----------
 class GeneratedProblem(BaseModel):
     stem: str = Field(description="문제 본문")
-    choices: list[str] = Field(description="보기 정확히 5개 (번호 없이 내용만)")
+    choices: list[str] = Field(description="보기 — '문제 형태'에 적힌 개수만큼 (번호 없이 내용만)")
     answer: Literal["1", "2", "3", "4", "5"] = Field(description="정답 보기 번호")
     solution: str = Field(description="학생이 따라갈 수 있는 단계별 해설")
     traps: list[str] = Field(description="이 문제가 노리는 흔한 실수나 함정")
@@ -52,6 +52,36 @@ class GeneratedShort(BaseModel):
     answer: int = Field(description="정답 — 0 이상 999 이하의 정수 하나")
     solution: str = Field(description="학생이 따라갈 수 있는 단계별 해설")
     traps: list[str] = Field(description="이 문제가 노리는 흔한 실수나 함정")
+
+
+class GeneratedText(BaseModel):
+    stem: str = Field(description="문제 본문 — 답이 짧은 단어·구·수식 하나로 정해지게")
+    answer: str = Field(description="정답")
+    accepted: list[str] = Field(description="정답으로 인정할 다른 표기 (동의어, 원어, 약어, 띄어쓰기가 다른 것). 없으면 빈 목록")
+    solution: str = Field(description="학생이 따라갈 수 있는 단계별 해설")
+    traps: list[str] = Field(description="이 문제가 노리는 흔한 실수나 함정")
+
+
+class GeneratedNumeric(BaseModel):
+    stem: str = Field(description="문제 본문 — 답이 수 하나로 정해지게 (구할 단위를 문제에 밝힌다)")
+    answer: float = Field(description="정답 수치")
+    unit: str = Field(description="정답의 단위 (없으면 빈 문자열)")
+    tolerance: float = Field(description="정답으로 인정할 오차의 절댓값 (반올림 자릿수에 맞춰, 정확한 값이면 0)")
+    solution: str = Field(description="학생이 따라갈 수 있는 단계별 해설")
+    traps: list[str] = Field(description="이 문제가 노리는 흔한 실수나 함정")
+
+
+class RubricItem(BaseModel):
+    criterion: str = Field(description="채점 기준 — 답안에 있어야 할 내용 한 가지")
+    points: int = Field(description="배점")
+
+
+class GeneratedEssay(BaseModel):
+    stem: str = Field(description="서술형 문제 본문 — 무엇을 어떤 범위로 쓰라는지 분명하게")
+    model_answer: str = Field(description="모범 답안")
+    rubric: list[RubricItem] = Field(description="채점 기준 2~5개, 배점 합계 10점")
+    solution: str = Field(description="해설 — 왜 그렇게 답하는지, 흔히 빠뜨리는 점")
+    traps: list[str] = Field(description="흔히 틀리거나 빠뜨리는 점")
 
 
 class Verdict(BaseModel):
@@ -68,12 +98,36 @@ class ShortVerdict(BaseModel):
     issues: list[str] = Field(description="발견한 문제점 (답이 여러 개, 조건 누락, 계산 오류, 코스 범위·수준 밖 등)")
 
 
+class TextVerdict(BaseModel):
+    answer: str | None = Field(description="스스로 풀어서 구한 답 (짧게), 구할 수 없으면 null")
+    work: str = Field(description="풀이 과정 요약")
+    well_posed: bool = Field(description="답이 하나로 정해지고 조건에 모순·누락이 없으면 true")
+    issues: list[str] = Field(description="발견한 문제점 (답이 여러 개, 조건 누락, 코스 범위·수준 밖 등)")
+
+
+class NumericVerdict(BaseModel):
+    answer: float | None = Field(description="스스로 풀어서 구한 수치 (문제가 정한 단위로), 구할 수 없으면 null")
+    work: str = Field(description="풀이 과정 요약")
+    well_posed: bool = Field(description="답이 하나로 정해지고 조건에 모순·누락이 없으면 true")
+    issues: list[str] = Field(description="발견한 문제점 (단위 불명확, 조건 누락, 계산 오류, 코스 범위·수준 밖 등)")
+
+
+class EssayVerdict(BaseModel):
+    well_posed: bool = Field(description="무엇을 쓰라는지 분명하고, 채점 기준으로 누가 채점해도 비슷한 점수가 나오면 true")
+    model_answer_ok: bool = Field(description="모범 답안이 내용상 맞고 채점 기준을 모두 만족하면 true")
+    work: str = Field(description="검토 요약")
+    issues: list[str] = Field(description="발견한 문제점 (모호한 질문, 틀린 모범 답안, 기준과 맞지 않는 배점, 범위 밖 등)")
+
+
 GENERATOR_INSTRUCTIONS = r"""당신은 여러 시험(수능·대학·자격증·공무원·어학 등)의 출제 경험이 많은 출제위원입니다.
 주어진 코스(시험·과목·수준·교육과정·교재)의 범위와 수준 안에서, 요청한 개념·난이도·문제 형태에 맞는 문제를 하나 만듭니다.
 
 반드시 지킬 것
-- 5지선다: 정답은 정확히 하나. 나머지 4개 보기는 그럴듯하지만 분명히 틀려야 하고, 흔한 실수로 나오는 값을 오답으로 넣는다
+- 객관식: 정답은 정확히 하나, 보기 개수는 '문제 형태'에 적힌 대로. 오답 보기는 그럴듯하지만 분명히 틀려야 하고 흔한 실수로 나오는 값을 넣는다
 - 단답형: 답이 0 이상 999 이하의 정수 하나로 정해지게 만든다 (자동 채점용)
+- 주관식: 답이 짧은 단어·구·수식 하나로 정해지게 만들고, 정답으로 인정할 다른 표기를 빠짐없이 적는다
+- 수치형: 답이 수 하나로 정해지게, 구할 단위와 반올림 자릿수를 문제에 밝히고 그에 맞는 오차를 정한다
+- 서술형: 무엇을 어떤 범위로 쓰라는지 분명하게 묻고, 모범 답안과 합계 10점의 채점 기준을 만든다
 - 그 시험이 실제로 묻는 방식과 용어를 쓴다. 코스 언어가 영어면 문제와 보기는 영어로, 해설은 한국어로 쓴다
 - 참고할 기출 문제가 주어지면 형식·어투·소재의 결을 따르되, 문장과 수치는 그대로 베끼지 말고 새로 만든다
 - 모든 수치는 직접 끝까지 계산해서 검산한다. 근삿값이 아닌 정확한 값을 쓴다
@@ -83,7 +137,8 @@ GENERATOR_INSTRUCTIONS = r"""당신은 여러 시험(수능·대학·자격증·
 - 이미 있는 문제와 소재·수치가 겹치지 않게 새로 만든다"""
 
 VERIFIER_INSTRUCTIONS = """당신은 시험 문제 검토위원입니다. 출제자가 만든 문제를 정답을 모르는 상태에서 직접 풉니다.
-- 처음부터 끝까지 스스로 계산해서 답을 구한다. 5지선다는 보기 번호를 고르고(정답이 없으면 none), 단답형은 정수로 답한다
+- 처음부터 끝까지 스스로 풀어서 답을 구한다. 객관식은 보기 번호를 고르고(정답이 없으면 none), 단답형은 정수, 주관식은 짧은 답, 수치형은 문제가 정한 단위의 수로 답한다
+- 서술형은 문제가 분명한지, 모범 답안이 맞고 채점 기준을 만족하는지, 기준으로 일관되게 채점할 수 있는지 검토한다
 - 정답이 둘 이상이거나, 조건이 모순되거나 빠졌거나, 문제 문장이 모호하거나, 주어진 코스의 범위·수준을 벗어나면 well_posed 를 false 로 하고 issues 에 구체적으로 쓴다
 - 사소한 표현 개선 의견은 issues 에 넣지 않는다 (정답 판정에 영향을 주는 것만)"""
 
@@ -208,14 +263,23 @@ class Candidate:
     calls: list[CallLog] = field(default_factory=list)
 
 
-def format_issues(p: GeneratedProblem | GeneratedShort) -> list[str]:
+def format_issues(p, choice_count: int = 5) -> list[str]:
     """모델 호출 없이 잡을 수 있는 형식 오류."""
+    empty = ["본문이나 해설이 비어 있음"] if not p.stem.strip() or not p.solution.strip() else []
     if isinstance(p, GeneratedShort):
-        errors = [] if 0 <= p.answer <= 999 else [f"단답형 정답 범위 밖: {p.answer}"]
-        return errors + (["본문이나 해설이 비어 있음"] if not p.stem.strip() or not p.solution.strip() else [])
+        return ([] if 0 <= p.answer <= 999 else [f"단답형 정답 범위 밖: {p.answer}"]) + empty
+    if isinstance(p, GeneratedText):
+        return (["정답이 비어 있음"] if not p.answer.strip() else []) + empty
+    if isinstance(p, GeneratedNumeric):
+        return (["오차가 음수"] if p.tolerance < 0 else []) + empty
+    if isinstance(p, GeneratedEssay):
+        errors = [] if 2 <= len(p.rubric) <= 6 and all(r.points > 0 for r in p.rubric) else ["채점 기준이 2~6개가 아니거나 배점이 0"]
+        return errors + (["모범 답안이 비어 있음"] if not p.model_answer.strip() else []) + (["본문이 비어 있음"] if not p.stem.strip() else [])
     errors = []
-    if len(p.choices) != 5:
-        errors.append(f"보기가 {len(p.choices)}개")
+    if len(p.choices) != choice_count:
+        errors.append(f"보기가 {len(p.choices)}개 (필요 {choice_count}개)")
+    if int(p.answer) > len(p.choices):
+        errors.append("정답 번호가 보기 밖")
     norm = [re.sub(r"\s+", "", c).lower() for c in p.choices]
     if len(set(norm)) != len(norm):
         errors.append("중복된 보기")
@@ -247,12 +311,34 @@ def course_brief(db: Session, course_id: str) -> str:
     return f"코스: {c.title} ({' · '.join(p for p in parts if p)})"
 
 
-def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multiple_choice") -> Candidate:
+norm_text, numbers_match = learning.norm_text, learning.numbers_match
+
+
+# 형식마다: (출제 스키마, 검증 스키마, 문제 형태 설명, 검증자에게 보일 문제, 검증 결과가 맞는지)
+FORMATS = {
+    "multiple_choice": (GeneratedProblem, Verdict, lambda n: f"객관식 {n}지선다 (보기 정확히 {n}개)",
+                        lambda p: p.stem + "\n\n" + "\n".join(f"{i}) {c}" for i, c in enumerate(p.choices, 1)),
+                        lambda p, v: v.answer == p.answer),
+    "short_answer": (GeneratedShort, ShortVerdict, lambda n: "단답형 (정답은 0 이상 999 이하의 정수)",
+                     lambda p: p.stem + "\n\n(단답형 · 정수로 답)", lambda p, v: v.answer == p.answer),
+    "text": (GeneratedText, TextVerdict, lambda n: "주관식 (짧은 단어·구·수식으로 답)",
+             lambda p: p.stem + "\n\n(주관식 · 짧게 답)",
+             lambda p, v: v.answer is not None and norm_text(v.answer) in {norm_text(x) for x in [p.answer, *p.accepted]}),
+    "numeric": (GeneratedNumeric, NumericVerdict, lambda n: "수치형 (답이 수 하나, 단위·반올림을 문제에 밝힘)",
+                lambda p: p.stem + f"\n\n(수치로 답{f' · 단위 {p.unit}' if p.unit else ''})",
+                lambda p, v: numbers_match(v.answer, p.answer, p.tolerance)),
+    "essay": (GeneratedEssay, EssayVerdict, lambda n: "서술형 (모범 답안과 합계 10점의 채점 기준)",
+              lambda p: f"{p.stem}\n\n[모범 답안]\n{p.model_answer}\n\n[채점 기준]\n"
+                        + "\n".join(f"- {r.criterion} ({r.points}점)" for r in p.rubric),
+              lambda p, v: v.model_answer_ok),
+}
+
+
+def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multiple_choice", choice_count: int = 5) -> Candidate:
     """문제 하나: 생성 → 형식 검사 → 독립 검증. 실패하면 max_attempts 까지 다시 만든다."""
     s = get_settings()
-    mc = question_type == "multiple_choice"
-    gen_schema, ver_schema = (GeneratedProblem, Verdict) if mc else (GeneratedShort, ShortVerdict)
-    prompt = f"{prompt}\n문제 형태: {'5지선다' if mc else '단답형 (정답은 0 이상 999 이하의 정수)'}"
+    gen_schema, ver_schema, describe, question_of, agrees = FORMATS[question_type]
+    prompt = f"{prompt}\n문제 형태: {describe(choice_count)}"
     calls: list[CallLog] = []
     last = Candidate(None, None, "생성하지 못함", calls)
     for _ in range(max_attempts):
@@ -265,11 +351,11 @@ def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multipl
             last = Candidate(None, None, f"생성 실패: {e}", calls)
             continue
         problem = gen.data
-        if errors := format_issues(problem):
+        if errors := format_issues(problem, choice_count):
             last = Candidate(problem, None, f"형식 오류: {', '.join(errors)}", calls)
             continue
 
-        question = problem.stem + ("\n\n" + "\n".join(f"{i}) {c}" for i, c in enumerate(problem.choices, 1)) if mc else "\n\n(단답형)")
+        question = question_of(problem)
         try:
             ver = llm.structured(model=s.openai_model_verify, effort=s.openai_effort_verify,
                                  instructions=VERIFIER_INSTRUCTIONS, prompt=question, schema=ver_schema)
@@ -281,8 +367,9 @@ def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multipl
         verdict = ver.data
         if not verdict.well_posed:
             last = Candidate(problem, verdict, f"문제 결함: {'; '.join(verdict.issues) or '검증자가 결함 지적'}", calls)
-        elif verdict.answer != problem.answer:
-            last = Candidate(problem, verdict, f"정답 불일치: 출제 {problem.answer}, 검증 {verdict.answer}", calls)
+        elif not agrees(problem, verdict):
+            got = getattr(verdict, "answer", "모범 답안 오류")
+            last = Candidate(problem, verdict, f"정답 불일치: 출제 {getattr(problem, 'answer', '')}, 검증 {got}", calls)
         else:
             return Candidate(problem, verdict, None, calls)
     return last
@@ -298,6 +385,17 @@ class GenerationReport:
     @property
     def calls_summary(self) -> str:
         return f"통과 {len(self.accepted)} · 탈락 {len(self.rejected)} · 비용 ${self.cost_usd:.4f}"
+
+
+def _answer_fields(p) -> tuple[str, dict | None]:
+    """저장할 정답과 형식별 채점 정보."""
+    if isinstance(p, GeneratedText):
+        return p.answer.strip(), {"accepted": list(dict.fromkeys(x.strip() for x in [p.answer, *p.accepted] if x.strip()))}
+    if isinstance(p, GeneratedNumeric):
+        return f"{p.answer:g}", {"unit": p.unit.strip(), "tolerance": p.tolerance}
+    if isinstance(p, GeneratedEssay):
+        return p.model_answer.strip(), {"rubric": [r.model_dump() for r in p.rubric], "max_score": sum(r.points for r in p.rubric)}
+    return str(p.answer), None
 
 
 def _exemplar_text(p: m.Problem) -> str:
@@ -329,29 +427,36 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
               + ("\n이미 있는 문제 (겹치지 않게):\n" + "\n".join(f"- {r[:120]}" for r in recent) if recent else "")
               + ("\n\n참고할 기출 문제 (이 결을 따르되 베끼지 말 것):\n\n" + "\n\n---\n\n".join(_exemplar_text(e) for e in exemplars[:3])
                  if exemplars else ""))
-    types = ["multiple_choice", "short_answer"] if question_type == "mixed" else [question_type]
+    course = db.get(m.Course, concept.course_id)
+    choice_count = course.choice_count if course else 5
+    if question_type == "mixed":
+        types = ["multiple_choice", "short_answer"]
+    elif question_type == "auto":  # 코스(시험) 형식대로 번갈아
+        types = [t for t in (course.formats if course else []) if t in FORMATS] or ["multiple_choice"]
+    else:
+        types = [question_type]
 
     # 문제마다 독립적이라 동시에 만든다 (DB 기록은 아래에서 한 스레드로)
     with ThreadPoolExecutor(max_workers=min(count, 4)) as pool:
-        candidates = list(pool.map(lambda i: (_one(llm, prompt, s.ai_max_attempts, types[i % len(types)]), types[i % len(types)]), range(count)))
+        candidates = list(pool.map(lambda i: (_one(llm, prompt, s.ai_max_attempts, types[i % len(types)], choice_count),
+                                              types[i % len(types)]), range(count)))
 
     report = GenerationReport(accepted=[], rejected=[], reasons=[], cost_usd=0.0)
     for cand, qtype in candidates:
         pid = None
-        mc = qtype == "multiple_choice"
-        if cand.problem is not None and not format_issues(cand.problem):
+        if cand.problem is not None and not format_issues(cand.problem, choice_count):
             pid = f"ai_{uuid.uuid4().hex[:12]}"
             ok = cand.reason is None
+            answer, spec = _answer_fields(cand.problem)
             db.add(m.Problem(
-                id=pid, domain=concept.domain, difficulty=difficulty,
-                problem_type=ProblemType.MULTIPLE_CHOICE if mc else ProblemType.SHORT_ANSWER,
-                stem=cand.problem.stem, choices=cand.problem.choices if mc else None, answer=str(cand.problem.answer),
-                owner_user_id=owner.id if owner else None,
+                id=pid, domain=concept.domain, difficulty=difficulty, problem_type=ProblemType(qtype),
+                stem=cand.problem.stem, choices=cand.problem.choices if qtype == "multiple_choice" else None,
+                answer=answer, answer_spec=spec, owner_user_id=owner.id if owner else None,
                 solution=cand.problem.solution, traps=cand.problem.traps, source=ProblemSource.GENERATED,
                 verification=VerificationStatus.VERIFIED if ok else VerificationStatus.REJECTED,
                 generation_meta={
                     "generate_model": s.openai_model_generate, "verify_model": s.openai_model_verify,
-                    "verifier_answer": str(cand.verdict.answer) if cand.verdict else None,
+                    "verifier_answer": str(getattr(cand.verdict, "answer", "")) if cand.verdict else None,
                     "exemplar_ids": [e.id for e in exemplars[:3]] if exemplars else [],
                     "verifier_issues": cand.verdict.issues if cand.verdict else [],
                     "verifier_work": cand.verdict.work if cand.verdict else None,

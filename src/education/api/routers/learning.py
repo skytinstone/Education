@@ -111,7 +111,19 @@ def review_solution(problem_id: str, body: SolutionReviewIn, user: CurrentUser, 
 
 @router.post("/attempts", tags=["문제"], status_code=status.HTTP_201_CREATED)
 def submit_attempt(body: AttemptIn, user: CurrentUser, db: DB) -> AttemptResult:
-    return learning.submit_answer(db, user, body)
+    """채점. 서술형은 AI 가 채점 기준표로 점수를 매기고 (10~30초), 60% 이상이면 맞힌 것으로 친다."""
+    p = db.get(m.Problem, body.problem_id)
+    essay = None
+    if p is not None and p.problem_type == "essay" and p.owner_user_id in (None, user.id):
+        llm = get_llm()
+        if llm is None:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 아직 설정되지 않아 서술형은 채점할 수 없어요")
+        try:
+            essay = review.grade_essay(db, llm, user, p, body.answer)
+        except review.ReviewError as e:
+            db.commit()
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from None
+    return learning.submit_answer(db, user, body, essay=essay)
 
 
 # ---------- 오답노트 ----------

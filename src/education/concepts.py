@@ -78,7 +78,8 @@ def _parse_file(path: Path) -> tuple[list[CourseMeta], list[Concept]]:
         sid = f"{domain}.{subject['key']}"
         courses.append(CourseMeta(
             id=sid, title=subject["name"], exam=data.get("exam", ""), category=data.get("category", domain), domain=domain,
-            level=data.get("level", ""), curriculum=data.get("curriculum", ""), aliases=subject.get("aliases", [])))
+            level=data.get("level", ""), curriculum=data.get("curriculum", ""), aliases=subject.get("aliases", []),
+            choice_count=data.get("choice_count", 5), formats=data.get("formats", [])))
         out.append(Concept(id=sid, name=subject["name"], domain=domain, level=ConceptLevel.SUBJECT, course_id=sid))
         for ui, unit in enumerate(subject["units"]):
             uid = f"{sid}.{unit['key']}"

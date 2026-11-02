@@ -131,7 +131,7 @@ def test_wrong_then_correct_resolves_note(client, auth, db):
 
     # 대화를 다시 열면 푼 기록과 정답·해설이 보인다
     view = client.get(f"/api/sessions/{s['id']}", headers=auth).json()["messages"][1]["problems"][0]
-    assert view["attempt"] == {"answer": wrong_choice(answer), "correct": False} and view["answer"] == answer
+    assert view["attempt"] == {"answer": wrong_choice(answer), "correct": False, "score": None, "feedback": None} and view["answer"] == answer
 
     assert client.patch(f"/api/wrong-notes/{notes[0]['id']}", json={"error_type": "calculation"}, headers=auth).status_code == 200
     assert client.get("/api/wrong-notes?error_type=calculation", headers=auth).json()[0]["error_type"] == "calculation"
