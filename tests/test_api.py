@@ -168,7 +168,7 @@ def test_stats_and_weak_concepts(client, auth):
     client.post("/api/attempts", json={"problem_id": "pb_kin", "answer": "3"}, headers=auth)
     st = client.get("/api/stats", headers=auth).json()
     assert st["today_count"] == 4 and st["streak"] == 1
-    assert st["accuracy_by_domain"]["physics"] == 1.0 and st["accuracy_by_domain"]["biology"] is None
+    assert st["accuracy_by_domain"]["physics"] == 1.0 and "biology" not in st["accuracy_by_domain"]  # 공부하는 분야만
     weak = st["weak_concepts"][0]
     assert weak["concept_id"] == "math.math1.exp_log.log_properties" and weak["attempts"] == 3 and weak["correct"] == 1
 
