@@ -104,7 +104,8 @@ def learner_context(db: Session, user: m.User, concept_id: str) -> tuple[str, di
         state = "다시 풀어 맞힘" if note.resolved_at else "아직 극복 못 함"
         lines.append(f"오답 ({ERROR_NAME[note.error_type]}, {state}): {p.stem[:160]} / 고른 답 {note.answer}, 정답 {p.answer}")
     for p in projects:
-        goal = " · ".join(x for x in (p.goal and f"목표 {p.goal}", p.exam_date and f"시험일 {p.exam_date}") if x)
+        goal = " · ".join(x for x in (p.goal and f"목표 {p.goal}", p.exam_date and f"시험일 {p.exam_date}",
+                                      p.textbook and f"교재 {p.textbook}") if x)
         lines.append(f"학습 프로젝트: {p.name}" + (f" ({goal})" if goal else ""))
     if cards:
         lines.append("이미 있는 암기 카드 (겹치지 않게): " + " / ".join(c[:60] for c in cards[:12]))

@@ -141,7 +141,7 @@ const Store = (() => {
     bank[p.id] = { ...old, ...p, answer: p.answer ?? old?.answer ?? null, solution: p.solution ?? old?.solution ?? null };
   }
   const toProject = (p) => ({
-    id: p.id, name: p.name, subjectId: p.subject_id, unitIds: p.unit_ids, goal: p.goal, examDate: p.exam_date,
+    id: p.id, name: p.name, subjectId: p.subject_id, unitIds: p.unit_ids, goal: p.goal, textbook: p.textbook ?? "", examDate: p.exam_date,
     questionType: p.question_type, pinned: p.pinned, createdAt: Date.parse(p.created_at),
   });
   function toSession(s) {
@@ -151,7 +151,7 @@ const Store = (() => {
       messages: s.messages.map((msg) => ({ role: msg.role, text: msg.text, problemIds: msg.problems.map((p) => p.id), at: Date.parse(msg.created_at) })),
     };
   }
-  const PROJECT_KEYS = { name: "name", subjectId: "subject_id", unitIds: "unit_ids", goal: "goal", examDate: "exam_date", questionType: "question_type", pinned: "pinned" };
+  const PROJECT_KEYS = { name: "name", subjectId: "subject_id", unitIds: "unit_ids", goal: "goal", textbook: "textbook", examDate: "exam_date", questionType: "question_type", pinned: "pinned" };
   const snake = (patch) => Object.fromEntries(Object.entries(patch).filter(([k]) => PROJECT_KEYS[k]).map(([k, v]) => [PROJECT_KEYS[k], v]));
 
   async function boot() {
@@ -302,14 +302,14 @@ const Store = (() => {
   // ================= 변경 =================
   const local = MODE === "local";
   const ops = {
-    async createProject({ name, subjectId, unitIds = [], goal = "", examDate = null, questionType = "multiple_choice" }) {
+    async createProject({ name, subjectId, unitIds = [], goal = "", textbook = "", examDate = null, questionType = "multiple_choice" }) {
       if (local) {
-        const p = { id: uid("p"), name, subjectId, unitIds, goal, examDate, questionType, pinned: false, createdAt: Date.now() };
+        const p = { id: uid("p"), name, subjectId, unitIds, goal, textbook, examDate, questionType, pinned: false, createdAt: Date.now() };
         state.projects.push(p);
         commit();
         return p.id;
       }
-      const p = toProject(await api("/projects", { method: "POST", body: snake({ name, subjectId, unitIds, goal, examDate, questionType }) }));
+      const p = toProject(await api("/projects", { method: "POST", body: snake({ name, subjectId, unitIds, goal, textbook, examDate, questionType }) }));
       state.projects.push(p);
       commit();
       return p.id;

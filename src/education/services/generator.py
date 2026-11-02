@@ -285,9 +285,11 @@ def _exemplar_text(p: m.Problem) -> str:
 
 def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int, count: int,
                       user: m.User | None = None, question_type: str = "multiple_choice",
-                      exemplars: list[m.Problem] | None = None, owner: m.User | None = None) -> GenerationReport:
+                      exemplars: list[m.Problem] | None = None, owner: m.User | None = None,
+                      textbook: str | None = None) -> GenerationReport:
     """question_type: multiple_choice · short_answer · mixed(번갈아).
-    exemplars: 본보기로 삼을 기출 문제. owner: 만든 문제를 그 사용자만 보게 할 때 (기출 기반 문제)."""
+    exemplars: 본보기로 삼을 기출 문제. owner: 만든 문제를 그 사용자만 보게 할 때 (기출 기반 문제).
+    textbook: 학생이 공부하는 교재 — 그 교재의 단원 구성·문제 유형·난이도 결을 따르게 한다 (문제를 베끼지는 않음)."""
     concept = db.get(m.Concept, concept_id)
     if concept is None or concept.level != "concept":
         raise ValueError(f"개념이 아님: {concept_id}")
@@ -296,6 +298,8 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
         select(m.Problem.stem).join(m.ProblemConcept).where(m.ProblemConcept.concept_id == concept_id)
         .order_by(m.Problem.created_at.desc()).limit(5)))
     prompt = (f"{_concept_brief(db, concept_id)}\n난이도: {difficulty} ({DIFFICULTY_GUIDE[difficulty]})\n"
+              + (f"\n학생이 공부하는 교재: {textbook} — 이 교재의 단원 구성·자주 나오는 문제 유형·난이도의 결을 따르되, "
+                 "교재에 실린 문제를 그대로 옮기지 말고 새로 만든다" if textbook else "")
               + ("\n이미 있는 문제 (겹치지 않게):\n" + "\n".join(f"- {r[:120]}" for r in recent) if recent else "")
               + ("\n\n참고할 기출 문제 (이 결을 따르되 베끼지 말 것):\n\n" + "\n\n---\n\n".join(_exemplar_text(e) for e in exemplars[:3])
                  if exemplars else ""))

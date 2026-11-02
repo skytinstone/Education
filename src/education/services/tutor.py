@@ -79,7 +79,8 @@ def reply(db: Session, user: m.User, text: str, project: m.Project | None) -> tu
                 report = generator.generate_problems(
                     db, llm, concept_id=plan.concept_id, difficulty=plan.difficulty, count=plan.count, user=user,
                     question_type=project.question_type if project else "multiple_choice",
-                    exemplars=exemplars, owner=user if exemplars else None)
+                    exemplars=exemplars, owner=user if exemplars else None,
+                    textbook=(project.textbook or None) if project else None)
             except (LLMError, ValueError) as e:
                 log.warning("AI 문제 생성 실패: %s", e)
                 report = None

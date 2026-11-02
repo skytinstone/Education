@@ -781,7 +781,7 @@
       <div class="page-head">
         <div>
           <h1><i data-lucide="folder" style="color:${COLOR[d]}"></i>${esc(p.name)}</h1>
-          <p>${esc(concept(p.subjectId).name)} · ${QTYPE[p.questionType ?? "multiple_choice"]}${p.goal ? ` · 목표 ${esc(p.goal)}` : ""}${p.examDate ? ` · 시험일 ${p.examDate}` : ""}</p>
+          <p>${esc(concept(p.subjectId).name)} · ${QTYPE[p.questionType ?? "multiple_choice"]}${p.goal ? ` · 목표 ${esc(p.goal)}` : ""}${p.examDate ? ` · 시험일 ${p.examDate}` : ""}${p.textbook ? ` · 교재 ${esc(p.textbook)}` : ""}</p>
         </div>
         <div class="page-actions">
           <a class="btn-primary" href="#/?project=${id}" style="text-decoration:none"><i data-lucide="square-pen"></i>이 프로젝트에서 새 학습</a>
@@ -1271,7 +1271,7 @@
   const MAJOR_PRESETS = ["인문계열", "자연계열", "예체능계열", "특성화고", "마이스터고"];
 
   // 입력하면 아래에 후보 목록을 띄우는 칸 (학교 검색). fetch(q) → [{ label, sub, value }]
-  function bindSuggest(input, list, fetch) {
+  function bindSuggest(input, list, fetch, minLength = 2) {
     let items = [], active = -1, timer = 0, seq = 0;
     const close = () => { list.hidden = true; input.setAttribute("aria-expanded", "false"); active = -1; };
     const draw = () => {
@@ -1284,7 +1284,7 @@
     input.addEventListener("input", () => {
       clearTimeout(timer);
       const q = input.value.trim();
-      if (q.length < 2) { items = []; return close(); }
+      if (q.length < minLength) { items = []; return close(); }
       timer = setTimeout(async () => {
         const mine = ++seq;
         try { const r = await fetch(q); if (mine === seq) { items = r; active = -1; draw(); } }
@@ -1832,7 +1832,9 @@
         <div class="two">
           <div class="field"><label for="f-goal">목표 <small>· 선택</small></label><input id="f-goal" placeholder="예: 1등급" value="${esc(p?.goal ?? "")}" maxlength="20" /></div>
           <div class="field"><label for="f-date">시험일 <small>· 선택</small></label><input id="f-date" type="date" value="${p?.examDate ?? ""}" /></div>
-        </div>`,
+        </div>
+        <div class="field"><label for="f-textbook">시험 교재 <small>· 선택 · 이 교재의 단원 순서와 문제 유형에 맞춰 문제를 만들어요</small></label>
+          <input id="f-textbook" placeholder="예: 수능특강 미적분, 쎈 미적분" value="${esc(p?.textbook ?? "")}" maxlength="120" /></div>`,
       onMount(f) {
         const sel = $("#f-subject", f);
         const drawUnits = () => {
@@ -1853,6 +1855,7 @@
           name, subjectId,
           unitIds: $$("#f-units input:checked", f).map((i) => i.value),
           goal: $("#f-goal", f).value.trim(),
+          textbook: $("#f-textbook", f).value.trim(),
           examDate: $("#f-date", f).value || null,
           questionType: $("#f-qtype", f).value,
         };
@@ -1953,6 +1956,13 @@
     }
     return { subjectId, goal, examDate };
   }
+  // 과목 칸에 적은 글 → 과목 id. 정확한 이름이 먼저, 아니면 별칭(수1·확통·물리 …)
+  const subjectFromText = (text) => SUBJECTS.find((x) => norm(x.name) === norm(text))?.id ?? readExam(text).subjectId;
+  // 과목 칸 후보: 이름에 들어 있거나 별칭으로 시작하면
+  const matchSubjects = (q) => {
+    const t = norm(q);
+    return SUBJECTS.filter((x) => norm(x.name).includes(t) || SUBJECT_ALIASES.some(([id, keys]) => id === x.id && keys.some((k) => k.startsWith(t) || t.startsWith(k))));
+  };
   // "적분법까지", "수열 빼고", "전 범위" → 단원 id 목록 ([] 이면 과목 전체, null 이면 못 알아들음)
   function readScope(text, subjectId) {
     const units = childrenOf(subjectId), t = norm(text);
@@ -1967,9 +1977,9 @@
 
   // 새 프로젝트 — 한 화면에서 글로 적으면 과목·목표·시험일·범위를 알아듣고, 아래 칸은 고쳐 쓸 수 있다
   function projectWizard() {
-    const w = { exam: "", subjectId: null, subjectPicked: false, picking: false, unitIds: [], scope: "",
+    const w = { exam: "", subjectId: null, subjectPicked: false, unitIds: [], scope: "",
       examDate: isoAfter(30), dateShown: false, dateTouched: false, goal: "", goalTouched: false, nameTouched: false,
-      questionType: "multiple_choice", files: [], busy: false };
+      questionType: "multiple_choice", textbook: "", files: [], busy: false };
     const sheet = openSheet({
       title: "새 프로젝트", wide: true,
       body: `
@@ -1978,8 +1988,16 @@
           <input id="np-exam" class="np-big" autocomplete="off" maxlength="60"
             placeholder="예: 2027 수능 미적분 1등급 · 화학I 중간고사 90점, 4월 25일" />
           <div class="np-read" data-read></div>
-          <div class="np-subjects" data-subjects>${SUBJECTS.map((x) => `
-            <button type="button" class="tag" data-subject="${x.id}" style="--c:${COLOR[x.domain]}"><span class="sw"></span>${esc(x.name)}</button>`).join("")}</div>
+          <div class="two np-basic">
+            <div class="field suggest"><label for="np-subject">준비 과목</label>
+              <input id="np-subject" autocomplete="off" maxlength="30" placeholder="예: 미적분, 수학I, 화학I"
+                role="combobox" aria-autocomplete="list" aria-controls="subject-list" aria-expanded="false" />
+              <ul class="suggest-list" id="subject-list" role="listbox" hidden></ul>
+              <p class="mini" data-subject-hint>${SUBJECTS.map((x) => x.name).join(" · ")}</p></div>
+            <div class="field"><label for="np-textbook">시험 교재 <small>· 선택</small></label>
+              <input id="np-textbook" autocomplete="off" maxlength="120" placeholder="예: 수능특강 미적분, 쎈 미적분" />
+              <p class="mini">적으면 이 교재의 결에 맞춰 문제를 만들어요</p></div>
+          </div>
           <div class="np-more" data-more hidden>
             <div class="field"><label for="np-scope">시험 범위</label>
               <input id="np-scope" autocomplete="off" maxlength="60" placeholder="예: 적분법까지 · 수열 빼고 · 전 범위 (비우면 과목 전체)" />
@@ -2005,18 +2023,29 @@
     });
     const body = $(".modal-body", sheet);
     const subjectName = () => concept(w.subjectId)?.name ?? "";
+    // 이름 기본값: 첫 칸에서 날짜·목표를 빼고 과목을 붙인다 ("2027 수능 1등급, 11월 19일" + 확통 → "2027 수능 확률과 통계")
+    const defaultName = () => {
+      const base = w.exam.replace(/\d{1,2}\s*월\s*\d{1,2}\s*일|[1-9]\s*등급|\d{2,3}\s*점|[,·]/g, " ").replace(/\s+/g, " ").trim();
+      const subj = subjectName();
+      const name = !base ? `${subj} 시험 준비` : SUBJECT_ALIASES.some(([id, keys]) => id === w.subjectId && keys.some((k) => norm(base).includes(k))) || norm(base).includes(norm(subj)) ? base : `${base} ${subj}`;
+      return name.slice(0, 30);
+    };
 
     // 알아들은 것 (칩) + 과목 고르기 + 아래 칸 보이기
     function drawRead() {
       const chips = [];
-      if (w.subjectId) chips.push(`<span class="np-chip" style="--c:${COLOR[concept(w.subjectId).domain]}"><span class="sw"></span>${esc(subjectName())}
-        <button type="button" data-change-subject>바꾸기</button></span>`);
       if (w.goal) chips.push(`<span class="np-chip"><i data-lucide="target"></i>목표 ${esc(w.goal)}</span>`);
       if (w.dateShown && w.examDate) chips.push(`<span class="np-chip"><i data-lucide="calendar"></i>시험일 ${esc(w.examDate)}</span>`);
-      const unknown = w.exam.trim() && !w.subjectId;
-      $("[data-read]", body).innerHTML = unknown ? `<span class="mini">어떤 과목인지 알아듣지 못했어요. 아래에서 골라 주세요</span>` : chips.join("");
-      $("[data-subjects]", body).hidden = !!w.subjectId && !w.picking;
-      $$("[data-subject]", body).forEach((b) => b.classList.toggle("on", b.dataset.subject === w.subjectId));
+      $("[data-read]", body).innerHTML = chips.join("");
+      // 과목 칸: 첫 칸에서 알아들은 과목을 채우고(직접 적은 게 없을 때), 못 알아들으면 지원 과목을 알려 준다
+      const subj = $("#np-subject"), hint = $("[data-subject-hint]", body);
+      if (!w.subjectPicked) subj.value = subjectName();
+      const typed = subj.value.trim();
+      const typing = typed && !w.subjectId && matchSubjects(typed).length; // 아직 적는 중 (후보가 있음)
+      const unknown = !w.subjectId && !typing && (typed || w.exam.trim());
+      hint.classList.toggle("bad", !!unknown);
+      hint.textContent = typing ? "목록에서 고르거나 과목 이름을 끝까지 적어 주세요" : unknown ? `${typed ? `'${typed}'은(는) 아직 지원하지 않는 과목이에요. ` : "준비 과목을 적어 주세요. "}지금은 ${SUBJECTS.map((x) => x.name).join(" · ")}`
+        : w.subjectId ? `${DOMAIN_NAME[concept(w.subjectId).domain]} · ${childrenOf(w.subjectId).length}개 단원` : SUBJECTS.map((x) => x.name).join(" · ");
       $("[data-more]", body).hidden = !w.subjectId;
       $("[data-next]", sheet).disabled = !w.subjectId;
       icons();
@@ -2033,7 +2062,7 @@
       const left = daysLeft(w.examDate);
       $("[data-period]", body).textContent = left != null && left >= 0 ? `준비 기간 ${left}일 · ${ddayLabel(left)}` : "";
       if (!w.goalTouched) $("#w-goal").value = w.goal;
-      if (!w.nameTouched) $("#w-name").value = (w.exam.trim() || `${subjectName()} 시험 준비`).slice(0, 30);
+      if (!w.nameTouched) $("#w-name").value = defaultName();
     }
     function setSubject(id) {
       if (id !== w.subjectId) {
@@ -2053,6 +2082,12 @@
         if (!w.goalTouched) w.goal = r.goal;
         if (r.examDate && !w.dateTouched) { w.examDate = r.examDate; w.dateShown = true; }
         setSubject(w.subjectPicked ? w.subjectId : r.subjectId);
+      } else if (id === "np-subject") {
+        const typed = e.target.value.trim();
+        w.subjectPicked = !!typed; // 비우면 다시 첫 칸에서 알아들은 과목을 쓴다
+        setSubject(typed ? subjectFromText(typed) : readExam(w.exam).subjectId);
+      } else if (id === "np-textbook") {
+        w.textbook = e.target.value;
       } else if (id === "np-scope") {
         w.scope = e.target.value;
         const ids = readScope(w.scope, w.subjectId);
@@ -2064,15 +2099,20 @@
       }
     });
     body.addEventListener("click", (e) => {
-      const subj = e.target.closest("[data-subject]");
-      if (subj) { w.subjectPicked = true; w.picking = false; return setSubject(subj.dataset.subject); }
-      if (e.target.closest("[data-change-subject]")) { w.picking = true; return drawRead(); }
       const days = e.target.closest("[data-days]");
       if (days) { w.examDate = isoAfter(Number(days.dataset.days)); w.dateTouched = w.dateShown = true; drawFields(); drawRead(); }
       const qt = e.target.closest("[data-qtype]");
       if (qt) { w.questionType = qt.dataset.qtype; $$("[data-qtype]", body).forEach((b) => b.classList.toggle("on", b === qt)); }
     });
+    // 과목 칸 후보 목록 (고르면 그 과목으로)
+    bindSuggest($("#np-subject"), $("#subject-list"), async (q) => matchSubjects(q).map((x) => ({
+      label: x.name, sub: `${DOMAIN_NAME[x.domain]} · ${childrenOf(x.id).length}개 단원`, value: x.name })), 1);
     body.addEventListener("change", (e) => {
+      if (e.target.id === "np-subject") {
+        const typed = e.target.value.trim();
+        w.subjectPicked = !!typed;
+        setSubject(typed ? subjectFromText(typed) : readExam(w.exam).subjectId);
+      }
       if (e.target.closest("[data-units]")) { w.unitIds = $$("[data-units] input:checked", body).map((i) => i.value); drawUnits(); }
       if (e.target.id === "w-date") { w.examDate = e.target.value || null; w.dateTouched = w.dateShown = true; drawFields(); drawRead(); }
     });
@@ -2096,7 +2136,7 @@
       btn.textContent = w.files.length ? "만들고 올리는 중…" : "만드는 중…";
       try {
         const id = await Store.createProject({ name, subjectId: w.subjectId, unitIds: w.unitIds, goal: (w.goal || "").trim(),
-          examDate: w.examDate, questionType: w.questionType });
+          textbook: w.textbook.trim(), examDate: w.examDate, questionType: w.questionType });
         const uploaded = w.files.length ? await uploadAll(id, w.files) : 0;
         closeOverlays();
         go(`/project/${id}`);

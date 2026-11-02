@@ -167,3 +167,23 @@ def test_tutor_without_ai_uses_bank(db, monkeypatch, auth, client):
     monkeypatch.setattr(tutor, "get_llm", lambda: None)
     ai = client.post("/api/sessions", json={"text": "화학 2문제"}, headers=auth).json()["messages"][1]
     assert ai["text"].startswith("AI 연결 전이라") and len(ai["problems"]) == 2
+
+
+def test_project_textbook_guides_generation(db, monkeypatch, auth, client):
+    prompts = []
+
+    class Capture(FakeLLM):
+        def structured(self, *, prompt, schema, **kw):
+            if schema is GeneratedProblem:
+                prompts.append(prompt)
+            return super().structured(prompt=prompt, schema=schema, **kw)
+
+    monkeypatch.setattr(tutor, "get_llm", lambda: Capture([good_problem()], [verdict("1")]))
+    pid = client.post("/api/projects", json={"name": "수능", "subject_id": "math.calculus", "textbook": "수능특강 미적분"},
+                      headers=auth).json()["id"]
+    assert client.get(f"/api/projects/{pid}", headers=auth).json()["project"]["textbook"] == "수능특강 미적분"
+    client.post("/api/sessions", json={"text": "치환적분 1문제", "project_id": pid}, headers=auth)
+    assert "수능특강 미적분" in prompts[0] and "그대로 옮기지 말고" in prompts[0]
+
+    client.patch(f"/api/projects/{pid}", json={"textbook": "쎈 미적분"}, headers=auth)
+    assert client.get("/api/sync", headers=auth).json()["projects"][0]["textbook"] == "쎈 미적분"

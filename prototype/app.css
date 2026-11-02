@@ -488,12 +488,9 @@ a.nav-item { text-decoration: none; }
 .np-read:empty { display: none; }
 .np-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
   background: #fff; box-shadow: inset 0 0 0 1px var(--line); animation: npIn .3s ease; }
-.np-chip .sw, .np-subjects .sw { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.np-chip .sw { width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
 .np-chip [data-lucide] { width: 14px; height: 14px; color: var(--ink-3); }
 .np-chip button { font-size: 12px; font-weight: 500; color: var(--ink-3); text-decoration: underline; text-underline-offset: 2px; }
-.np-subjects { display: flex; flex-wrap: wrap; gap: 6px; }
-.np-subjects .tag { display: inline-flex; align-items: center; gap: 6px; height: 30px; }
-.np-subjects .tag.on .sw { background: #fff; }
 .np-more { display: grid; gap: 14px; padding-top: 14px; border-top: 1px solid var(--line); animation: npIn .35s ease; }
 .np-more .unit-chips { margin-top: 8px; }
 .np-upload summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; color: var(--ink-2); }
@@ -653,3 +650,6 @@ a.nav-item { text-decoration: none; }
 .announce[open] summary { margin-bottom: 12px; }
 .announce .field + .field { margin-top: 10px; }
 .announce .fb-actions { margin-top: 12px; }
+
+.np-basic .mini.bad { color: var(--bad); }
+.np-more[hidden] { display: none; }

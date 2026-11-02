@@ -202,6 +202,7 @@ class ProjectIn(BaseModel):
     subject_id: str
     unit_ids: list[str] = []
     goal: str = Field(default="", max_length=60)
+    textbook: str = Field(default="", max_length=120)
     exam_date: date | None = None
     question_type: QuestionType = "multiple_choice"
 
@@ -211,6 +212,7 @@ class ProjectPatch(BaseModel):
     subject_id: str | None = None
     unit_ids: list[str] | None = None
     goal: str | None = Field(default=None, max_length=60)
+    textbook: str | None = Field(default=None, max_length=120)
     exam_date: date | None = None
     question_type: QuestionType | None = None
     pinned: bool | None = None
@@ -222,6 +224,7 @@ class ProjectOut(Out):
     subject_id: str
     unit_ids: list[str]
     goal: str
+    textbook: str
     exam_date: date | None
     question_type: str
     pinned: bool

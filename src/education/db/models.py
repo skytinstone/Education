@@ -162,6 +162,8 @@ class Project(Base):
     subject_id: Mapped[str] = mapped_column(ForeignKey("concepts.id"))
     unit_ids: Mapped[list[str]] = mapped_column(ARRAY(String(120)), server_default="{}")  # 비어 있으면 과목 전체
     goal: Mapped[str] = mapped_column(String(60), server_default="")
+    # 공부하는 교재 (예: "수능특강 미적분, 쎈 수학Ⅰ") — 문제 생성·개념 정리가 이 교재의 단원 순서·문제 유형을 참고한다
+    textbook: Mapped[str] = mapped_column(String(120), server_default="")
     exam_date: Mapped[date | None] = mapped_column(Date)
     question_type: Mapped[str] = mapped_column(String(16), server_default="multiple_choice")  # multiple_choice | short_answer | mixed
     pinned: Mapped[bool] = mapped_column(Boolean, server_default="false")

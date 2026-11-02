@@ -40,7 +40,7 @@ def sync(user: CurrentUser, db: DB) -> dict:
             "unreadNotifications": notifications.unread_count(db, user.id),
         },
         "projects": [{
-            "id": str(p.id), "name": p.name, "subjectId": p.subject_id, "unitIds": p.unit_ids, "goal": p.goal,
+            "id": str(p.id), "name": p.name, "subjectId": p.subject_id, "unitIds": p.unit_ids, "goal": p.goal, "textbook": p.textbook,
             "examDate": p.exam_date.isoformat() if p.exam_date else None, "questionType": p.question_type,
             "pinned": p.pinned, "createdAt": ms(p.created_at),
         } for p in db.scalars(select(m.Project).where(m.Project.user_id == user.id))],

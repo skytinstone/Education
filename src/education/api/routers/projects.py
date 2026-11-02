@@ -163,7 +163,8 @@ def generate_from_past(project_id: UUID, body: GenerateIn, user: CurrentUser, db
     try:
         report = generator.generate_problems(
             db, llm, concept_id=concept_id, difficulty=difficulty, count=body.count, user=user,
-            question_type=project.question_type, exemplars=exemplars, owner=user if exemplars else None)
+            question_type=project.question_type, exemplars=exemplars, owner=user if exemplars else None,
+            textbook=project.textbook or None)
     except LLMError:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, "AI 응답이 원활하지 않아요. 잠시 후 다시 시도해 주세요") from None
     if not report.accepted:
