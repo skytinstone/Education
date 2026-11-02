@@ -558,6 +558,19 @@ a.nav-item { text-decoration: none; }
 .work-preview { min-height: 40px; padding: 10px 12px; border-radius: 11px; background: #fff; font-size: 14px; line-height: 1.7; white-space: pre-line; overflow-x: auto; }
 .work canvas { width: 100%; height: 320px; border-radius: 11px; background: #fff; box-shadow: inset 0 0 0 1px rgba(15,23,42,.12); touch-action: none; cursor: crosshair; }
 .work-tools { display: flex; gap: 6px; flex-wrap: wrap; }
+/* 크게 보기 — 화면 전체, 위에 문제 */
+.work-stem { display: none; }
+.work.full { position: fixed; inset: 0; z-index: 300; align-content: start; border-radius: 0; overflow-y: auto;
+  padding: 18px max(16px, calc((100vw - 1040px) / 2)); background: #f7f8fc; box-shadow: none; }
+.work.full .work-stem { display: block; max-height: 30vh; overflow-y: auto; padding: 12px 14px; border-radius: 12px; background: #fff;
+  box-shadow: inset 0 0 0 1px var(--line); font-size: 15px; line-height: 1.7; }
+.work.full .work-stem p { margin: 0; white-space: pre-line; }
+.work.full .work-stem ol { margin: 8px 0 0; padding-left: 22px; }
+.work.full textarea { min-height: 42vh; font-size: 15.5px; }
+.work.full canvas { height: max(420px, 62vh); }
+body.work-full-open { overflow: hidden; }
+/* 등장 애니메이션(transform)·컨테이너 쿼리가 있으면 fixed 가 그 안에 갇히므로, 펼친 동안만 감싼 요소에서 끈다 */
+:has(> * .work.full), :has(> .work.full) { animation: none !important; transform: none !important; container-type: normal !important; contain: none !important; filter: none !important; }
 .work-tools .tag { display: inline-flex; align-items: center; gap: 4px; }
 .work-tools [data-lucide] { width: 13px; height: 13px; }
 .work-foot { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex-wrap: wrap; }

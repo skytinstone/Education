@@ -515,11 +515,15 @@
   function workHTML(pid) {
     const w = workState[pid];
     const attempted = Store.state.attempts.some((a) => a.problemId === pid);
+    const p = Store.problem(pid);
     return `
-      <div class="work" data-work-panel="${pid}">
+      <div class="work ${w.full ? "full" : ""}" data-work-panel="${pid}">
         <div class="work-head"><b><i data-lucide="pencil-line"></i>서술형 풀이</b>
           <div class="seg">${[["type", "타이핑"], ["draw", "손글씨"]].map(([k, t]) => `<button type="button" data-work-tab="${k}" class="${w.tab === k ? "on" : ""}">${t}</button>`).join("")}</div>
+          <button type="button" class="icon-btn" data-work-full aria-label="${w.full ? "작게 보기" : "크게 보기"}" title="${w.full ? "작게 보기 (Esc)" : "크게 보기"}"><i data-lucide="${w.full ? "minimize-2" : "maximize-2"}"></i></button>
           <button type="button" class="icon-btn" data-work-close aria-label="풀이 칸 닫기"><i data-lucide="x"></i></button></div>
+        <div class="work-stem"><p data-math>${esc(p?.stem ?? "")}</p>
+          ${p?.choices?.length ? `<ol>${p.choices.map((c) => `<li data-math>${esc(c)}</li>`).join("")}</ol>` : ""}</div>
         <div class="work-type" ${w.tab === "type" ? "" : "hidden"}>
           <textarea data-work-text rows="6" maxlength="4000" placeholder="한 줄에 한 단계씩 적어 주세요&#10;예) t = x^2 로 치환하면 dt = 2x dx&#10;    $\\int_0^1 e^t\\,dt = e - 1$">${esc(w.text)}</textarea>
           <div class="work-preview" data-math data-work-preview>${workPreview(w.text)}</div>
@@ -562,13 +566,18 @@
       const ctx = cv.getContext("2d");
       const width = cv.clientWidth;
       if (!width) return; // 숨겨진 탭이면 보일 때 다시
+      // 크게 보기에서 쓴 것을 작게 돌아와도 잘리지 않게: 폭에 맞춰 줄이고 그 높이만큼 캔버스를 늘린다
+      const [iw, ih] = w.image ? w.imageSize : [0, 0];
+      const scale = iw ? Math.min(1, width / iw) : 1;
+      const height = Math.max(cv.clientHeight || 320, Math.ceil(ih * scale));
+      if (height > cv.clientHeight) cv.style.height = `${height}px`;
       const dpr = Math.min(devicePixelRatio || 1, 2);
       cv.width = width * dpr;
-      cv.height = 320 * dpr;
+      cv.height = height * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.fillStyle = "#fff";
-      ctx.fillRect(0, 0, width, 320);
-      if (w.image) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, width, 320); img.src = w.image; }
+      ctx.fillRect(0, 0, width, height);
+      if (w.image) { const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, iw * scale, ih * scale); img.src = w.image; }
       cv.dataset.ready = "1";
       let drawing = false;
       const at = (e) => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
@@ -584,11 +593,32 @@
         ctx.stroke();
       });
       cv.addEventListener("pointermove", (e) => { if (drawing) { ctx.lineTo(...at(e)); ctx.stroke(); } });
-      const end = () => { if (!drawing) return; drawing = false; w.image = cv.toDataURL("image/png"); w.drawn = true; };
+      const end = () => { if (!drawing) return; drawing = false; w.image = cv.toDataURL("image/png"); w.imageSize = [width, height]; w.drawn = true; };
       cv.addEventListener("pointerup", end);
       cv.addEventListener("pointercancel", end);
     });
   }
+  // 풀이 칸 크게 보기 — 화면 전체로 펼치고 문제를 위에 보여 준다. 손글씨는 새 크기로 캔버스를 다시 깐다 (쓴 것은 유지)
+  function setWorkFull(panel, full) {
+    const w = workState[panel.dataset.workPanel];
+    w.full = full;
+    panel.classList.toggle("full", full);
+    document.body.classList.toggle("work-full-open", full);
+    const btn = $("[data-work-full]", panel);
+    btn.setAttribute("aria-label", full ? "작게 보기" : "크게 보기");
+    btn.title = full ? "작게 보기 (Esc)" : "크게 보기";
+    btn.innerHTML = `<i data-lucide="${full ? "minimize-2" : "maximize-2"}"></i>`;
+    const cv = $("canvas[data-work-canvas]", panel);
+    cv.replaceWith(Object.assign(document.createElement("canvas"), { ariaLabel: "손글씨 풀이" }));
+    $(".work-draw canvas", panel).setAttribute("data-work-canvas", "");
+    icons();
+    (w.tab === "type" ? $("[data-work-text]", panel) : null)?.focus();
+  }
+  document.addEventListener("keydown", (e) => {
+    const panel = e.key === "Escape" && $(".work.full");
+    if (panel) { e.preventDefault(); setWorkFull(panel, false); }
+  });
+
   // 풀이 칸의 버튼들 (문제 카드가 있는 모든 화면에서 공통)
   async function handleWork(e) {
     const toggle = e.target.closest("[data-work]");
@@ -613,7 +643,12 @@
       mountWorkCanvases();
       return;
     }
+    if (e.target.closest("[data-work-full]")) {
+      setWorkFull(panel, !w.full);
+      return;
+    }
     if (e.target.closest("[data-work-close]")) {
+      if (w.full) setWorkFull(panel, false);
       w.open = false;
       const card = panel.closest("[data-problem]");
       card.classList.remove("has-work");
