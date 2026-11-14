@@ -55,7 +55,7 @@
 
   /* ---------- 왼쪽: 소개 ---------- */
   .intro { display: flex; flex-direction: column; padding: 32px 56px; }
-  .brand { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+  .brand { display: flex; align-items: center; gap: 10px; white-space: nowrap; color: inherit; text-decoration: none; align-self: flex-start; }
   .brand-company { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 15px; letter-spacing: -0.025em; }
 
   /* 가운데: Eureka 워드마크 + 슬로건 */
@@ -223,9 +223,9 @@
 <main class="login">
   <!-- ===================== 소개 ===================== -->
   <section class="intro">
-    <div class="brand reveal">
+    <a class="brand reveal" href="/" title="Eureka 소개 페이지로">
       <span class="brand-company">Horcrux Technologies</span>
-    </div>
+    </a>
 
     <div class="pitch">
       <span class="eyebrow reveal"><i></i>AI 학습 에이전트</span>

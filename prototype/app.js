@@ -319,17 +319,16 @@
     if (homeProjectId && !Store.project(homeProjectId)) homeProjectId = null;
     renderChip();
 
-    // 이번 주 약점 배너 — 3번 이상 푼 개념 중 정답률이 가장 낮은 것
-    const weak = Store.conceptStats().find((s) => s.attempts >= 3);
-    if (weak) {
-      const c = concept(weak.conceptId);
-      $("#banner-eyebrow").textContent = `이번 주 약점 · ${subjectOf(c.id)?.name ?? ""}`;
-      $("#banner-title").textContent = c.name;
-      $("#banner-desc").textContent = `최근 ${weak.attempts}문제 중 ${weak.attempts - weak.correct}문제 오답 · 정답률 ${pct(weak.accuracy)}`;
-      $("#banner-concept").dataset.href = `#/library/concept/${c.id}`;
-    }
+    const st = Store.state;
+    const name = st.user?.name;
+    $("#greeting").textContent = name ? `${name}님, 오늘은 무엇을 공부할까요?` : "오늘은 무엇을 공부할까요?";
 
-    const recent = [...Store.state.sessions].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4);
+    renderGoal();
+    renderTodo();
+    renderExam();
+    renderActivity();
+
+    const recent = [...st.sessions].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4);
     $("#cards-recent").innerHTML = recent.map((s) => {
       const p = s.projectId && Store.project(s.projectId);
       const ids = s.messages.flatMap((m) => m.problemIds ?? []);
@@ -339,15 +338,7 @@
         href: `#/chat/${s.id}`, c: p ? COLOR[projectDomain(p)] : "var(--ink-3)", kind: p ? p.name : "대화", title: s.title,
         meta: `${ids.length ? `${ok} / ${ids.length} 정답 · ` : ""}${relTime(s.updatedAt)}`, pct: ids.length ? (ok / ids.length) * 100 : 0,
       });
-    }).join("") || '<p class="empty">아직 학습 기록이 없어요</p>';
-
-    const unknownCards = Store.state.cards.filter((c) => c.known !== true).length;
-    const open = Store.openNotes();
-    const recs = [];
-    if (weak) recs.push({ href: `#/library/concept/${weak.conceptId}`, c: COLOR[concept(weak.conceptId).domain], kind: "약점 보완", title: `${concept(weak.conceptId).name} 다시 보기`, meta: `정답률 ${pct(weak.accuracy)} · 개념부터 정리해요` });
-    if (open.length) recs.push({ href: "#/notes", c: "var(--warn)", kind: "복습 타이밍", title: `안 푼 오답 ${open.length}문제 다시 풀기`, meta: "잊기 전에 다시 풀면 오래 기억해요" });
-    if (unknownCards) recs.push({ href: "#/library/cards", c: "var(--accent)", kind: "암기", title: `암기 카드 ${unknownCards}장`, meta: `예상 ${Math.max(1, Math.round(unknownCards / 2))}분` });
-    $("#cards-recommend").innerHTML = recs.map(card).join("") || '<p class="empty">추천할 학습이 없어요. 잘하고 있어요!</p>';
+    }).join("") || '<p class="empty">아직 학습 기록이 없어요. 위 입력창에 풀고 싶은 문제를 적어 보세요</p>';
 
     $("#subjects").innerHTML = myDomains().map((d) => {
       const acc = Store.accuracy({ domain: d });
@@ -357,10 +348,188 @@
           <span class="kind"><span class="sw"></span>${DOMAIN_NAME[d]}</span>
           <div class="pct">${acc == null ? "–" : Math.round(acc * 100)}<small>% 정답률</small></div>
           <div class="bar"><i style="width:${acc == null ? 0 : acc * 100}%"></i></div>
-          <div class="weak">${w ? `약점 <b>${esc(concept(w.conceptId).name)}</b>` : "아직 풀이 기록이 없어요"}</div>
+          <div class="weak">${w ? `약점 <b>${esc(concept(w.conceptId)?.name ?? "")}</b>` : "아직 풀이 기록이 없어요"}</div>
         </a>`;
     }).join("");
   }
+
+  const dayKey = (t) => new Date(new Date(t).toDateString()).getTime();
+
+  // ---------- 오늘 목표: 링 + 연속 학습 ----------
+  // 오늘 아직 안 풀었으면 어제까지 이어진 연속 기록을 보여 주고 이어 가자고 한다
+  function streakUntilYesterday() {
+    const days = new Set(Store.state.attempts.map((a) => dayKey(a.at)));
+    let n = 0;
+    for (let d = startOfToday() - DAY; days.has(d); d -= DAY) n++;
+    return n;
+  }
+  function renderGoal() {
+    const done = Store.todayCount(), goal = Math.max(1, Store.state.user.dailyGoal || 20);
+    const r = 44, len = 2 * Math.PI * r, ratio = Math.min(1, done / goal);
+    const left = goal - done;
+    const streak = done ? Store.streak() : streakUntilYesterday();
+    const streakText = done
+      ? `${streak}일 연속 학습 중`
+      : streak ? `어제까지 ${streak}일 연속 · 오늘도 이어 가요` : "오늘 첫 문제로 연속 학습을 시작해요";
+    $("#goal-card").innerHTML = `
+      <h2>오늘 목표</h2>
+      <div class="ring" role="img" aria-label="오늘 ${goal}문제 중 ${done}문제 풀었어요">
+        <svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="${r}" /><circle class="fill" cx="50" cy="50" r="${r}" stroke-dasharray="${len}" stroke-dashoffset="${len}" data-offset="${len * (1 - ratio)}" /></svg>
+        <div class="num"><b>${done}</b><small>/ ${goal}문제</small></div>
+      </div>
+      <div class="msg ${left <= 0 ? "done" : ""}">${left <= 0 ? "오늘 목표를 달성했어요!" : `목표까지 ${left}문제`}</div>
+      <span class="streak ${done ? "" : "off"}"><i data-lucide="flame"></i>${streakText}</span>`;
+    // 다음 프레임에 채워서 링이 차오르는 애니메이션
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const c = $("#goal-card .fill");
+      if (c) c.style.strokeDashoffset = c.dataset.offset;
+    }));
+  }
+
+  // ---------- 오늘 할 일: 복습 시기 → 약점 → 암기 카드 → 목표 ----------
+  const REVIEW_DAYS = [1, 3, 7]; // 서버 알림(services/reminders.py)과 같은 간격
+  function renderTodo() {
+    const st = Store.state;
+    const today = startOfToday();
+    const open = Store.openNotes();
+    const due = open.filter((n) => REVIEW_DAYS.includes(Math.round((today - dayKey(n.createdAt)) / DAY)));
+    const weak = Store.conceptStats().find((s) => s.attempts >= 3 && s.accuracy < 0.8 && concept(s.conceptId));
+    const unknownCards = st.cards.filter((c) => c.known !== true).length;
+    const left = (st.user.dailyGoal || 20) - Store.todayCount();
+
+    const items = [];
+    if (due.length) items.push({ href: "#/notes", icon: "rotate-ccw", c: "var(--warn)", title: `복습할 오답 ${due.length}문제`, meta: "틀린 지 1·3·7일째 — 지금 다시 풀면 오래 기억돼요" });
+    else if (open.length) items.push({ href: "#/notes", icon: "circle-x", c: "var(--warn)", title: `아직 안 푼 오답 ${open.length}문제`, meta: "맞히면 오답노트에서 졸업해요" });
+    if (weak) {
+      const c = concept(weak.conceptId);
+      items.push({ href: `#/library/concept/${c.id}`, icon: "target", c: COLOR[c.domain], title: `약점 개념 · ${c.name}`, meta: `정답률 ${pct(weak.accuracy)} (${weak.attempts}문제) · 개념 정리부터 다시 봐요` });
+    }
+    if (unknownCards) items.push({ href: "#/library/cards", icon: "layers", c: "var(--accent)", title: `암기 카드 ${unknownCards}장`, meta: `약 ${Math.max(1, Math.round(unknownCards / 2))}분이면 한 번 넘겨 볼 수 있어요` });
+    if (left > 0) {
+      const topic = weak ? concept(weak.conceptId).name : (DOMAIN_NAME[myDomains()[0]] ?? "수학");
+      items.push({ fill: `${topic} 문제 ${Math.min(left, 5)}개 내줘`, icon: "pencil-line", c: "var(--ink)", title: `문제 ${left}개 더 풀기`, meta: "누르면 입력창에 요청을 채워 드려요" });
+    }
+
+    const shown = items.slice(0, 4);
+    $("#todo-count").textContent = shown.length ? `${shown.length}개` : "";
+    $("#todo").innerHTML = shown.length ? shown.map((t) => {
+      const inner = `
+        <span class="ic" style="--c:${t.c}"><i data-lucide="${t.icon}"></i></span>
+        <span class="tx"><b>${esc(t.title)}</b><small>${esc(t.meta)}</small></span>
+        <i data-lucide="chevron-right" class="go"></i>`;
+      return t.href ? `<a class="todo-item" href="${t.href}">${inner}</a>` : `<button type="button" class="todo-item" data-fill="${esc(t.fill)}">${inner}</button>`;
+    }).join("") : '<div class="todo-done"><i data-lucide="party-popper"></i><span>오늘 할 일을 모두 끝냈어요.<br />내일도 이 화면에서 챙겨 드릴게요</span></div>';
+  }
+
+  // ---------- 다가오는 시험 ----------
+  const WEEKDAY = "일월화수목금토";
+  function renderExam() {
+    const upcoming = Store.state.projects
+      .map((p) => ({ p, n: daysLeft(p.examDate) }))
+      .filter((x) => x.n != null && x.n >= 0)
+      .sort((a, b) => a.n - b.n);
+    if (!upcoming.length) {
+      $("#exam-card").outerHTML = `
+        <article class="panel exam empty-exam" id="exam-card">
+          <h2>다가오는 시험</h2>
+          <p>시험 날짜가 있는 프로젝트를 만들면 D-day와 남은 오답을 여기서 챙겨 드려요.</p>
+          <button type="button" class="btn-ghost" data-wizard><i data-lucide="plus"></i>프로젝트 만들기</button>
+        </article>`;
+      return;
+    }
+    const { p, n } = upcoming[0];
+    const d = new Date(`${p.examDate}T00:00:00`);
+    const acc = Store.accuracy({ projectId: p.id });
+    const notes = Store.openNotes().filter((x) => x.projectId === p.id).length;
+    const next = upcoming[1];
+    $("#exam-card").outerHTML = `
+      <a class="panel exam" id="exam-card" href="#/project/${p.id}" style="--c:${n <= 14 ? "var(--warn)" : COLOR[projectDomain(p)]}">
+        <h2>다가오는 시험</h2>
+        <div class="dd">${ddayLabel(n)}</div>
+        <div class="name">${esc(p.name)}</div>
+        <div class="date">${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAY[d.getDay()]})${p.goal ? ` · 목표 ${esc(p.goal)}` : ""}</div>
+        <div class="facts"><span>정답률 <b>${pct(acc)}</b></span><span>남은 오답 <b>${notes}</b></span></div>
+        ${next ? `<div class="next">그다음 · ${esc(next.p.name)} ${ddayLabel(next.n)}</div>` : ""}
+      </a>`;
+  }
+
+  // ---------- 학습 기록: 최근 20주 히트맵 + 이번 주 요약 ----------
+  // 칸 하나 12px + 간격 3px. 들어가는 만큼 주를 보여 준다 (12~53주)
+  const heatWeeks = () => Math.max(12, Math.min(53, Math.floor(($("#heat-scroll").clientWidth + 3) / 15)));
+  let shownWeeks = 0;
+  new ResizeObserver(() => {
+    if (!home.hidden && Store.state && heatWeeks() !== shownWeeks) renderActivity();
+  }).observe($("#heat-scroll"));
+
+  function renderActivity() {
+    const WEEKS = (shownWeeks = heatWeeks());
+    const goal = Math.max(1, Store.state.user.dailyGoal || 20);
+    const byDay = new Map();
+    for (const a of Store.state.attempts) {
+      const k = dayKey(a.at);
+      const v = byDay.get(k) ?? { n: 0, ok: 0 };
+      v.n++; v.ok += a.correct ? 1 : 0;
+      byDay.set(k, v);
+    }
+    const now = new Date(startOfToday());
+    const today = now.getTime();
+    const mondayOffset = (now.getDay() + 6) % 7; // 월요일 시작
+    // 날짜 계산은 Date 생성자로 (서머타임이 있는 시간대에서도 하루 = 자정 기준)
+    const dateAt = (offset) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset).getTime();
+    const startOffset = -mondayOffset - (WEEKS - 1) * 7;
+    const level = (n) => (!n ? 0 : n >= goal ? 4 : n >= goal * 0.5 ? 3 : n >= goal * 0.25 ? 2 : 1);
+
+    let html = "", lastMonth = -1;
+    for (let w = 0; w < WEEKS; w++) {
+      // 월이 바뀌는 주에만 위에 월 표시 (그 주 일요일 기준)
+      const m = new Date(dateAt(startOffset + w * 7 + 6)).getMonth();
+      // 첫 칸은 그 달이 2주 이상 이어질 때만 (바로 다음 달 표시와 겹치지 않게)
+      const crowded = w === 0 && new Date(dateAt(startOffset + 13)).getMonth() !== m;
+      html += `<span class="m">${m !== lastMonth && !crowded ? `${m + 1}월` : ""}</span>`;
+      lastMonth = m;
+      for (let i = 0; i < 7; i++) {
+        const t = dateAt(startOffset + w * 7 + i);
+        const v = byDay.get(t);
+        const d = new Date(t);
+        const cls = t > today ? "future" : `l${level(v?.n)}${t === today ? " is-today" : ""}`;
+        html += `<span class="d ${cls}" title="${d.getMonth() + 1}월 ${d.getDate()}일 · ${v ? `${v.n}문제, 정답 ${v.ok}` : "학습 없음"}"></span>`;
+      }
+    }
+    const heat = $("#heat");
+    heat.innerHTML = html;
+    heat.setAttribute("role", "img");
+    heat.setAttribute("aria-label", `최근 ${WEEKS}주 동안 날마다 푼 문제 수`);
+
+    // 이번 주(월~오늘) vs 지난주 같은 요일까지
+    const sum = (from, to) => {
+      let n = 0, ok = 0, days = 0;
+      for (let i = from; i <= to; i++) { const v = byDay.get(dateAt(i)); if (v) { n += v.n; ok += v.ok; days++; } }
+      return { n, ok, days, acc: n ? ok / n : null };
+    };
+    const cur = sum(-mondayOffset, 0), prev = sum(-mondayOffset - 7, -7);
+    const delta = (a, b, unit) => {
+      if (a == null || b == null) return '<span class="delta">지난주 기록 없음</span>';
+      const d = a - b;
+      return `<span class="delta ${d > 0 ? "up" : d < 0 ? "down" : ""}">지난주보다 ${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d)}${unit}</span>`;
+    };
+    const accPct = (s) => (s.acc == null ? null : Math.round(s.acc * 100));
+    $("#week-stats").innerHTML = `
+      <div class="wstat"><div class="k">이번 주 푼 문제</div><div class="v">${cur.n}<small>문제</small></div>${delta(cur.n, prev.n || null, "문제")}</div>
+      <div class="wstat"><div class="k">이번 주 정답률</div><div class="v">${accPct(cur) ?? "–"}<small>%</small></div>${delta(accPct(cur), accPct(prev), "%p")}</div>
+      <div class="wstat"><div class="k">공부한 날</div><div class="v">${cur.days}<small>/ ${mondayOffset + 1}일</small></div><span class="delta">누적 ${Store.state.attempts.length}문제</span></div>`;
+  }
+
+  $("#home").addEventListener("click", (e) => {
+    const fill = e.target.closest("[data-fill]");
+    if (fill) {
+      prompt.value = fill.dataset.fill;
+      send.disabled = false;
+      prompt.focus();
+      contentEl.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    if (e.target.closest("[data-wizard]")) projectWizard();
+  });
 
   function card({ href, c, kind, title, meta, pct: p = 0 }) {
     return `
@@ -411,8 +580,6 @@
     send.disabled = false;
     prompt.focus();
   });
-  $("#banner-review").addEventListener("click", () => go("/notes"));
-  $("#banner-concept").addEventListener("click", (e) => { location.hash = e.currentTarget.dataset.href || "#/library"; });
 
   // ================= 대화 =================
   // 질문을 보내고 답을 기다린다. 새 대화면 바로 그 대화로 이동하고, 서버가 진짜 id 를 주면 주소를 바꾼다
@@ -890,9 +1057,9 @@
       </div>
 
       <div class="stats">
-        <div class="stat"><b>${n == null ? "–" : ddayLabel(n)}</b><span>시험까지</span></div>
-        <div class="stat"><b>${tries}</b><span>푼 문제</span></div>
-        <div class="stat"><b>${pct(acc)}</b><span>정답률</span></div>
+        <div class="wstat"><b>${n == null ? "–" : ddayLabel(n)}</b><span>시험까지</span></div>
+        <div class="wstat"><b>${tries}</b><span>푼 문제</span></div>
+        <div class="wstat"><b>${pct(acc)}</b><span>정답률</span></div>
         <a class="stat" href="#/notes?project=${id}" style="text-decoration:none;color:inherit"><b style="color:${open ? "var(--warn)" : "inherit"}">${open}</b><span>남은 오답 →</span></a>
       </div>
 
@@ -2544,7 +2711,7 @@
   setUnread(Store.state.user?.unreadNotifications ?? 0);
 
   // 홈 요소: 스크롤하면 아래에서 위로 떠오름
-  [[".hero h1", ".hero p", ".hero .composer"], [".action"], [".banner"], [".tabs"], ["#cards-recent .card"], ["#cards-recommend .card"], [".section-head"], [".subject"]]
+  [[".hero h1", ".hero p", ".hero .composer"], [".action"], [".today > .panel"], [".activity"], [".section-head"], ["#cards-recent .card"], [".subject"]]
     .forEach((group) => group.flatMap((s) => $$(s)).forEach((el, i) => { el.classList.add("reveal"); el.style.setProperty("--d", `${i * 70}ms`); }));
   const revealer = new IntersectionObserver((entries) => {
     for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); revealer.unobserve(e.target); }
@@ -2552,11 +2719,6 @@
   $$(".reveal").forEach((el) => revealer.observe(el));
   }).catch((e) => toast(`데이터를 불러오지 못했어요: ${e.message}`));
 
-  $$("[data-tab]").forEach((t) => t.addEventListener("click", () => {
-    $$("[data-tab]").forEach((x) => x.classList.toggle("active", x === t));
-    $("#cards-recent").classList.toggle("hidden", t.dataset.tab !== "recent");
-    $("#cards-recommend").classList.toggle("hidden", t.dataset.tab !== "recommend");
-  }));
 
   // 무지개 도트: 홈에서는 입력창 중심, 다른 화면에서는 화면 위쪽 가운데
   const composerEl = $("#composer");
@@ -2571,10 +2733,5 @@
     },
     clear: () => (home.hidden ? [] : homeText.map((el) => el.getBoundingClientRect())),
     scrollY: () => contentEl.scrollTop,
-  });
-  dotField($("#banner-dots"), {
-    gap: 12, baseR: 0.8, peakR: 2, baseAlpha: 0.12, peakAlpha: 0.75, light: 58,
-    wavelength: 60, speed: 1.4, hueSpeed: 40, introSec: 1.8, edges: true,
-    focus: (W, H) => [W / 2, H / 2],
   });
 })();

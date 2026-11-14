@@ -199,7 +199,7 @@
   .content { flex: 1; overflow-y: auto; padding: 48px 4px 40px; }
   .wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
 
-  .hero { text-align: center; padding: 11vh 0 0; }
+  .hero { text-align: center; padding: 9vh 0 0; }
   .hero h1 { font-size: clamp(24px, 2.4vw, 30px); font-weight: 600; letter-spacing: -0.025em; }
   .hero p { color: var(--ink-2); margin-top: 8px; font-size: 14px; }
 
@@ -229,7 +229,7 @@
   .send:not(:disabled) { box-shadow: 0 0 0 3px #fff, 0 0 0 5px transparent; }
   .send:not(:disabled):hover { transform: scale(1.05); }
 
-  .actions { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; max-width: 780px; margin: 120px auto 0; }
+  .actions { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; max-width: 780px; margin: 72px auto 0; }
   .action { display: flex; flex-direction: column; align-items: center; gap: 11px; padding: 6px 0; border-radius: 14px; font-size: 14px; font-weight: 500; }
   .action .tile {
     width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center;
@@ -242,27 +242,93 @@
   /* 호버 시 무지개 테두리 */
   .action:hover .tile { transform: translateY(-3px); background: linear-gradient(#fff, #fff) padding-box, var(--rainbow) border-box; }
 
-  /* 배너: 클리어 화이트 유리 + 양옆 무지개 도트 */
-  .banner {
-    margin-top: 44px; border-radius: 18px; min-height: 190px;
-    overflow: hidden; text-align: center;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
-    padding: 32px 28px; background: rgba(255, 255, 255, 0.6);
-  }
-  .banner canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .banner > div { position: relative; z-index: 1; }
-  .banner .eyebrow { font-size: 12.5px; font-weight: 500; color: var(--ink-3); }
-  .banner h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; margin-top: 6px; }
-  .banner p { margin-top: 4px; font-size: 13.5px; color: var(--ink-2); }
-  .banner .cta { display: flex; gap: 6px; }
   .btn-primary { background: var(--ink); color: #fff; height: 32px; padding: 0 13px; border-radius: 9px; font-weight: 500; font-size: 14px; }
   .btn-primary:hover { background: #1e293b; }
   .btn-ghost { height: 32px; padding: 0 13px; border-radius: 9px; font-weight: 500; font-size: 14px; background: rgba(255,255,255,.7); border: 1px solid var(--line); }
   .btn-ghost:hover { background: #fff; }
 
-  .tabs { display: flex; gap: 4px; margin-top: 36px; }
-  .tab { height: 30px; padding: 0 12px; border-radius: 9px; font-size: 14px; color: var(--ink-2); font-weight: 500; }
-  .tab.active { color: var(--ink); background: #fff; border: 1px solid var(--line); box-shadow: 0 1px 3px rgba(15,23,42,.05); }
+  /* ---------- 홈 대시보드: 오늘 · 학습 기록 ---------- */
+  .panel {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 18px;
+    padding: 18px 20px; box-shadow: 0 2px 10px rgba(31,41,80,.04); min-width: 0;
+  }
+  .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+  .panel-head h2, .panel h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .muted { font-size: 12.5px; color: var(--ink-3); }
+
+  .today { display: grid; grid-template-columns: 1fr 1.55fr 1fr; gap: 14px; margin-top: 56px; align-items: stretch; }
+
+  .goal { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px; }
+  .goal h2 { align-self: flex-start; }
+  .ring { position: relative; width: 120px; height: 120px; }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 10; }
+  .ring .track { stroke: rgba(15,23,42,.06); }
+  .ring .fill { stroke: url(#ring-grad); stroke-linecap: round; transition: stroke-dashoffset 1.2s cubic-bezier(.16,1,.3,1); }
+  .ring .num { position: absolute; inset: 0; display: grid; place-content: center; line-height: 1.1; }
+  .ring .num b { font-size: 28px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+  .ring .num small { font-size: 12px; color: var(--ink-3); }
+  .goal .msg { font-size: 13.5px; font-weight: 600; }
+  .goal .msg.done { color: var(--ok); }
+  .streak { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--ink-2); }
+  .streak [data-lucide] { width: 14px; height: 14px; color: var(--warn); }
+  .streak.off [data-lucide] { color: var(--ink-3); }
+
+  .todo-list { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+  .todo-item {
+    display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+    padding: 10px; margin: 0 -10px; width: calc(100% + 20px); border-radius: 12px;
+    color: inherit; text-decoration: none; transition: background .15s;
+  }
+  .todo-item:hover { background: rgba(15,23,42,.035); }
+  .todo-item .ic {
+    width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; display: grid; place-items: center;
+    background: color-mix(in srgb, var(--c) 12%, transparent); color: var(--c);
+  }
+  .todo-item .tx { flex: 1; min-width: 0; }
+  .todo-item b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .todo-item small { display: block; font-size: 12.5px; color: var(--ink-3); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .todo-item .go { color: var(--ink-3); transition: transform .2s; }
+  .todo-item:hover .go { transform: translateX(3px); color: var(--ink); }
+  .todo-done { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 28px 0 18px; text-align: center; font-size: 13.5px; color: var(--ink-2); }
+  .todo-done [data-lucide] { width: 26px; height: 26px; color: var(--ok); }
+
+  .exam { display: flex; flex-direction: column; gap: 6px; color: inherit; text-decoration: none; }
+  a.exam { transition: transform .2s, box-shadow .2s; }
+  a.exam:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(31,41,80,.08); }
+  .exam .dd { margin-top: 10px; font-size: 40px; line-height: 1; font-weight: 800; letter-spacing: -0.04em; color: var(--c); font-variant-numeric: tabular-nums; }
+  .exam .name { font-size: 14.5px; font-weight: 600; margin-top: 6px; }
+  .exam .date { font-size: 12.5px; color: var(--ink-3); }
+  .exam .facts { display: flex; gap: 14px; margin-top: auto; padding-top: 12px; font-size: 12.5px; color: var(--ink-2); }
+  .exam .facts b { font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .exam .next { font-size: 12px; color: var(--ink-3); border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+  .exam.empty-exam { align-items: flex-start; }
+  .exam.empty-exam p { font-size: 13.5px; color: var(--ink-2); line-height: 1.6; margin: 10px 0 14px; }
+
+  .activity { margin-top: 14px; }
+  .legend { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; color: var(--ink-3); }
+  .legend i { width: 11px; height: 11px; border-radius: 3px; }
+  .legend i:first-child { margin-left: 3px; }
+  .legend i:last-child { margin-right: 3px; }
+  .l0 { background: rgba(15,23,42,.06); }
+  .l1 { background: color-mix(in srgb, var(--accent) 25%, transparent); }
+  .l2 { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+  .l3 { background: color-mix(in srgb, var(--accent) 70%, transparent); }
+  .l4 { background: var(--accent); }
+  .activity-body { display: flex; gap: 28px; align-items: flex-end; margin-top: 14px; }
+  .heat-scroll { flex: 1; min-width: 0; overflow: hidden; display: flex; justify-content: flex-end; }
+  .heat { display: inline-grid; grid-auto-flow: column; grid-auto-columns: 12px; grid-template-rows: 14px repeat(7, 12px); gap: 3px; }
+  .heat .m { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; line-height: 12px; width: 12px; overflow: visible; }
+  .heat .d { width: 12px; height: 12px; border-radius: 3px; }
+  .heat .d.is-today { box-shadow: 0 0 0 1.5px var(--ink); }
+  .heat .d.future { visibility: hidden; }
+  .week-stats { display: grid; grid-template-columns: repeat(3, auto); gap: 6px 24px; flex-shrink: 0; }
+  .wstat .k { font-size: 12px; color: var(--ink-3); }
+  .wstat .v { font-size: 22px; font-weight: 700; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .wstat .v small { font-size: 12.5px; font-weight: 500; color: var(--ink-3); margin-left: 2px; }
+  .wstat .delta { font-size: 12px; font-weight: 600; color: var(--ink-3); }
+  .wstat .delta.up { color: var(--ok); }
+  .wstat .delta.down { color: var(--bad); }
 
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; margin-top: 16px; }
   .card {
@@ -309,7 +375,9 @@
   @media (max-width: 960px) {
     .actions { grid-template-columns: repeat(4, 1fr); row-gap: 14px; margin-top: 64px; }
     .search { display: none; }
-    .banner { padding: 26px 20px; }
+    .today { grid-template-columns: 1fr 1fr; }
+    .today .todo { grid-column: 1 / -1; grid-row: 1; }
+    .activity-body { flex-direction: column; align-items: stretch; gap: 18px; }
   }
   @media (max-width: 760px) {
     .app { padding: 8px; gap: 0; }
@@ -319,11 +387,21 @@
     .topbar .pill-btn { display: none; }
     .wrap { padding: 0 12px; }
     .chip .chip-text { display: none; }
+    .today { margin-top: 40px; }
+    .week-stats { grid-template-columns: repeat(3, 1fr); gap: 6px 12px; }
+    .wstat .v { font-size: 19px; }
+  }
+  @media (max-width: 480px) {
+    .today { grid-template-columns: 1fr; }
+    .legend { display: none; }
   }
 </style>
 </head>
 <body>
 <canvas id="dots" aria-hidden="true"></canvas>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="ring-grad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4fc3ff" /><stop offset=".5" stop-color="#6b7cff" /><stop offset="1" stop-color="#c06bff" /></linearGradient>
+</defs></svg>
 
 <div class="app" id="app">
   <!-- ===================== 사이드바 ===================== -->
@@ -371,7 +449,7 @@
       <div class="wrap">
         <div id="home">
         <section class="hero">
-          <h1>오늘은 무엇을 공부할까요?</h1>
+          <h1 id="greeting">오늘은 무엇을 공부할까요?</h1>
           <p>문제 생성부터 오답 분석, 개념 정리까지 한 번에</p>
 
           <form class="composer glass" id="composer">
@@ -385,25 +463,33 @@
 
         <section class="actions" id="actions"></section>
 
-        <section class="banner glass">
-          <canvas id="banner-dots" aria-hidden="true"></canvas>
-          <div>
-            <div class="eyebrow" id="banner-eyebrow">이번 주 약점</div>
-            <h2 id="banner-title">아직 분석할 기록이 없어요</h2>
-            <p id="banner-desc">문제를 풀면 가장 약한 개념을 알려드려요</p>
+        <!-- 오늘: 목표 · 할 일 · 다가오는 시험 -->
+        <section class="today" aria-label="오늘">
+          <article class="panel goal" id="goal-card"></article>
+          <article class="panel todo">
+            <div class="panel-head"><h2>오늘 할 일</h2><span class="muted" id="todo-count"></span></div>
+            <div class="todo-list" id="todo"></div>
+          </article>
+          <article class="panel exam" id="exam-card"></article>
+        </section>
+
+        <!-- 학습 기록: 최근 20주 히트맵 + 이번 주 요약 -->
+        <section class="panel activity" aria-label="학습 기록">
+          <div class="panel-head">
+            <h2>학습 기록</h2>
+            <span class="legend" aria-hidden="true">적음 <i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> 목표 달성</span>
           </div>
-          <div class="cta">
-            <button class="btn-primary" id="banner-review">복습 시작</button>
-            <button class="btn-ghost" id="banner-concept">개념 보기</button>
+          <div class="activity-body">
+            <div class="heat-scroll" id="heat-scroll"><div class="heat" id="heat"></div></div>
+            <div class="week-stats" id="week-stats"></div>
           </div>
         </section>
 
-        <div class="tabs">
-          <button class="tab active" data-tab="recent">최근 학습</button>
-          <button class="tab" data-tab="recommend">추천 학습</button>
+        <div class="section-head">
+          <h2>최근 학습</h2>
+          <a href="#/library">라이브러리</a>
         </div>
         <section class="cards" id="cards-recent"></section>
-        <section class="cards hidden" id="cards-recommend"></section>
 
         <div class="section-head">
           <h2>과목별 학습 현황</h2>
