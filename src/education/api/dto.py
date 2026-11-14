@@ -346,6 +346,7 @@ class MessageOut(BaseModel):
     role: str
     text: str
     problems: list[ProblemView]
+    explanation: dict | None = None  # 계산·설명 질문의 풀이 (services/explain.py)
     created_at: datetime
 
 

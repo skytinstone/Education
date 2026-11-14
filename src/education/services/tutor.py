@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from education.db import models as m
 from education.schemas import Domain, VerificationStatus
-from education.services import generator, learning
+from education.services import explain, generator, learning
 from education.services.llm import LLMError, get_llm
 
 log = logging.getLogger(__name__)
@@ -66,6 +66,18 @@ def textbook_label(project: m.Project) -> str | None:
     if not project.textbook:
         return None
     return f"{project.textbook} (ISBN {project.textbook_isbn})" if project.textbook_isbn else project.textbook
+
+
+def reply_full(db: Session, user: m.User, text: str, project: m.Project | None) -> tuple[str, list[str], dict | None]:
+    """(답변 문장, 문제 id 목록, 풀이). 계산·설명 질문이면 문제 대신 풀이로 답한다."""
+    llm = get_llm()
+    if llm and explain.is_explain_request(text):
+        try:
+            line, payload = explain.explain(db, llm, user, text)
+            return line, [], payload
+        except LLMError as e:
+            log.warning("AI 풀이 실패: %s", e)
+    return (*reply(db, user, text, project), None)
 
 
 def reply(db: Session, user: m.User, text: str, project: m.Project | None) -> tuple[str, list[str]]:

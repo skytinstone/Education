@@ -15,9 +15,9 @@ router = APIRouter(prefix="/sessions", tags=["대화"])
 def _converse(db: Session, user: m.User, s: m.ChatSession, text: str) -> list[m.Message]:
     """학생 메시지를 남기고 답변을 만든다."""
     project = db.get(m.Project, s.project_id) if s.project_id else None
-    reply_text, problem_ids = tutor.reply(db, user, text, project)
+    reply_text, problem_ids, explanation = tutor.reply_full(db, user, text, project)
     msgs = [m.Message(session_id=s.id, role="user", text=text),
-            m.Message(session_id=s.id, role="ai", text=reply_text, problem_ids=problem_ids)]
+            m.Message(session_id=s.id, role="ai", text=reply_text, problem_ids=problem_ids, explanation=explanation)]
     db.add_all(msgs)
     s.updated_at = func.now()
     db.commit()
@@ -25,7 +25,7 @@ def _converse(db: Session, user: m.User, s: m.ChatSession, text: str) -> list[m.
 
 
 def _message_out(db: Session, user: m.User, msg: m.Message) -> MessageOut:
-    return MessageOut(id=msg.id, role=msg.role, text=msg.text, created_at=msg.created_at,
+    return MessageOut(id=msg.id, role=msg.role, text=msg.text, created_at=msg.created_at, explanation=msg.explanation,
                       problems=learning.problem_views(db, user, msg.problem_ids, session_id=msg.session_id))
 
 

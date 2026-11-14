@@ -11,6 +11,7 @@
     lucide.createIcons();
     if (window.renderMathInElement) $$("[data-math]").forEach((el) => renderMathInElement(el, MATH_OPTS));
     mountWorkCanvases();
+    mountGraphs();
   };
   // 서술형 풀이 칸 상태 — 문제 id → { open, tab, text, image, drawn, eraser, review, busy } (다시 그려도 유지)
   const workState = {};
@@ -991,6 +992,7 @@
     const msgs = s.messages.map((m, mi) => m.role === "user"
       ? `<div class="msg user"><div class="bubble">${esc(m.text)}</div></div>`
       : `<div class="msg ai"><span class="ai-avatar"></span><div class="ai-body"><p>${esc(m.text)}</p>
+          ${m.explanation ? explanationHTML(m.explanation, `${s.id}-${mi}`) : ""}
           ${problemSetHTML(s, mi, m.problemIds ?? [])}
         </div></div>`).join("");
 
@@ -1003,7 +1005,7 @@
         </div>
         <div class="thread">
           ${msgs}
-          ${Store.isPending(id) ? `<div class="msg ai"><span class="ai-avatar"></span><div class="ai-body"><div class="typing"><i></i><i></i><i></i></div>${Store.mode === "api" ? '<p class="mini">문제를 만들고 다른 AI가 검증하고 있어요. 1분 정도 걸릴 수 있어요</p>' : ""}</div></div>` : ""}
+          ${Store.isPending(id) ? `<div class="msg ai"><span class="ai-avatar"></span><div class="ai-body"><div class="typing"><i></i><i></i><i></i></div>${Store.mode === "api" ? '<p class="mini">답을 준비하고 검산하고 있어요. 문제를 새로 만들면 1분 정도 걸릴 수 있어요</p>' : ""}</div></div>` : ""}
         </div>
         <form class="composer glass chat-composer" id="chat-form">
           <input id="chat-input" placeholder="이어서 물어보세요" autocomplete="off" />
@@ -1029,6 +1031,151 @@
     view.onclick = (e) => { if (!handleProblemSet(e, redraw) && !handleProblemExtras(e)) handleAnswer(e, ctx, redraw); };
 
     contentEl.scrollTop = keepScroll ? scroll : contentEl.scrollHeight;
+  }
+
+  // ================= 계산·설명 풀이 (요약 · 원리 · 단계 · 답 · 검산 · 그래프) =================
+  const SERIES = ["#2a78d6", "#eb6834", "#1baf7a"]; // 범주 색 순서 고정 (dataviz 검증 통과)
+  const graphData = {}; // 그래프 key → 데이터 (화면 폭이 바뀌면 다시 그린다)
+
+  function explanationHTML(e, key) {
+    const check = e.check?.status === "verified"
+      ? `<span class="ex-check ok"><i data-lucide="badge-check"></i>검산 완료 · ${esc(e.check.note)}</span>`
+      : e.check?.status === "mismatch"
+        ? `<span class="ex-check warn"><i data-lucide="triangle-alert"></i>검산 결과가 달라요 · ${esc(e.check.note)}. 한 번 더 확인해 주세요</span>`
+        : "";
+    if (e.graph) graphData[key] = e.graph;
+    return `
+      <div class="explain">
+        <p class="ex-summary" data-math>${esc(e.summary)}</p>
+        ${e.principle ? `<p class="ex-principle" data-math><b>원리</b> ${esc(e.principle)}</p>` : ""}
+        ${e.steps?.length ? `<h4 class="ex-h">단계별 풀이</h4>
+          <ol class="ex-steps">${e.steps.map((s) => `
+            <li><p data-math><b>${esc(s.title)}</b> ${esc(s.text)}</p>${s.math ? `<div class="ex-math" data-math>$$${esc(s.math)}$$</div>` : ""}</li>`).join("")}
+          </ol>` : ""}
+        ${e.result ? `<div class="ex-result"><span class="ex-label">최종 답</span><div class="ex-math" data-math>$$${esc(e.result)}$$</div>${check}</div>` : check}
+        ${e.graph ? `
+          <figure class="ex-graph">
+            <figcaption>${esc(e.graph.title)}</figcaption>
+            <div class="ex-legend">${e.graph.series.map((s) => `<span><i style="background:${SERIES[s.slot % 3]}"></i>${esc(s.label)}</span>`).join("")}</div>
+            <div class="ex-plot" data-graph="${esc(key)}" role="img" aria-label="${esc(e.graph.title)}"></div>
+            <details class="ex-table"><summary>값을 표로 보기</summary>${graphTable(e.graph)}</details>
+          </figure>` : ""}
+      </div>`;
+  }
+
+  function graphTable(g) {
+    const step = Math.max(1, Math.round((g.xs.length - 1) / 10));
+    const rows = g.xs.map((x, i) => i).filter((i) => i % step === 0 || i === g.xs.length - 1);
+    const f = (v) => (v == null ? "정의되지 않음" : Number(v.toFixed(4)).toString());
+    return `<table><thead><tr><th>x</th>${g.series.map((s) => `<th>${esc(s.label)}</th>`).join("")}</tr></thead>
+      <tbody>${rows.map((i) => `<tr><td>${f(g.xs[i])}</td>${g.series.map((s) => `<td>${f(s.ys[i])}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  }
+
+  // 보기 좋은 눈금 (1·2·5 × 10ⁿ)
+  function niceTicks(lo, hi, count = 5) {
+    const span = hi - lo || 1, raw = span / count, mag = 10 ** Math.floor(Math.log10(raw));
+    const step = [1, 2, 5, 10].map((k) => k * mag).find((s) => span / s <= count) ?? 10 * mag;
+    const out = [];
+    for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) out.push(Math.abs(v) < step * 1e-9 ? 0 : v);
+    return out;
+  }
+  const fmtTick = (v) => (Math.abs(v) >= 1000 || (Math.abs(v) < 0.01 && v !== 0) ? v.toExponential(0) : Number(v.toFixed(2)).toString());
+
+  function mountGraphs() {
+    $$(".ex-plot[data-graph]").forEach((el) => {
+      if (!el._ro) { el._ro = new ResizeObserver(() => drawGraph(el)); el._ro.observe(el); }
+      drawGraph(el);
+    });
+  }
+
+  function drawGraph(el) {
+    const g = graphData[el.dataset.graph];
+    const W = Math.round(el.clientWidth);
+    if (!g || !W || el._w === W) return;
+    el._w = W;
+    const H = Math.round(W < 480 ? Math.max(240, W * 0.78) : Math.min(340, Math.max(220, W * 0.56)));
+    const M = { l: 44, r: 14, t: 14, b: 28 }, pw = W - M.l - M.r, ph = H - M.t - M.b;
+
+    // y 범위: 2~98% 값으로 정해 점근선 근처의 아주 큰 값이 그래프를 짓누르지 않게
+    const all = g.series.flatMap((s) => s.ys).filter((v) => v != null).sort((a, b) => a - b);
+    const q = (p) => all[Math.min(all.length - 1, Math.max(0, Math.round(p * (all.length - 1))))];
+    let lo = q(0.02), hi = q(0.98);
+    g.marks.forEach((mk) => { lo = Math.min(lo, mk.y); hi = Math.max(hi, mk.y); });
+    if (lo > 0 && lo < (hi - lo) * 0.6) lo = 0; // 0 이 가까우면 기준선이 보이게
+    if (hi < 0 && -hi < (hi - lo) * 0.6) hi = 0;
+    if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+    const pad = (hi - lo) * 0.12; lo -= pad; hi += pad;
+    const x0 = g.xs[0], x1 = g.xs[g.xs.length - 1];
+    const X = (x) => M.l + ((x - x0) / (x1 - x0)) * pw, Y = (y) => M.t + (1 - (y - lo) / (hi - lo)) * ph;
+
+    const yt = niceTicks(lo, hi, 5), xt = niceTicks(x0, x1, Math.max(3, Math.round(pw / 80)));
+    const grid = yt.map((v) => `<line x1="${M.l}" x2="${W - M.r}" y1="${Y(v)}" y2="${Y(v)}" class="${v === 0 ? "axis0" : "grid"}"/>
+      <text x="${M.l - 8}" y="${Y(v) + 4}" text-anchor="end" class="tick">${fmtTick(v)}</text>`).join("")
+      + xt.map((v) => `${v === 0 ? `<line x1="${X(0)}" x2="${X(0)}" y1="${M.t}" y2="${H - M.b}" class="axis0"/>` : ""}
+      <text x="${X(v)}" y="${H - 8}" text-anchor="middle" class="tick">${fmtTick(v)}</text>`).join("");
+
+    // 선: 정의되지 않는 점이나 점근선(값이 크게 튀는 곳)에서 끊는다
+    const jump = (hi - lo) * 0.8;
+    const paths = g.series.map((s) => {
+      let d = "", prev = null;
+      s.ys.forEach((y, i) => {
+        if (y == null || (prev != null && Math.abs(y - prev) > jump)) { prev = y; if (y == null) return; d += `M${X(g.xs[i]).toFixed(1)},${Y(y).toFixed(1)}`; return; }
+        d += `${prev == null ? "M" : "L"}${X(g.xs[i]).toFixed(1)},${Y(y).toFixed(1)}`;
+        prev = y;
+      });
+      return `<path d="${d}" fill="none" stroke="${SERIES[s.slot % 3]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" clip-path="url(#clip-${el.dataset.graph.replace(/\W/g, "")})"/>`;
+    }).join("");
+
+    // 선 끝 직접 라벨 (글자는 본문 색, 겹치면 아래로 비킨다)
+    const ends = g.series.map((s) => {
+      for (let i = s.ys.length - 1; i >= 0; i--) {
+        const y = s.ys[i];
+        if (y != null && y >= lo && y <= hi) return { s, x: X(g.xs[i]), y: Y(y) };
+      }
+      return null;
+    }).filter(Boolean).sort((a, b) => a.y - b.y);
+    ends.forEach((e, i) => { if (i && e.y - ends[i - 1].y < 14) e.y = ends[i - 1].y + 14; });
+    const labels = W < 420 ? "" : ends.map((e) => `<text x="${Math.min(e.x, W - M.r) - 4}" y="${e.y - 7}" text-anchor="end" class="dlabel">${esc(e.s.label.split("=")[0].trim())}</text>`).join("");
+
+    // 점 라벨: 가까운 라벨끼리는 위아래로 비키고, 아주 좁은 화면에서는 좌표만
+    const pts = g.marks.map((mk) => ({ mk, cx: X(mk.x), cy: Y(mk.y), ly: Y(mk.y) - 8 })).sort((a, b) => a.ly - b.ly);
+    pts.forEach((p, i) => { if (i && Math.abs(p.cx - pts[i - 1].cx) < 120 && p.ly - pts[i - 1].ly < 16) p.ly = pts[i - 1].ly + 16; });
+    const marks = pts.map(({ mk, cx, cy, ly }) => `<circle cx="${cx}" cy="${cy}" r="4.5" fill="${SERIES[mk.slot % 3]}" stroke="#fff" stroke-width="2"/>
+      <text x="${cx + 8}" y="${ly}" class="mlabel">${W < 420 ? "" : `${esc(mk.label)} `}(${fmtTick(mk.x)}, ${fmtTick(mk.y)})</text>`).join("");
+
+    const clipId = `clip-${el.dataset.graph.replace(/\W/g, "")}`;
+    el.innerHTML = `
+      <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+        <defs><clipPath id="${clipId}"><rect x="${M.l}" y="${M.t}" width="${pw}" height="${ph}"/></clipPath></defs>
+        ${grid}${paths}${marks}${labels}
+        <g class="hover" hidden><line class="cross" y1="${M.t}" y2="${H - M.b}"/>${g.series.map((s) => `<circle r="4" fill="${SERIES[s.slot % 3]}" stroke="#fff" stroke-width="2"/>`).join("")}</g>
+        <rect x="${M.l}" y="${M.t}" width="${pw}" height="${ph}" fill="transparent" class="hit"/>
+      </svg>
+      <div class="ex-tip" hidden></div>`;
+
+    // 마우스·손가락을 따라다니는 기준선 + 값
+    const svg = $("svg", el), hov = $(".hover", el), tip = $(".ex-tip", el), dots = $$(".hover circle", el);
+    const move = (ev) => {
+      const r = svg.getBoundingClientRect();
+      const px = Math.min(Math.max(ev.clientX - r.left, M.l), W - M.r);
+      const i = Math.round(((px - M.l) / pw) * (g.xs.length - 1));
+      const xv = g.xs[i];
+      hov.hidden = false;
+      $(".cross", el).setAttribute("x1", X(xv)); $(".cross", el).setAttribute("x2", X(xv));
+      g.series.forEach((s, k) => {
+        const y = s.ys[i], ok = y != null && y >= lo && y <= hi;
+        dots[k].style.display = ok ? "" : "none";
+        if (ok) { dots[k].setAttribute("cx", X(xv)); dots[k].setAttribute("cy", Y(y)); }
+      });
+      tip.hidden = false;
+      tip.innerHTML = `<b>x = ${fmtTick(xv)}</b>${g.series.map((s) => `<span><i style="background:${SERIES[s.slot % 3]}"></i>${esc(s.label.split("=")[0].trim())} <b>${s.ys[i] == null ? "–" : Number(s.ys[i].toFixed(4))}</b></span>`).join("")}`;
+      const left = X(xv) + 12 + tip.offsetWidth > W ? X(xv) - 12 - tip.offsetWidth : X(xv) + 12;
+      tip.style.left = `${left}px`; tip.style.top = `${M.t + 4}px`;
+    };
+    const hit = $(".hit", el);
+    hit.addEventListener("pointermove", move);
+    hit.addEventListener("pointerdown", move);
+    hit.addEventListener("pointerleave", () => { hov.hidden = true; tip.hidden = true; });
   }
 
   // ================= 프로젝트 =================

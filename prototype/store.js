@@ -149,7 +149,7 @@ const Store = (() => {
     s.messages.forEach((msg) => msg.problems.forEach(mergeProblem));
     return {
       id: s.id, projectId: s.project_id, title: s.title, createdAt: Date.parse(s.created_at), updatedAt: Date.parse(s.updated_at),
-      messages: s.messages.map((msg) => ({ role: msg.role, text: msg.text, problemIds: msg.problems.map((p) => p.id), at: Date.parse(msg.created_at) })),
+      messages: s.messages.map((msg) => ({ role: msg.role, text: msg.text, problemIds: msg.problems.map((p) => p.id), explanation: msg.explanation ?? null, at: Date.parse(msg.created_at) })),
     };
   }
   const PROJECT_KEYS = { name: "name", subjectId: "subject_id", unitIds: "unit_ids", goal: "goal", textbook: "textbook", textbookIsbn: "textbook_isbn", examDate: "exam_date", questionType: "question_type", pinned: "pinned" };

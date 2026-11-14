@@ -299,6 +299,8 @@ class Message(Base):
     role: Mapped[str] = mapped_column(String(8))  # user | ai
     text: Mapped[str] = mapped_column(Text)
     problem_ids: Mapped[list[str]] = mapped_column(ARRAY(String(64)), server_default="{}")
+    # 계산·설명 질문의 풀이 (결과·원리·단계·그래프·검산, services/explain.py). 문제를 낸 답변이면 비어 있다
+    explanation: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp(), nullable=False)
 
     session: Mapped[ChatSession] = relationship(back_populates="messages")
