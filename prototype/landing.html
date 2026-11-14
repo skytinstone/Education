@@ -4,21 +4,21 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Eureka — 시험 준비를 AI로</title>
-<meta name="description" content="문제 생성부터 오답 분석, 약점 진단, 기출 기반 변형 문제까지. 검증 에이전트를 통과한 문제만 보여주는 시험 준비 AI 학습 에이전트, Eureka." />
+<meta name="description" content="문제 생성부터 오답 분석, 약점 진단, 기출 기반 변형 문제까지. 검산까지 마친 고퀄리티 문제를 제공하는 시험 준비 AI 학습 에이전트, Eureka." />
 <meta property="og:title" content="Eureka — 시험 준비를 AI로" />
-<meta property="og:description" content="문제 생성부터 오답 분석, 개념별 약점 진단, 기출 기반 변형 문제까지 한곳에서. 검증 에이전트를 통과한 문제만 보여 주는 시험 준비 AI 학습 에이전트 Eureka와 함께 수능 수학·과학을 제대로 준비해 보세요." />
+<meta property="og:description" content="문제 생성부터 오답 분석, 개념별 약점 진단, 기출 기반 변형 문제까지 한곳에서. 검산까지 마친 고퀄리티 문제를 제공하는 시험 준비 AI 학습 에이전트 Eureka와 함께 수능 수학·과학을 제대로 준비해 보세요." />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Eureka" />
 <meta property="og:locale" content="ko_KR" />
 <meta property="og:url" content="https://eurekai.cloud/" />
-<meta property="og:image" content="https://eurekai.cloud/app/og-image.png?v=3" />
+<meta property="og:image" content="https://eurekai.cloud/app/og-image.png?v=4" />
 <meta property="og:image:type" content="image/png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="627" />
 <meta property="og:image:alt" content="Eureka — 시험 준비를 AI로, 제대로. 검증된 AI 문제와 오답노트, 약점 분석" />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:description" content="문제 생성부터 오답 분석, 개념별 약점 진단, 기출 기반 변형 문제까지 한곳에서. 검증 에이전트를 통과한 문제만 보여 주는 시험 준비 AI 학습 에이전트 Eureka와 함께 수능 수학·과학을 제대로 준비해 보세요." />
-<meta name="twitter:image" content="https://eurekai.cloud/app/og-image.png?v=3" />
+<meta name="twitter:description" content="문제 생성부터 오답 분석, 개념별 약점 진단, 기출 기반 변형 문제까지 한곳에서. 검산까지 마친 고퀄리티 문제를 제공하는 시험 준비 AI 학습 에이전트 Eureka와 함께 수능 수학·과학을 제대로 준비해 보세요." />
+<meta name="twitter:image" content="https://eurekai.cloud/app/og-image.png?v=4" />
 <link rel="canonical" href="https://eurekai.cloud/" />
 <meta name="theme-color" content="#f7f8fb" />
 <!-- 이 페이지는 사이트 루트(/)에서 열린다 → 공용 파일은 /app/ 절대 경로로 -->
@@ -238,57 +238,19 @@
   .extra h4 { margin-top: 14px; font-size: 15.5px; font-weight: 700; letter-spacing: -0.015em; }
   .extra p { margin-top: 6px; font-size: 13.5px; line-height: 1.6; color: var(--ink-2); }
 
-  /* ---------- 검증 에이전트 ---------- */
+  /* ---------- 문제 품질 ---------- */
   .verify { background: var(--ink); color: #fff; border-radius: 32px; padding: 72px 56px; position: relative; overflow: hidden; }
   .verify canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .55; pointer-events: none; }
   .verify > * { position: relative; }
   .verify .kicker { color: #9fb0ff; }
   .verify .sub { color: rgba(255,255,255,.72); }
-  /* 흐름: 번호 원을 잇는 선 + 단계 설명 */
-  .flow { list-style: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-top: 52px; position: relative; }
-  .flow::before { content: ""; position: absolute; top: 19px; left: 20px; right: calc(25% - 20px); height: 2px; background: linear-gradient(90deg, rgba(255,255,255,.25), rgba(255,255,255,.12)); }
-  .flow li { position: relative; }
-  .flow .no { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; font-size: 16px; background: #fff; color: var(--ink); box-shadow: 0 0 0 6px var(--ink); position: relative; }
-  .flow h4 { margin-top: 18px; font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
-  .flow p { margin-top: 8px; font-size: 14.5px; line-height: 1.65; color: rgba(255,255,255,.72); }
-  .flow .who { display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 12px; font-weight: 600; color: rgba(255,255,255,.6); padding: 4px 9px; border-radius: 999px; background: rgba(255,255,255,.07); }
-  .flow .who [data-lucide] { width: 13px; height: 13px; }
-  .flow .who.rule { color: #fcd34d; background: rgba(252,211,77,.1); }
-  .flow .who.check { color: #93c5fd; background: rgba(147,197,253,.12); }
-
-  /* 갈림길: 통과 / 탈락 */
-  .branch { margin-top: 44px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; position: relative; }
-  .branch .q { grid-column: 1 / -1; justify-self: center; font-size: 15px; font-weight: 700; padding: 10px 18px; border-radius: 999px; background: rgba(255,255,255,.1); box-shadow: inset 0 0 0 1px rgba(255,255,255,.18); }
-  .out { display: flex; gap: 14px; padding: 20px; border-radius: 18px; }
-  .out [data-lucide] { width: 24px; height: 24px; flex-shrink: 0; margin-top: 2px; }
-  .out b { font-size: 16px; }
-  .out b small { font-size: 12.5px; font-weight: 600; margin-left: 6px; opacity: .75; }
-  .out p { margin-top: 4px; font-size: 14px; line-height: 1.6; color: rgba(255,255,255,.72); }
-  .out.pass { background: rgba(22,163,74,.16); box-shadow: inset 0 0 0 1px rgba(74,222,128,.35); }
-  .out.pass [data-lucide], .out.pass b { color: #4ade80; }
-  .out.fail { background: rgba(225,29,72,.12); box-shadow: inset 0 0 0 1px rgba(251,113,133,.3); }
-  .out.fail [data-lucide], .out.fail b { color: #fb7185; }
-
-  /* 걸러지는 예시 */
-  .cases-head { margin-top: 52px; display: flex; align-items: baseline; gap: 10px; }
-  .cases-head h3 { font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
-  .cases-head span { font-size: 12.5px; color: rgba(255,255,255,.5); }
-  .cases { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; }
-  .case { padding: 18px; border-radius: 16px; background: rgba(255,255,255,.05); box-shadow: inset 0 0 0 1px rgba(255,255,255,.09); display: flex; flex-direction: column; gap: 10px; }
-  .case .tag-r { align-self: flex-start; font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: rgba(251,113,133,.15); color: #fda4af; }
-  .case p { font-size: 14px; line-height: 1.65; color: rgba(255,255,255,.82); }
-  .case p b { color: #fff; }
-  .case .res { margin-top: auto; font-size: 12.5px; color: rgba(255,255,255,.5); display: flex; align-items: center; gap: 6px; }
-  .case .res [data-lucide] { width: 14px; height: 14px; }
-
-  /* 나간 뒤에도 */
-  .after { margin-top: 44px; padding-top: 28px; border-top: 1px solid rgba(255,255,255,.1); display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
-  .after h3 { font-size: 16px; font-weight: 700; flex-shrink: 0; }
-  .after ol { list-style: none; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 14px; color: rgba(255,255,255,.78); }
-  .after li { display: flex; align-items: center; gap: 10px; }
-  .after li + li::before { content: "→"; color: rgba(255,255,255,.35); }
-  .soon-note { margin-top: 18px; font-size: 13px; color: rgba(255,255,255,.55); display: flex; gap: 8px; align-items: center; }
-  .soon-note b { white-space: nowrap; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: rgba(255,255,255,.1); color: rgba(255,255,255,.8); }
+  .verify h2 { font-size: clamp(30px, 3.6vw, 46px); }
+  .verify .sub { font-size: 18px; max-width: 34em; }
+  .points { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 48px; }
+  .point { padding: 22px; border-radius: 18px; background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
+  .point [data-lucide] { width: 24px; height: 24px; color: #9fb0ff; }
+  .point b { display: block; margin-top: 14px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+  .point p { margin-top: 6px; font-size: 14.5px; line-height: 1.6; color: rgba(255,255,255,.7); }
 
   /* ---------- 사용 흐름 ---------- */
   .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 48px; }
@@ -366,9 +328,6 @@
     .hero { padding-top: 112px; }
     .demo { max-width: 560px; width: 100%; margin: 0 auto; }
     .extras { grid-template-columns: repeat(2, 1fr); }
-    .flow { grid-template-columns: repeat(2, 1fr); row-gap: 32px; }
-    .flow::before { display: none; }
-    .cases { grid-template-columns: 1fr; }
     .subjects { grid-template-columns: repeat(3, 1fr); }
   }
   @media (max-width: 760px) {
@@ -380,12 +339,7 @@
     .features, .steps, .promises { grid-template-columns: 1fr; }
     .feature { padding: 22px; }
     .verify { padding: 48px 22px; border-radius: 24px; }
-    .flow { grid-template-columns: 1fr; gap: 24px; }
-    .flow li { padding-left: 56px; }
-    .flow .no { position: absolute; left: 0; top: 0; }
-    .flow h4 { margin-top: 8px; }
-    .branch { grid-template-columns: 1fr; }
-    .after { gap: 12px; }
+    .points { grid-template-columns: 1fr; }
     .subjects { grid-template-columns: repeat(2, 1fr); }
     .choices { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .final { border-radius: 24px; padding: 64px 20px; }
@@ -410,7 +364,7 @@
     </a>
     <nav class="nav-links" aria-label="페이지 안내">
       <a href="#features">기능</a>
-      <a href="#verify">검증 과정</a>
+      <a href="#verify">문제 품질</a>
       <a href="#how">학습 흐름</a>
       <a href="#subjects">과목</a>
       <a href="#faq">자주 묻는 질문</a>
@@ -433,7 +387,7 @@
       <div class="pitch">
         <span class="eyebrow reveal"><i></i>시험 준비 AI 학습 에이전트</span>
         <h1 class="reveal">시험 준비를<br /><em>AI</em>로, 제대로.</h1>
-        <p class="lead reveal">원하는 개념과 난이도를 말하면 문제를 만들고, 틀린 이유를 짚어 다시 풀게 하고, 약한 개념을 찾아 정리해 줘요. 모든 문제는 검증 에이전트를 통과한 것만 보여드려요.</p>
+        <p class="lead reveal">원하는 개념과 난이도를 말하면 문제를 만들고, 틀린 이유를 짚어 다시 풀게 하고, 약한 개념을 찾아 정리해 줘요. 모든 문제는 검산까지 마친 것만 보여 드려요.</p>
         <div class="cta reveal" data-guest>
           <a class="btn btn-dark btn-lg" href="/app/login.html#signup">지금 시작하기 <i data-lucide="arrow-right" class="arrow"></i></a>
           <a class="btn btn-light btn-lg" href="#features">기능 둘러보기</a>
@@ -452,9 +406,9 @@
         <div class="demo-bar" aria-hidden="true"><i></i><i></i><i></i></div>
         <div class="ask" id="demo-ask"><span id="demo-text"></span><span class="caret"></span></div>
         <div class="checks step off" id="demo-checks">
-          <span class="check" data-check><i data-lucide="loader" class="spin"></i>출제</span>
-          <span class="check" data-check><i data-lucide="loader" class="spin"></i>형식 검사</span>
-          <span class="check" data-check><i data-lucide="loader" class="spin"></i>정답 가리고 다시 풀기</span>
+          <span class="check" data-check><i data-lucide="loader" class="spin"></i>문제 분석</span>
+          <span class="check" data-check><i data-lucide="loader" class="spin"></i>검산</span>
+          <span class="check" data-check><i data-lucide="loader" class="spin"></i>품질 확인</span>
         </div>
         <div class="problem step off" id="demo-problem">
           <div class="meta"><span class="sw"></span>미적분 · 치환적분<span class="lv">3점</span></div>
@@ -566,56 +520,19 @@
     </div>
   </section>
 
-  <!-- ===================== 검증 에이전트 ===================== -->
+  <!-- ===================== 문제 품질 ===================== -->
   <section class="block" id="verify" style="padding-top: 24px">
     <div class="wrap">
       <div class="verify">
         <canvas id="verify-dots" aria-hidden="true"></canvas>
-        <div class="kicker reveal">검증 과정</div>
-        <h2 class="reveal">문제 하나가 학생에게<br />도착하기까지</h2>
-        <p class="sub reveal">Eureka가 만든 문제는 바로 나가지 않아요. 문제를 낸 AI와 따로, 정답을 모르는 상태에서 한 번 더 풀어 보고 답이 맞을 때만 보여 드려요.</p>
-
-        <ol class="flow">
-          <li class="reveal"><span class="no">1</span><h4>출제</h4>
-            <p>요청한 개념·난이도·문제 형식에 맞춰 문제와 정답, 풀이를 만들어요.</p>
-            <span class="who"><i data-lucide="sparkles"></i>문제를 내는 AI</span></li>
-          <li class="reveal"><span class="no">2</span><h4>형식 검사</h4>
-            <p>보기가 정해진 개수인지, 겹치는 보기는 없는지, 정답 번호가 보기 안에 있는지 같은 기본 규칙부터 확인해요.</p>
-            <span class="who rule"><i data-lucide="list-checks"></i>자동 규칙 · AI 없이</span></li>
-          <li class="reveal"><span class="no">3</span><h4>정답 가리고 다시 풀기</h4>
-            <p>정답과 풀이는 빼고 문제만 넘겨요. 처음부터 혼자 풀어 답을 내고, 답이 여러 개 나오거나 조건이 빠진 곳은 없는지도 살펴요.</p>
-            <span class="who check"><i data-lucide="eye-off"></i>검토하는 AI</span></li>
-          <li class="reveal"><span class="no">4</span><h4>답 맞춰 보기</h4>
-            <p>처음 만든 정답과 다시 푼 답을 비교해요. 수치형은 허용 오차 안이면, 주관식은 띄어쓰기·표기 차이를 정리한 뒤 같은지 봐요.</p>
-            <span class="who rule"><i data-lucide="scale"></i>자동 비교</span></li>
-        </ol>
-
-        <div class="branch">
-          <div class="q reveal">두 답이 같고, 문제에 흠이 없나요?</div>
-          <div class="out pass reveal"><i data-lucide="circle-check"></i><div><b>예 · 통과<small>학생 화면으로</small></b>
-            <p>통과한 문제만 학습 화면에 나가요.</p></div></div>
-          <div class="out fail reveal"><i data-lucide="rotate-ccw"></i><div><b>아니요 · 탈락<small>1단계부터 다시</small></b>
-            <p>그 문제는 버리고 새로 만들어요. 탈락한 문제는 학생에게 보이지 않고, 품질을 점검하는 기록으로만 남아요.</p></div></div>
+        <div class="kicker reveal">문제 품질</div>
+        <h2 class="reveal">검산까지 마친 문제만<br />여러분께 드려요</h2>
+        <p class="sub reveal">AI가 문제를 분석하고 한 번 더 검산해, 합격에 가까워지는 고퀄리티 문제만 제공해요.</p>
+        <div class="points">
+          <div class="point reveal"><i data-lucide="search-check"></i><b>꼼꼼한 분석</b><p>개념과 난이도, 출제 의도에 맞는지부터 살펴요.</p></div>
+          <div class="point reveal"><i data-lucide="badge-check"></i><b>한 번 더 검산</b><p>정답과 조건이 정확한 문제만 통과시켜요.</p></div>
+          <div class="point reveal"><i data-lucide="trophy"></i><b>합격을 향한 문제</b><p>실제 시험 수준에 맞춘 문제로 실력을 키워요.</p></div>
         </div>
-
-        <div class="cases-head reveal"><h3>이런 문제가 걸러져요</h3><span>예시</span></div>
-        <div class="cases">
-          <div class="case reveal"><span class="tag-r">정답 불일치</span>
-            <p>문제를 낸 AI는 정답을 <b>3번(8)</b>으로 적었는데, 정답을 모르고 다시 푼 결과는 <b>4번(10)</b>이었어요.</p>
-            <span class="res"><i data-lucide="rotate-ccw"></i>탈락 · 다시 출제</span></div>
-          <div class="case reveal"><span class="tag-r">조건 누락</span>
-            <p>"서로 다른 두 실근"이라는 조건이 빠져서, 조건에 맞는 답이 <b>두 개</b> 나올 수 있었어요.</p>
-            <span class="res"><i data-lucide="rotate-ccw"></i>탈락 · 다시 출제</span></div>
-          <div class="case reveal"><span class="tag-r">형식 오류</span>
-            <p>2번과 4번 보기가 똑같이 <b>12</b>로 적혀 있었어요. AI를 부르기 전에 규칙 검사에서 바로 걸러요.</p>
-            <span class="res"><i data-lucide="rotate-ccw"></i>탈락 · 다시 출제</span></div>
-        </div>
-
-        <div class="after reveal">
-          <h3>나간 뒤에도 지켜봐요</h3>
-          <ol><li>학생 두 명이 같은 문제를 신고</li><li>바로 숨김</li><li>운영자가 확인하고 고치거나 되살림</li></ol>
-        </div>
-        <p class="soon-note reveal"><b>준비 중</b>계산이 많은 문제는 코드로 직접 계산해 한 번 더 확인하는 단계를 붙이고 있어요.</p>
       </div>
     </div>
   </section>
@@ -704,7 +621,7 @@
       <div class="faq">
         <details class="reveal">
           <summary>AI가 만든 문제, 정말 믿어도 되나요?<i data-lucide="plus"></i></summary>
-          <p>안심하고 푸실 수 있도록, Eureka는 모든 문제를 한 번 더 풀어 봐요. 문제를 낸 AI와 따로, 검토하는 AI가 정답과 풀이를 보지 않고 처음부터 다시 풀어요. 두 답이 같고 문제에 흠이 없을 때만 여러분께 보여 드리고, 아니면 버리고 새로 만들어요. 그래도 이상한 문제가 보이면 문제 화면에서 바로 신고해 주세요. 두 분 이상 신고한 문제는 곧바로 숨기고, 운영자가 직접 확인해요.</p>
+          <p>네, 안심하셔도 돼요. Eureka는 AI가 만든 문제를 그대로 내보내지 않고, 한 번 더 검산해서 정답과 조건이 정확한 문제만 보여 드려요. 그래도 이상한 문제가 보이면 문제 화면에서 바로 신고해 주세요. 확인해서 빠르게 바로잡을게요.</p>
         </details>
         <details class="reveal">
           <summary>어떤 과목을 공부할 수 있나요?<i data-lucide="plus"></i></summary>
