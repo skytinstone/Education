@@ -426,7 +426,10 @@
       localStorage.setItem("eureka.token", data.access_token);
       localStorage.setItem("eureka.user", JSON.stringify(data.user));
     } catch { /* 저장 불가 환경 — 이번 방문 동안만 로그인 */ }
-    location.href = "index.html";
+    // 관리자 페이지에서 간편 로그인을 시작했으면 그리로 돌아간다 (정해 둔 주소만 — 외부로 보내지 않게)
+    let next = null;
+    try { next = localStorage.getItem("eureka.next"); localStorage.removeItem("eureka.next"); } catch { /* 무시 */ }
+    location.href = next === "/admin" ? "/admin" : "index.html";
   }
   const go = () => (location.href = "index.html");
 

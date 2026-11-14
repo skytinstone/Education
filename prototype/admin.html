@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Eureka Admin</title>
+<!-- 이 페이지는 /admin 에서 열린다 → 공용 파일은 /app/ 절대 경로로 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap" />
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<link rel="stylesheet" href="/app/app.css" />
+<style>
+  :root {
+    --bg: #f4f5f8;
+    --ink: #0f172a;
+    --ink-2: #475569;
+    --ink-3: #6b7280;
+    --line: rgba(15, 23, 42, 0.08);
+    --accent: #4f6bff;
+    --accent-soft: rgba(79, 107, 255, 0.1);
+    --warn: #f97316;
+    --ok: #16a34a;
+    --bad: #e11d48;
+    --surface: #fff;
+    --side: #0f172a;
+    --side-w: 232px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  [hidden] { display: none !important; }
+  body {
+    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; word-break: keep-all;
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  input, textarea, select { font: inherit; color: inherit; }
+  [data-lucide] { width: 16px; height: 16px; stroke-width: 1.7; flex-shrink: 0; }
+  .icon-btn { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 9px; }
+  .icon-btn:hover { background: rgba(15,23,42,.06); }
+  .btn-primary { background: var(--ink); color: #fff; height: 34px; padding: 0 14px; border-radius: 10px; font-weight: 600; font-size: 13.5px; }
+  .btn-primary:hover { background: #1e293b; }
+  .btn-ghost { height: 34px; padding: 0 14px; border-radius: 10px; font-weight: 500; font-size: 13.5px; background: #fff; border: 1px solid rgba(15,23,42,.12); }
+  .btn-ghost:hover { background: #f8fafc; }
+
+  /* ---------- 레이아웃: 어두운 사이드바 + 밝은 본문 ---------- */
+  .shell { display: grid; grid-template-columns: var(--side-w) 1fr; min-height: 100vh; }
+  .side { background: var(--side); color: #cbd5e1; display: flex; flex-direction: column; padding: 18px 12px; position: sticky; top: 0; height: 100vh; }
+  .brand { display: flex; align-items: center; gap: 8px; padding: 2px 8px 22px; color: #fff; white-space: nowrap; }
+  .brand b { font-family: "Space Grotesk", sans-serif; font-size: 13px; letter-spacing: -0.02em; color: #94a3b8; }
+  .brand span { font-weight: 700; font-size: 17px; letter-spacing: -0.02em; }
+  .brand em { font-style: normal; font-size: 11px; font-weight: 700; padding: 2px 7px; border-radius: 6px; background: var(--accent); color: #fff; }
+  .side-nav { display: grid; gap: 2px; }
+  .side-nav a { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px; font-size: 14px; color: #cbd5e1; text-decoration: none; }
+  .side-nav a:hover { background: rgba(255,255,255,.06); color: #fff; }
+  .side-nav a.on { background: rgba(255,255,255,.1); color: #fff; font-weight: 600; }
+  .side-foot { margin-top: auto; display: grid; gap: 6px; border-top: 1px solid rgba(255,255,255,.08); padding-top: 12px; }
+  .me { padding: 4px 10px 8px; font-size: 13px; color: #fff; line-height: 1.35; }
+  .me small { display: block; color: #94a3b8; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  .side-foot a, .side-foot button { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; font-size: 13px; color: #cbd5e1; text-decoration: none; text-align: left; }
+  .side-foot a:hover, .side-foot button:hover { background: rgba(255,255,255,.06); color: #fff; }
+  .main { min-width: 0; padding: 28px 32px 56px; }
+  .main-inner { max-width: 1180px; margin: 0 auto; }
+  .topbar-m { display: none; }
+  .page-head h1 { font-size: 22px; }
+  .admin-body { margin-top: 20px; }
+
+  /* ---------- 입장 화면 (로그인 · 권한 없음) ---------- */
+  .gate { min-height: 100vh; display: grid; place-items: center; padding: 24px; background: radial-gradient(1200px 600px at 50% -10%, #e0e7ff 0%, var(--bg) 60%); }
+  .gate-card { width: min(400px, 100%); background: #fff; border-radius: 20px; padding: 28px; box-shadow: 0 24px 64px rgba(31,41,80,.12), 0 0 0 1px var(--line); }
+  .gate-card .brand { color: var(--ink); padding: 0 0 18px; }
+  .gate-card .brand b { color: var(--ink-3); }
+  .gate-card h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+  .gate-card .sub { margin-top: 4px; font-size: 13.5px; color: var(--ink-2); line-height: 1.6; }
+  .gate-msg { margin-top: 14px; padding: 10px 12px; border-radius: 10px; background: rgba(225,29,72,.07); color: var(--bad); font-size: 13px; }
+  .social { margin-top: 18px; display: grid; gap: 8px; }
+  .social button { height: 44px; border-radius: 11px; display: flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; font-size: 14px; box-shadow: inset 0 0 0 1px rgba(15,23,42,.14); }
+  .social button:hover { background: #f8fafc; }
+  .social .kakao { background: #fee500; box-shadow: none; }
+  .social .kakao:hover { background: #f5dc00; }
+  .social svg { width: 18px; height: 18px; }
+  .or { display: flex; align-items: center; gap: 10px; margin: 18px 0 12px; font-size: 12px; color: var(--ink-3); }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .gate .field + .field { margin-top: 10px; }
+  .gate .field input { background: #fff; box-shadow: inset 0 0 0 1px rgba(15,23,42,.14); }
+  .gate .submit { width: 100%; height: 44px; margin-top: 16px; border-radius: 11px; font-size: 14.5px; justify-content: center; }
+  .gate .submit:disabled { opacity: .5; }
+  .gate-note { margin-top: 16px; font-size: 12px; color: var(--ink-3); line-height: 1.6; }
+  .gate[data-mode="login"] .denied, .gate[data-mode="denied"] .login { display: none; }
+  .denied .actions-row { display: flex; gap: 8px; margin-top: 18px; }
+  .denied .actions-row > * { flex: 1; display: inline-flex; align-items: center; justify-content: center; text-decoration: none; height: 40px; color: inherit; }
+  .denied .actions-row .btn-primary { color: #fff; }
+
+  @media (max-width: 860px) {
+    .shell { grid-template-columns: 1fr; }
+    .side { position: fixed; z-index: 40; left: 0; top: 0; bottom: 0; width: var(--side-w); transform: translateX(-100%); transition: transform .25s; }
+    .shell.nav-open .side { transform: none; box-shadow: 0 0 0 100vmax rgba(15,23,42,.35); }
+    .main { padding: 16px 16px 48px; }
+    .topbar-m { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-weight: 700; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===================== 입장: 로그인 / 권한 없음 ===================== -->
+<div class="gate" id="gate" data-mode="login" hidden>
+  <div class="gate-card">
+    <div class="brand"><b>Horcrux Technologies</b><span>Eureka</span><em>ADMIN</em></div>
+
+    <div class="login">
+      <h1>관리자 로그인</h1>
+      <p class="sub">운영자로 등록된 계정만 들어올 수 있어요.</p>
+      <p class="gate-msg" id="gate-msg" role="alert" hidden></p>
+      <div class="social">
+        <button type="button" data-provider="google">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2 1.5-4.5 2.4-7.2 2.4-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+          Google로 로그인
+        </button>
+        <button type="button" class="kakao" data-provider="kakao">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#000" d="M12 3C6.48 3 2 6.58 2 11c0 2.83 1.86 5.32 4.66 6.73l-.95 3.48c-.08.3.26.54.52.37l4.13-2.73c.53.06 1.08.1 1.64.1 5.52 0 10-3.58 10-8s-4.48-8-10-8z"/></svg>
+          카카오로 로그인
+        </button>
+      </div>
+      <div class="or">또는 이메일로</div>
+      <form id="gate-form" novalidate>
+        <div class="field"><label for="g-email">이메일</label><input id="g-email" type="email" autocomplete="email" placeholder="admin@example.com" /></div>
+        <div class="field"><label for="g-pw">비밀번호</label><input id="g-pw" type="password" autocomplete="current-password" /></div>
+        <button class="btn-primary submit" type="submit">로그인</button>
+      </form>
+      <p class="gate-note">운영자 계정은 서버 설정(ADMIN_EMAILS)에서 정해요. 학습 화면과 같은 계정으로 로그인하면 돼요.</p>
+    </div>
+
+    <div class="denied">
+      <h1>관리자 권한이 없어요</h1>
+      <p class="sub">지금 로그인한 계정은 운영자로 등록돼 있지 않아요. 운영자 계정으로 다시 로그인하거나, 서버의 ADMIN_EMAILS 설정을 확인해 주세요.</p>
+      <div class="actions-row">
+        <button class="btn-primary" data-logout>다른 계정으로 로그인</button>
+        <a class="btn-ghost" href="/app/index.html">학습 화면으로</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 관리자 화면 ===================== -->
+<div class="shell" id="shell" hidden>
+  <aside class="side">
+    <div class="brand"><span>Eureka</span><em>ADMIN</em></div>
+    <nav class="side-nav" aria-label="관리자 메뉴">
+      <a href="#/overview" data-tab="overview"><i data-lucide="layout-dashboard"></i>개요</a>
+      <a href="#/users" data-tab="users"><i data-lucide="users"></i>회원</a>
+      <a href="#/ai" data-tab="ai"><i data-lucide="cpu"></i>AI 사용량</a>
+      <a href="#/logins" data-tab="logins"><i data-lucide="log-in"></i>로그인 기록</a>
+      <a href="#/voc" data-tab="voc"><i data-lucide="inbox"></i>VOC</a>
+    </nav>
+    <div class="side-foot">
+      <div class="me"><span id="me-name"></span><small id="me-email"></small></div>
+      <a href="/app/index.html" target="_blank" rel="noopener"><i data-lucide="external-link"></i>학습 화면 열기</a>
+      <a href="/" target="_blank" rel="noopener"><i data-lucide="globe"></i>소개 페이지</a>
+      <button type="button" data-logout><i data-lucide="log-out"></i>로그아웃</button>
+    </div>
+  </aside>
+  <main class="main">
+    <div class="topbar-m"><button class="icon-btn" id="nav-toggle" aria-label="메뉴"><i data-lucide="menu"></i></button>Eureka Admin</div>
+    <div class="main-inner" id="view"></div>
+  </main>
+</div>
+
+<script src="/app/admin.js"></script>
+</body>
+</html>

@@ -481,19 +481,10 @@ const Store = (() => {
     // 알림 — { unread, items } / 읽음 처리 (ids 를 비우면 모두)
     notifications() { return local ? Promise.resolve({ unread: 0, items: [] }) : api("/notifications"); },
     readNotifications(ids = null) { return local ? Promise.resolve() : api("/notifications/read", { method: "POST", body: { ids } }); },
-    adminAnnounce(body) { return api("/admin/announcements", { method: "POST", body }); },
     // 피드백·문제 신고 { kind, message, problem_id, page }
     sendFeedback(body) {
       return api("/feedback", { method: "POST", body });
     },
-    // 운영자 전용
-    adminFeedback(params) { return api(`/admin/feedback?${new URLSearchParams(params)}`); },
-    // 운영 콘솔 — 개요·AI 사용량·로그인 기록·회원 관리
-    adminGet(path, params) { return api(`/admin${path}${params ? `?${new URLSearchParams(params)}` : ""}`); },
-    adminPost(path, body) { return api(`/admin${path}`, { method: "POST", body }); },
-    adminDelete(path, body) { return api(`/admin${path}`, { method: "DELETE", body }); },
-    adminUpdateFeedback(id, patch) { return api(`/admin/feedback/${id}`, { method: "PATCH", body: patch }); },
-    adminRestoreProblem(pid) { return api(`/admin/problems/${encodeURIComponent(pid)}/restore`, { method: "POST" }); },
     // 서술형 풀이 확인 — { text } 또는 { image: PNG data URL }. 서버 모드에서만
     reviewSolution(problemId, body) {
       if (local) return Promise.reject(new Error("서술형 풀이 확인은 로그인한 서버 화면에서 쓸 수 있어요"));

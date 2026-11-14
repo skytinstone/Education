@@ -29,6 +29,12 @@ def user_id(client, headers) -> str:
     return client.get("/api/me", headers=headers).json()["id"]
 
 
+def test_admin_page_and_landing_are_served(client):
+    page = client.get("/admin")
+    assert page.status_code == 200 and "관리자 로그인" in page.text and page.headers["x-robots-tag"] == "noindex"
+    assert "Eureka" in client.get("/").text
+
+
 def test_admin_paths_hidden_from_users(client, auth):
     for path in ("/api/admin/overview", "/api/admin/ai-usage", "/api/admin/logins", "/api/admin/users"):
         assert client.get(path, headers=auth).status_code == 404, path

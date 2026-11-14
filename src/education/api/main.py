@@ -3,6 +3,7 @@
     uv run uvicorn education.api.main:app --reload
     → API 문서  http://127.0.0.1:8000/docs
     → 소개 페이지 http://127.0.0.1:8000/
+    → 관리자 페이지 http://127.0.0.1:8000/admin
     → 프로토타입 http://127.0.0.1:8000/app/login.html
 """
 
@@ -43,3 +44,9 @@ app.mount("/app", StaticFiles(directory=ROOT / "prototype", html=True), name="ap
 def root() -> FileResponse:
     """서비스 소개(랜딩) 페이지. 로그인·앱 화면은 /app/ 아래에 있다."""
     return FileResponse(ROOT / "prototype" / "landing.html")
+
+
+@app.get("/admin", include_in_schema=False)
+def admin_page() -> FileResponse:
+    """관리자 페이지. 화면은 누구나 받지만, 데이터(/api/admin/*)는 ADMIN_EMAILS 계정에만 나간다."""
+    return FileResponse(ROOT / "prototype" / "admin.html", headers={"X-Robots-Tag": "noindex", "Cache-Control": "no-store"})
