@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from education.config import get_settings
 from education.db import models as m
-from education.services import learning, notifications
+from education.services import audit, learning, notifications
 
 REVIEW_DAYS = (1, 3, 7)  # 틀린 지 며칠째에 다시 풀지
 DDAY_TIPS = {
@@ -91,5 +91,7 @@ def run(db: Session, *, evening: bool = False, today: date | None = None) -> Cou
             sent["review_due"] += review_due(db, user, today)
             sent["exam_dday"] += exam_dday(db, user, today)
             sent["cards_due"] += cards_due(db, user, today)
+    if not evening:  # 개인정보처리방침: 로그 데이터는 90일까지만
+        sent["login_events_purged"] = audit.purge_old(db)
     db.commit()
     return sent

@@ -403,7 +403,9 @@ class FeedbackOut(Out):
 
 
 class AdminFeedbackOut(FeedbackOut):
+    user_id: UUID
     user_email: str
+    user_name: str
     problem_hidden: bool = False  # 신고로 숨겨진 문제인지
     problem_stem: str | None = None
 

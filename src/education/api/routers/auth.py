@@ -19,7 +19,7 @@ from education.api.dto import (
 from education.config import get_settings
 from education.db import models as m
 from education.security import create_ticket, create_token, hash_password, read_ticket, verify_password
-from education.services import avatars, materials, oauth, schools
+from education.services import accounts, audit, avatars, oauth, schools
 from education.services.oauth import OAuthError, Provider, SocialProfile
 
 router = APIRouter(tags=["인증 · 사용자"])
@@ -32,30 +32,46 @@ LINK_COOKIE = "eureka_oauth_link"
 COOKIE_PATH = "/api/auth"
 
 
+SUSPENDED = "이용이 정지된 계정이에요. 문의: horcruxtech.ai@gmail.com"
+
+
 def _token(user: m.User) -> TokenOut:
     return TokenOut(access_token=create_token(user.id), user=UserOut.model_validate(user))
 
 
+def _issue(db: Session, request: Request, user: m.User, method: str, kind: str = "login") -> TokenOut:
+    """로그인 토큰을 내주고 기록을 남긴다. 정지된 계정은 막는다 (모든 로그인·가입 경로가 여기를 지난다)."""
+    if audit.is_suspended(user):
+        audit.record_login(db, request, method=method, kind=kind, ok=False, user=user, reason="suspended")
+        db.commit()
+        raise HTTPException(status.HTTP_403_FORBIDDEN, SUSPENDED)
+    audit.record_login(db, request, method=method, kind=kind, ok=True, user=user)
+    db.commit()
+    return _token(user)
+
+
 # ---------- 이메일 가입 · 로그인 ----------
 @router.post("/auth/signup", status_code=status.HTTP_201_CREATED)
-def signup(body: SignupIn, db: DB) -> TokenOut:
+def signup(body: SignupIn, request: Request, db: DB) -> TokenOut:
     email = body.email.lower()
     if db.scalar(select(m.User.id).where(m.User.email == email)):
         raise HTTPException(status.HTTP_409_CONFLICT, "이미 가입된 이메일이에요")
     user = m.User(email=email, name=body.name.strip(), password_hash=hash_password(body.password),
                   agreed_marketing=body.agreed_marketing)
     db.add(user)
-    db.commit()
-    return _token(user)
+    db.flush()
+    return _issue(db, request, user, "password", kind="signup")
 
 
 @router.post("/auth/login")
-def login(body: LoginIn, db: DB) -> TokenOut:
+def login(body: LoginIn, request: Request, db: DB) -> TokenOut:
     user = db.scalar(select(m.User).where(m.User.email == body.email.lower()))
     # 이메일이 없는 경우와 비밀번호가 틀린 경우를 구분하지 않는다 (계정 존재 여부 노출 방지)
     if not user or not verify_password(body.password, user.password_hash):
+        audit.record_login(db, request, method="password", ok=False, user=user, email=body.email, reason="bad_credentials")
+        db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "이메일 또는 비밀번호를 확인해 주세요")
-    return _token(user)
+    return _issue(db, request, user, "password")
 
 
 # ---------- 간편 로그인 (Google · 카카오) ----------
@@ -175,7 +191,7 @@ def social_callback(provider: Provider, request: Request, db: DB, code: str | No
                                         "email": user.email, "ev": profile.email_verified}, timedelta(minutes=10))
         return _to_login_page(social_link=ticket, provider=provider, email=user.email)
     if user:
-        return _to_login_page(login_ticket=create_ticket("login", {"sub": str(user.id)}, timedelta(minutes=2)))
+        return _to_login_page(login_ticket=create_ticket("login", {"sub": str(user.id), "p": provider}, timedelta(minutes=2)))
     # 처음 온 사용자 → 약관 동의 화면으로 (프로필은 서명된 티켓에 담아 둔다)
     email = profile.email.lower() if profile.email else None
     ticket = create_ticket("signup", {"provider": profile.provider, "pid": profile.provider_user_id, "email": email,
@@ -184,24 +200,28 @@ def social_callback(provider: Provider, request: Request, db: DB, code: str | No
 
 
 @router.post("/auth/social/exchange")
-def social_exchange(body: TicketIn, db: DB) -> TokenOut:
+def social_exchange(body: TicketIn, request: Request, db: DB) -> TokenOut:
     """간편 로그인 직후 받은 짧은 티켓을 로그인 토큰으로 바꾼다."""
     claims = read_ticket(body.ticket, "login")
     user = db.get(m.User, UUID(claims["sub"])) if claims else None
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "로그인 시간이 지났어요. 다시 시도해 주세요")
-    return _token(user)
+    return _issue(db, request, user, claims.get("p") if claims.get("p") in ("google", "kakao") else "google")
 
 
 @router.post("/auth/social/link")
-def social_link(body: SocialLinkIn, db: DB) -> TokenOut:
+def social_link(body: SocialLinkIn, request: Request, db: DB) -> TokenOut:
     """같은 이메일로 이미 가입한 계정에 간편 로그인을 연결한다 — 그 계정의 비밀번호로 본인 확인."""
     c = read_ticket(body.link_token, "link")
     user = db.get(m.User, UUID(c["sub"])) if c else None
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "연결 시간이 지났어요. 간편 로그인을 다시 시도해 주세요")
     if not verify_password(body.password, user.password_hash):
+        audit.record_login(db, request, method=c["provider"], ok=False, user=user, reason="bad_credentials")
+        db.commit()
         raise HTTPException(status.HTTP_403_FORBIDDEN, "비밀번호가 맞지 않아요")
+    if audit.is_suspended(user):  # 정지된 계정에는 새 로그인 방법을 붙이지 않는다
+        return _issue(db, request, user, c["provider"])
     account = _account(db, c["provider"], c["pid"])
     if account and account.user_id != user.id:
         raise HTTPException(status.HTTP_409_CONFLICT, "이 간편 로그인 계정은 이미 다른 Eureka 계정에 연결돼 있어요")
@@ -212,11 +232,11 @@ def social_link(body: SocialLinkIn, db: DB) -> TokenOut:
             db.rollback()
             if _account(db, c["provider"], c["pid"]) is None:
                 raise
-    return _token(user)
+    return _issue(db, request, user, c["provider"])
 
 
 @router.post("/auth/social/complete", status_code=status.HTTP_201_CREATED)
-def social_complete(body: SocialSignupIn, db: DB) -> TokenOut:
+def social_complete(body: SocialSignupIn, request: Request, db: DB) -> TokenOut:
     """처음 온 간편 로그인 사용자의 약관 동의를 받고 계정을 만든다."""
     c = read_ticket(body.signup_token, "signup")
     if c is None:
@@ -224,7 +244,7 @@ def social_complete(body: SocialSignupIn, db: DB) -> TokenOut:
     linked = db.scalar(select(m.OAuthAccount.user_id).where(
         m.OAuthAccount.provider == c["provider"], m.OAuthAccount.provider_user_id == c["pid"]))
     if linked:  # 가입 버튼을 두 번 누른 경우 등 — 이미 만들어진 계정으로 로그인
-        return _token(db.get(m.User, linked))
+        return _issue(db, request, db.get(m.User, linked), c["provider"])
 
     # 제공자가 준 이메일이 있으면 그것을, 없으면(카카오 이메일 미동의) 사용자가 입력한 것을 쓴다
     email = (c["email"] or body.email or "").lower() or None
@@ -243,7 +263,7 @@ def social_complete(body: SocialSignupIn, db: DB) -> TokenOut:
     except IntegrityError:
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "이미 처리된 가입이에요. 다시 로그인해 주세요") from None
-    return _token(user)
+    return _issue(db, request, user, c["provider"], kind="signup")
 
 
 # ---------- 내 정보 ----------
@@ -282,11 +302,7 @@ def delete_me(body: AccountDeleteIn, user: CurrentUser, db: DB) -> Response:
     백업에는 최대 90일 남았다가 자동 삭제된다 (개인정보처리방침 4번)."""
     if body.confirm_email.strip().lower() != user.email:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "이메일이 맞지 않아요")
-    user_id = user.id
-    db.delete(user)  # 학습 기록·프로젝트·카드 등은 DB 의 ON DELETE CASCADE 로 함께 지워진다
-    db.commit()
-    avatars.delete_photo(user_id)
-    materials.delete_user_files(user_id)
+    accounts.delete_account(db, user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

@@ -73,11 +73,39 @@ class User(Base):
     avatar_type: Mapped[str] = mapped_column(String(8), server_default="initial")
     avatar_preset: Mapped[str | None] = mapped_column(String(32))
     avatar_version: Mapped[int] = mapped_column(server_default="0")  # 사진을 바꿀 때마다 +1 (브라우저 캐시 무효화)
+    # 운영자가 이용을 정지한 계정 — 로그인과 모든 API 가 막힌다 (운영 콘솔에서 해제)
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    suspended_reason: Mapped[str | None] = mapped_column(String(500))
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at()
 
     __table_args__ = (
         CheckConstraint("daily_goal BETWEEN 1 AND 200", name="daily_goal_range"),
         CheckConstraint("avatar_type IN ('initial', 'preset', 'photo')", name="user_avatar_type"),
+    )
+
+
+class LoginEvent(Base):
+    """로그인·가입 기록 (성공과 실패 모두). 개인정보처리방침의 '로그 데이터' — 90일이 지나면 지운다 (services/audit.py).
+    없는 이메일로 실패한 시도도 남기도록 user_id 는 비어 있을 수 있다."""
+    __tablename__ = "login_events"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    email: Mapped[str | None] = mapped_column(String(320))
+    method: Mapped[str] = mapped_column(String(16))  # password · google · kakao
+    kind: Mapped[str] = mapped_column(String(8), server_default="login")  # login · signup
+    ok: Mapped[bool] = mapped_column(Boolean)
+    reason: Mapped[str | None] = mapped_column(String(32))  # 실패 이유: bad_credentials · suspended
+    ip: Mapped[str | None] = mapped_column(String(64))
+    user_agent: Mapped[str | None] = mapped_column(String(300))
+    # now() 는 트랜잭션 시작 시각이라, 한 요청 안의 여러 기록도 순서가 갈리도록 실제 시각을 쓴다
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp(), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("method IN ('password', 'google', 'kakao')", name="login_event_method"),
+        CheckConstraint("kind IN ('login', 'signup')", name="login_event_kind"),
+        Index("ix_login_events_created", "created_at"),
     )
 
 
@@ -389,6 +417,8 @@ class LLMCall(Base):
     user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     problem_id: Mapped[str | None] = mapped_column(ForeignKey("problems.id", ondelete="SET NULL"), index=True)
     created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (Index("ix_llm_calls_created", "created_at"),)  # 운영 콘솔의 기간별 사용량
 
 
 class SavedProblem(Base):

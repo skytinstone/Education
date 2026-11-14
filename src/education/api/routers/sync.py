@@ -10,9 +10,8 @@ from datetime import datetime
 from fastapi import APIRouter
 from sqlalchemy import select
 
-from education.api.deps import DB, CurrentUser
+from education.api.deps import DB, CurrentUser, is_admin
 from education.api.dto import UserOut
-from education.config import get_settings
 from education.db import models as m
 from education.schemas import VerificationStatus
 from education.services import courses, learning, notifications
@@ -40,7 +39,7 @@ def sync(user: CurrentUser, db: DB) -> dict:
             "birthDate": user.birth_date.isoformat() if user.birth_date else None, "school": user.school,
             "major": user.major, "address": user.address, "avatarType": user.avatar_type,
             "avatarPreset": user.avatar_preset, "avatarUrl": UserOut.model_validate(user).avatar_url,
-            "isAdmin": user.email.lower() in get_settings().admins,
+            "isAdmin": is_admin(user),
             "unreadNotifications": notifications.unread_count(db, user.id),
         },
         "projects": [{

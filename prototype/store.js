@@ -116,7 +116,8 @@ const Store = (() => {
     const res = await fetch(`/api${path}`, { method, headers, body: form ?? (body !== undefined ? JSON.stringify(body) : undefined) });
     if (res.status === 401) {
       try { localStorage.removeItem("eureka.token"); } catch { /* 무시 */ }
-      location.href = "login.html";
+      const why = await res.clone().json().catch(() => ({}));
+      location.href = String(why.detail ?? "").includes("정지") ? "login.html#suspended" : "login.html";
       throw new Error("로그인이 필요해요");
     }
     if (res.status === 204) return null;
@@ -486,7 +487,11 @@ const Store = (() => {
       return api("/feedback", { method: "POST", body });
     },
     // 운영자 전용
-    adminFeedback(state) { return api(`/admin/feedback?state=${state}`); },
+    adminFeedback(params) { return api(`/admin/feedback?${new URLSearchParams(params)}`); },
+    // 운영 콘솔 — 개요·AI 사용량·로그인 기록·회원 관리
+    adminGet(path, params) { return api(`/admin${path}${params ? `?${new URLSearchParams(params)}` : ""}`); },
+    adminPost(path, body) { return api(`/admin${path}`, { method: "POST", body }); },
+    adminDelete(path, body) { return api(`/admin${path}`, { method: "DELETE", body }); },
     adminUpdateFeedback(id, patch) { return api(`/admin/feedback/${id}`, { method: "PATCH", body: patch }); },
     adminRestoreProblem(pid) { return api(`/admin/problems/${encodeURIComponent(pid)}/restore`, { method: "POST" }); },
     // 서술형 풀이 확인 — { text } 또는 { image: PNG data URL }. 서버 모드에서만

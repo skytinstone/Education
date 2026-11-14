@@ -4,11 +4,10 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 
-from education.api.deps import DB, CurrentUser
+from education.api.deps import DB, CurrentUser, admin_user
 from education.api.dto import AdminFeedbackOut, AdminFeedbackPatch, AnnouncementIn, FeedbackIn, FeedbackOut
-from education.config import get_settings
 from education.db import models as m
 from education.services import feedback, notifications
 
@@ -30,31 +29,44 @@ def my_feedback(user: CurrentUser, db: DB) -> list[FeedbackOut]:
     return [FeedbackOut.model_validate(f) for f in db.scalars(q)]
 
 
-# ---------- 운영자 ----------
-def admin_user(user: CurrentUser) -> m.User:
-    if user.email.lower() not in get_settings().admins:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "찾을 수 없어요")  # 운영자 경로가 있다는 것도 알리지 않음
-    return user
-
-
+# ---------- 운영자 (VOC) ----------
 admin = APIRouter(prefix="/admin", tags=["운영"], dependencies=[Depends(admin_user)])
 
 
 def _admin_view(db, fb: m.Feedback) -> AdminFeedbackOut:
     problem = db.get(m.Problem, fb.problem_id) if fb.problem_id else None
-    return AdminFeedbackOut(**FeedbackOut.model_validate(fb).model_dump(), user_email=db.get(m.User, fb.user_id).email,
-                            problem_hidden=feedback.is_hidden(problem), problem_stem=problem.stem if problem else None)
+    sender = db.get(m.User, fb.user_id)
+    return AdminFeedbackOut(**FeedbackOut.model_validate(fb).model_dump(), user_id=sender.id, user_email=sender.email,
+                            user_name=sender.name, problem_hidden=feedback.is_hidden(problem), problem_stem=problem.stem if problem else None)
 
 
 @admin.get("/feedback")
-def list_feedback(db: DB, state: str = "open") -> list[AdminFeedbackOut]:
-    """state: open(접수+확인 중) · resolved · all"""
-    q = select(m.Feedback).order_by(m.Feedback.created_at.desc()).limit(200)
+def list_feedback(db: DB, state: str = "open", kind: str | None = None, q: str | None = None,
+                  user_id: UUID | None = None) -> list[AdminFeedbackOut]:
+    """state: open(접수+확인 중) · resolved · all. kind 로 종류를, q 로 내용·보낸 사람 이메일을 찾는다."""
+    stmt = select(m.Feedback).join(m.User, m.User.id == m.Feedback.user_id).order_by(m.Feedback.created_at.desc()).limit(200)
     if state == "open":
-        q = q.where(m.Feedback.status != "resolved")
+        stmt = stmt.where(m.Feedback.status != "resolved")
     elif state == "resolved":
-        q = q.where(m.Feedback.status == "resolved")
-    return [_admin_view(db, f) for f in db.scalars(q)]
+        stmt = stmt.where(m.Feedback.status == "resolved")
+    if kind in feedback.KIND_NAME:
+        stmt = stmt.where(m.Feedback.kind == kind)
+    if user_id:
+        stmt = stmt.where(m.Feedback.user_id == user_id)
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        stmt = stmt.where(or_(m.Feedback.message.ilike(like), m.User.email.ilike(like), m.User.name.ilike(like)))
+    return [_admin_view(db, f) for f in db.scalars(stmt)]
+
+
+@admin.get("/feedback/summary")
+def feedback_summary(db: DB) -> dict:
+    """VOC 현황 — 상태별·종류별 개수 (처리할 것 = 접수 + 확인 중)."""
+    by_status = dict(db.execute(select(m.Feedback.status, func.count()).group_by(m.Feedback.status)).all())
+    open_kinds = dict(db.execute(select(m.Feedback.kind, func.count()).where(m.Feedback.status != "resolved")
+                                 .group_by(m.Feedback.kind)).all())
+    return {"by_status": {k: by_status.get(k, 0) for k in ("open", "reviewing", "resolved")},
+            "open_by_kind": {k: open_kinds.get(k, 0) for k in feedback.KIND_NAME}}
 
 
 @admin.patch("/feedback/{feedback_id}")

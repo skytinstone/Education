@@ -667,6 +667,9 @@
   } else if (location.hash === "#left") {
     history.replaceState(null, "", location.pathname);
     notice("탈퇴가 끝났어요. 그동안 Eureka를 이용해 주셔서 고마워요", "info");
+  } else if (location.hash === "#suspended") {
+    history.replaceState(null, "", location.pathname);
+    notice("이용이 정지된 계정이에요. 문의: horcruxtech.ai@gmail.com");
   }
 </script>
 </body>

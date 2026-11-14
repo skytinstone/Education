@@ -85,7 +85,9 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 | 계정 | `PATCH /me` (생년월일·학교·전공·주소·캐릭터) · `POST /me/avatar` (사진) · `GET /users/{id}/avatar` · `GET /search/schools?q=` (나이스 학교 검색) |
 | 피드백 | `POST /feedback` (의견·문제 신고, 같은 문제를 두 사람이 신고하면 숨김) · `GET /feedback/mine` |
 | 알림 | `GET /notifications` (최근 30개 + 안 읽은 수) · `POST /notifications/read` (`{ids}`, 비우면 모두) |
-| 운영 (`ADMIN_EMAILS`) | `GET /admin/feedback` · `PATCH /admin/feedback/{id}` (상태·답변 → 보낸 사람에게 알림) · `POST /admin/problems/{id}/restore` · `POST /admin/announcements` (전체 공지) |
+| 운영 콘솔 (`ADMIN_EMAILS`) | `GET /admin/overview` (가입자·활성 사용자·AI 비용·VOC 요약) · `GET /admin/ai-usage?days=` (용도·모델·사용자별 토큰·비용, 최근 실패) · `GET /admin/logins` (로그인·가입 기록, 성공·실패·IP·기기) |
+| 회원 관리 (`ADMIN_EMAILS`) | `GET /admin/users` (검색·정렬) · `GET /admin/users/{id}` · `POST /admin/users/{id}/suspend` `{reason}` · `POST /admin/users/{id}/unsuspend` · `DELETE /admin/users/{id}` `{confirm_email}` |
+| VOC (`ADMIN_EMAILS`) | `GET /admin/feedback` (상태·종류·검색·회원 필터) · `GET /admin/feedback/summary` · `PATCH /admin/feedback/{id}` (상태·답변 → 보낸 사람에게 알림) · `POST /admin/problems/{id}/restore` · `POST /admin/announcements` (전체 공지) |
 | 화면 동기화 | `GET /sync` — 로그인한 화면이 처음 열릴 때 내 데이터를 한 번에 |
 
 - 문제의 **정답과 해설은 답을 제출한 뒤에만** 응답에 들어간다
@@ -94,6 +96,8 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 - AI 호출은 모두 `llm_calls` 에 토큰·비용·시간을 기록한다 (`uv run python -m education.generate` 로 문제 은행 채우기)
 - 모든 사용자 데이터는 본인 것만 보이고, 남의 데이터는 존재 여부와 상관없이 404
 - '오늘'의 기준 시간대는 `Asia/Seoul` (`TIMEZONE` 으로 변경)
+- 로그인·가입은 성공·실패 모두 `login_events` 에 남기고(IP·브라우저), **90일이 지나면 지운다** (개인정보처리방침의 로그 보관 기간)
+- 이용 정지(`users.suspended_at`)된 계정은 로그인과 모든 API 가 막히고, 이미 받은 토큰도 바로 무효가 된다. 운영자 계정은 정지·삭제할 수 없다
 
 ## 간편 로그인 (Google · 카카오)
 1. 아래 콘솔에서 앱을 등록하고 키를 받아 `.env` 에 넣는다 (키는 채팅·코드에 붙여넣지 말 것)

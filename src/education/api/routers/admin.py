@@ -1,0 +1,295 @@
+"""운영 콘솔 (ADMIN_EMAILS 계정만) — 가입·이용 현황, AI 사용량, 로그인 기록, 계정 관리.
+
+의견·문제 신고(VOC)는 routers/feedback.py 의 /admin/feedback 에 있다.
+날짜별 집계는 서비스 시간대(TIMEZONE, 기본 Asia/Seoul) 기준이다.
+"""
+
+from datetime import date, datetime, timedelta, timezone
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import BaseModel, Field
+from sqlalchemy import DateTime, Select, distinct, func, literal, or_, select, union
+from sqlalchemy.orm import Session
+
+from education.api.deps import DB, admin_user, is_admin
+from education.config import get_settings
+from education.db import models as m
+from education.services import accounts, audit, learning
+
+router = APIRouter(prefix="/admin", tags=["운영"], dependencies=[Depends(admin_user)])
+
+
+def _local_date(column):
+    return func.date(func.timezone(get_settings().timezone, column))
+
+
+def _ago(days: int) -> datetime:
+    return datetime.now(timezone.utc) - timedelta(days=days)
+
+
+def _since_local(db: Session, days: int) -> datetime:
+    """서비스 시간대로 '오늘 포함 최근 days 일'의 시작 시각 (UTC)."""
+    start = learning.local_today(db) - timedelta(days=days - 1)
+    return db.scalar(select(func.timezone(get_settings().timezone, func.cast(literal(start), DateTime()))))
+
+
+def _fill_days(db: Session, rows: dict[date, dict], days: int, empty: dict) -> list[dict]:
+    """빈 날도 0 으로 채운 날짜순 목록."""
+    today = learning.local_today(db)
+    out = []
+    for i in range(days - 1, -1, -1):
+        d = today - timedelta(days=i)
+        out.append({"date": d.isoformat(), **(rows.get(d) or empty)})
+    return out
+
+
+def _cost(x) -> float:
+    return round(float(x or 0), 4)
+
+
+# ---------- 개요 ----------
+def _active_users(db: Session, since: datetime) -> int:
+    """기간 안에 로그인했거나 문제를 푼 사람 수 (토큰이 7일 유지되므로 풀이 기록도 함께 본다)."""
+    ids = union(
+        select(m.Attempt.user_id).where(m.Attempt.created_at >= since),
+        select(m.LoginEvent.user_id).where(m.LoginEvent.created_at >= since, m.LoginEvent.ok, m.LoginEvent.user_id.is_not(None)),
+    ).subquery()
+    return db.scalar(select(func.count(distinct(ids.c.user_id)))) or 0
+
+
+@router.get("/overview")
+def overview(db: DB, days: int = Query(30, ge=7, le=180)) -> dict:
+    today_start, week_start, month_start = _since_local(db, 1), _since_local(db, 7), _since_local(db, 30)
+    users = db.execute(select(
+        func.count(),
+        func.count().filter(m.User.created_at >= today_start),
+        func.count().filter(m.User.created_at >= week_start),
+        func.count().filter(m.User.created_at >= month_start),
+        func.count().filter(m.User.suspended_at.is_not(None)),
+        func.count().filter(m.User.password_hash.is_not(None)),
+    )).one()
+    providers = dict(db.execute(select(m.OAuthAccount.provider, func.count(distinct(m.OAuthAccount.user_id)))
+                                .group_by(m.OAuthAccount.provider)).all())
+
+    day = _local_date(m.User.created_at)
+    signups = {d: {"count": n} for d, n in db.execute(
+        select(day, func.count()).where(m.User.created_at >= _since_local(db, days)).group_by(day)).all()}
+
+    ai = db.execute(select(
+        func.coalesce(func.sum(m.LLMCall.cost_usd).filter(m.LLMCall.created_at >= today_start), 0),
+        func.coalesce(func.sum(m.LLMCall.cost_usd).filter(m.LLMCall.created_at >= week_start), 0),
+        func.coalesce(func.sum(m.LLMCall.cost_usd), 0),
+        func.count(),
+        func.count().filter(~m.LLMCall.ok),
+    ).where(m.LLMCall.created_at >= month_start)).one()
+
+    voc = dict(db.execute(select(m.Feedback.status, func.count()).where(m.Feedback.status != "resolved")
+                          .group_by(m.Feedback.status)).all())
+    failed_logins = db.scalar(select(func.count()).where(m.LoginEvent.created_at >= _ago(1), ~m.LoginEvent.ok)) or 0
+
+    return {
+        "users": {"total": users[0], "new_today": users[1], "new_7d": users[2], "new_30d": users[3], "suspended": users[4]},
+        "sign_in_methods": {"password": users[5], "google": providers.get("google", 0), "kakao": providers.get("kakao", 0)},
+        "active": {"dau": _active_users(db, today_start), "wau": _active_users(db, week_start), "mau": _active_users(db, month_start)},
+        "signups_by_day": _fill_days(db, signups, days, {"count": 0}),
+        "ai": {"cost_today": _cost(ai[0]), "cost_7d": _cost(ai[1]), "cost_30d": _cost(ai[2]), "calls_30d": ai[3], "failed_30d": ai[4]},
+        "voc": {"open": voc.get("open", 0), "reviewing": voc.get("reviewing", 0)},
+        "failed_logins_24h": failed_logins,
+    }
+
+
+# ---------- AI 사용량 ----------
+@router.get("/ai-usage")
+def ai_usage(db: DB, days: int = Query(30, ge=1, le=180)) -> dict:
+    since = _since_local(db, days)
+    L = m.LLMCall
+    tokens = L.input_tokens + L.output_tokens
+    in_range = L.created_at >= since
+
+    t = db.execute(select(
+        func.count(), func.count().filter(~L.ok),
+        func.coalesce(func.sum(L.input_tokens), 0), func.coalesce(func.sum(L.cached_tokens), 0),
+        func.coalesce(func.sum(L.output_tokens), 0), func.coalesce(func.sum(L.reasoning_tokens), 0),
+        func.coalesce(func.sum(L.cost_usd), 0), func.coalesce(func.avg(L.latency_ms).filter(L.ok), 0),
+    ).where(in_range)).one()
+
+    day = _local_date(L.created_at)
+    by_day = {d: {"calls": c, "cost_usd": _cost(cost), "tokens": int(tok or 0)} for d, c, cost, tok in db.execute(
+        select(day, func.count(), func.sum(L.cost_usd), func.sum(tokens)).where(in_range).group_by(day)).all()}
+
+    def grouped(col) -> list[dict]:
+        rows = db.execute(select(col, func.count(), func.count().filter(~L.ok), func.sum(L.cost_usd), func.sum(tokens),
+                                 func.avg(L.latency_ms).filter(L.ok))
+                          .where(in_range).group_by(col).order_by(func.sum(L.cost_usd).desc().nulls_last())).all()
+        return [{"key": k, "calls": c, "failed": f, "cost_usd": _cost(cost), "tokens": int(tok or 0), "avg_latency_ms": int(lat or 0)}
+                for k, c, f, cost, tok, lat in rows]
+
+    top = db.execute(select(m.User.id, m.User.email, m.User.name, func.count(), func.sum(L.cost_usd))
+                     .join(m.User, m.User.id == L.user_id).where(in_range)
+                     .group_by(m.User.id).order_by(func.sum(L.cost_usd).desc().nulls_last()).limit(10)).all()
+    errors = db.execute(select(L.created_at, L.purpose, L.model, L.error, m.User.email)
+                        .outerjoin(m.User, m.User.id == L.user_id)
+                        .where(in_range, ~L.ok).order_by(L.created_at.desc()).limit(15)).all()
+    return {
+        "days": days,
+        "totals": {"calls": t[0], "failed": t[1], "input_tokens": int(t[2]), "cached_tokens": int(t[3]),
+                   "output_tokens": int(t[4]), "reasoning_tokens": int(t[5]), "cost_usd": _cost(t[6]), "avg_latency_ms": int(t[7])},
+        "by_day": _fill_days(db, by_day, days, {"calls": 0, "cost_usd": 0, "tokens": 0}),
+        "by_purpose": grouped(L.purpose),
+        "by_model": grouped(L.model),
+        "top_users": [{"user_id": str(i), "email": e, "name": n, "calls": c, "cost_usd": _cost(cost)} for i, e, n, c, cost in top],
+        "recent_errors": [{"at": at.isoformat(), "purpose": p, "model": md, "error": (err or "")[:300], "email": e}
+                          for at, p, md, err, e in errors],
+    }
+
+
+# ---------- 로그인 기록 ----------
+def _event(e: m.LoginEvent, name: str | None) -> dict:
+    return {"id": str(e.id), "at": e.created_at.isoformat(), "user_id": str(e.user_id) if e.user_id else None,
+            "email": e.email, "name": name, "method": e.method, "kind": e.kind, "ok": e.ok, "reason": e.reason,
+            "ip": e.ip, "user_agent": e.user_agent}
+
+
+@router.get("/logins")
+def logins(db: DB, q: str | None = None, result: str = "all", method: str | None = None, user_id: UUID | None = None,
+           before: datetime | None = None, limit: int = Query(100, ge=1, le=500)) -> dict:
+    """최근 로그인·가입 기록 (최신순). before 로 이전 페이지를 이어서 받는다. 90일이 지난 기록은 이때 함께 지운다."""
+    if audit.purge_old(db):
+        db.commit()
+    E = m.LoginEvent
+    stmt = select(E, m.User.name).outerjoin(m.User, m.User.id == E.user_id).order_by(E.created_at.desc()).limit(limit)
+    if result == "ok":
+        stmt = stmt.where(E.ok)
+    elif result == "fail":
+        stmt = stmt.where(~E.ok)
+    if method in ("password", "google", "kakao"):
+        stmt = stmt.where(E.method == method)
+    if user_id:
+        stmt = stmt.where(E.user_id == user_id)
+    if before:
+        stmt = stmt.where(E.created_at < before)
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        stmt = stmt.where(or_(E.email.ilike(like), E.ip.ilike(like), m.User.name.ilike(like)))
+    items = [_event(e, name) for e, name in db.execute(stmt).all()]
+    last24 = db.execute(select(func.count().filter(E.ok), func.count().filter(~E.ok)).where(E.created_at >= _ago(1))).one()
+    return {"items": items, "last_24h": {"ok": last24[0], "failed": last24[1]}, "retention_days": audit.RETENTION_DAYS}
+
+
+# ---------- 계정 관리 ----------
+def _methods(db: Session, user_ids: list[UUID]) -> dict[UUID, list[str]]:
+    out: dict[UUID, list[str]] = {}
+    for uid, provider in db.execute(select(m.OAuthAccount.user_id, m.OAuthAccount.provider)
+                                    .where(m.OAuthAccount.user_id.in_(user_ids))).all():
+        out.setdefault(uid, []).append(provider)
+    return out
+
+
+def _user_row(u: m.User, methods: list[str], attempts: int, cost) -> dict:
+    return {"id": str(u.id), "email": u.email, "name": u.name, "created_at": u.created_at.isoformat(),
+            "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None,
+            "suspended_at": u.suspended_at.isoformat() if u.suspended_at else None,
+            "methods": (["password"] if u.password_hash else []) + sorted(methods),
+            "attempts": attempts, "cost_usd": _cost(cost), "is_admin": is_admin(u)}
+
+
+@router.get("/users")
+def list_users(db: DB, q: str | None = None, state: str = "all", sort: str = "recent",
+               limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)) -> dict:
+    """state: all · active · suspended. sort: recent(가입순) · login(최근 로그인) · attempts · cost"""
+    attempts = select(m.Attempt.user_id, func.count().label("n")).group_by(m.Attempt.user_id).subquery()
+    cost = select(m.LLMCall.user_id, func.sum(m.LLMCall.cost_usd).label("c")).group_by(m.LLMCall.user_id).subquery()
+    base: Select = select(m.User).outerjoin(attempts, attempts.c.user_id == m.User.id).outerjoin(cost, cost.c.user_id == m.User.id)
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        base = base.where(or_(m.User.email.ilike(like), m.User.name.ilike(like)))
+    if state == "suspended":
+        base = base.where(m.User.suspended_at.is_not(None))
+    elif state == "active":
+        base = base.where(m.User.suspended_at.is_(None))
+    total = db.scalar(select(func.count()).select_from(base.subquery()))
+    order = {
+        "login": m.User.last_login_at.desc().nulls_last(),
+        "attempts": func.coalesce(attempts.c.n, 0).desc(),
+        "cost": func.coalesce(cost.c.c, 0).desc(),
+    }.get(sort, m.User.created_at.desc())
+    rows = db.execute(base.add_columns(func.coalesce(attempts.c.n, 0), cost.c.c)
+                      .order_by(order, m.User.created_at.desc()).limit(limit).offset(offset)).all()
+    methods = _methods(db, [u.id for u, *_ in rows])
+    return {"total": total, "items": [_user_row(u, methods.get(u.id, []), n, c) for u, n, c in rows]}
+
+
+def _target(db: Session, user_id: UUID) -> m.User:
+    user = db.get(m.User, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "사용자를 찾을 수 없어요")
+    return user
+
+
+@router.get("/users/{user_id}")
+def user_detail(user_id: UUID, db: DB) -> dict:
+    u = _target(db, user_id)
+    A = m.Attempt
+    a = db.execute(select(func.count(), func.count().filter(A.correct), func.max(A.created_at)).where(A.user_id == u.id)).one()
+    ai = db.execute(select(func.count(), func.sum(m.LLMCall.cost_usd)).where(m.LLMCall.user_id == u.id)).one()
+    count = lambda model: db.scalar(select(func.count()).select_from(model).where(model.user_id == u.id)) or 0  # noqa: E731
+    open_notes = db.scalar(select(func.count()).where(m.WrongNote.user_id == u.id, m.WrongNote.resolved_at.is_(None))) or 0
+    events = db.scalars(select(m.LoginEvent).where(m.LoginEvent.user_id == u.id).order_by(m.LoginEvent.created_at.desc()).limit(20))
+    feedback = db.scalars(select(m.Feedback).where(m.Feedback.user_id == u.id).order_by(m.Feedback.created_at.desc()).limit(20))
+    return {
+        "user": {**_user_row(u, _methods(db, [u.id]).get(u.id, []), a[0], ai[1]),
+                 "email_verified": u.email_verified, "daily_goal": u.daily_goal, "agreed_marketing": u.agreed_marketing,
+                 "school": u.school, "major": u.major, "birth_date": u.birth_date.isoformat() if u.birth_date else None,
+                 "suspended_reason": u.suspended_reason},
+        "learning": {"attempts": a[0], "correct": a[1], "accuracy": (a[1] / a[0]) if a[0] else None,
+                     "last_attempt_at": a[2].isoformat() if a[2] else None, "today": learning.today_count(db, u),
+                     "streak": learning.streak(db, u), "open_notes": open_notes, "projects": count(m.Project),
+                     "sessions": count(m.ChatSession), "cards": count(m.Card), "materials": count(m.Material)},
+        "ai": {"calls": ai[0], "cost_usd": _cost(ai[1])},
+        "logins": [_event(e, u.name) for e in events],
+        "feedback": [{"id": str(f.id), "kind": f.kind, "status": f.status, "message": f.message[:300],
+                      "created_at": f.created_at.isoformat()} for f in feedback],
+    }
+
+
+class SuspendIn(BaseModel):
+    reason: str = Field(min_length=2, max_length=500)
+
+
+class AdminDeleteIn(BaseModel):
+    confirm_email: str
+
+
+def _guard(target: m.User) -> None:
+    if is_admin(target):
+        raise HTTPException(status.HTTP_409_CONFLICT, "운영자 계정은 여기서 정지하거나 삭제할 수 없어요 (ADMIN_EMAILS 에서 먼저 빼 주세요)")
+
+
+@router.post("/users/{user_id}/suspend")
+def suspend(user_id: UUID, body: SuspendIn, db: DB) -> dict:
+    """이용 정지 — 로그인과 모든 API 가 바로 막힌다 (이미 받은 로그인 토큰도)."""
+    u = _target(db, user_id)
+    _guard(u)
+    u.suspended_at, u.suspended_reason = datetime.now(timezone.utc), body.reason.strip()
+    db.commit()
+    return user_detail(user_id, db)
+
+
+@router.post("/users/{user_id}/unsuspend")
+def unsuspend(user_id: UUID, db: DB) -> dict:
+    u = _target(db, user_id)
+    u.suspended_at = u.suspended_reason = None
+    db.commit()
+    return user_detail(user_id, db)
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(user_id: UUID, body: AdminDeleteIn, db: DB) -> Response:
+    """계정 삭제 — 회원 탈퇴와 똑같이 학습 기록·올린 파일·프로필 사진까지 지운다. 실수 방지로 이메일을 한 번 더 받는다."""
+    u = _target(db, user_id)
+    _guard(u)
+    if body.confirm_email.strip().lower() != u.email:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "이메일이 맞지 않아요")
+    accounts.delete_account(db, u)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
