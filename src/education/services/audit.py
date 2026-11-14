@@ -36,7 +36,10 @@ def record_login(db: Session, request: Request | None, *, method: str, ok: bool,
 def purge_old(db: Session) -> int:
     """보관 기간이 지난 로그인 기록을 지운다. 지운 개수를 돌려준다."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)
-    return db.execute(delete(m.LoginEvent).where(m.LoginEvent.created_at < cutoff)).rowcount or 0
+    n = db.execute(delete(m.LoginEvent).where(m.LoginEvent.created_at < cutoff)).rowcount or 0
+    # 방문자 수 기록도 같은 기간만 남긴다
+    db.execute(delete(m.SiteVisit).where(m.SiteVisit.created_at < cutoff))
+    return n
 
 
 def is_suspended(user: m.User | None) -> bool:

@@ -96,6 +96,7 @@ def overview(db: DB, days: int = Query(30, ge=7, le=180)) -> dict:
         "ai": {"cost_today": _cost(ai[0]), "cost_7d": _cost(ai[1]), "cost_30d": _cost(ai[2]), "calls_30d": ai[3], "failed_30d": ai[4]},
         "voc": {"open": voc.get("open", 0), "reviewing": voc.get("reviewing", 0)},
         "failed_logins_24h": failed_logins,
+        "visitors_today": db.scalar(select(func.count()).select_from(m.SiteVisit).where(m.SiteVisit.day == learning.local_today(db))) or 0,
     }
 
 

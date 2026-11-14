@@ -90,6 +90,7 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 | 회원 관리 (`ADMIN_EMAILS`) | `GET /admin/users` (검색·정렬) · `GET /admin/users/{id}` · `POST /admin/users/{id}/suspend` `{reason}` · `POST /admin/users/{id}/unsuspend` · `DELETE /admin/users/{id}` `{confirm_email}` |
 | VOC (`ADMIN_EMAILS`) | `GET /admin/feedback` (상태·종류·검색·회원 필터) · `GET /admin/feedback/summary` · `PATCH /admin/feedback/{id}` (상태·답변 → 보낸 사람에게 알림) · `POST /admin/problems/{id}/restore` · `POST /admin/announcements` (전체 공지) |
 | 화면 동기화 | `GET /sync` — 로그인한 화면이 처음 열릴 때 내 데이터를 한 번에 |
+| 방문자 | `POST /visits` `{visitor_id}` (같은 브라우저는 하루 한 번, 봇 제외, 한 IP 하루 30명까지) · `GET /visits/today` — 로그인 화면 우측 상단의 '오늘 방문자' (로그인 불필요) |
 
 - 문제의 **정답과 해설은 답을 제출한 뒤에만** 응답에 들어간다
 - 올린 기출과 그것을 본보기로 만든 문제는 **올린 사람에게만** 보인다 (`problems.owner_user_id`)

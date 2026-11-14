@@ -197,6 +197,7 @@
           <div class="ov-links">
             <a href="#/logins" class="${o.failed_logins_24h >= 10 ? "warn" : ""}"><i data-lucide="shield-alert"></i>최근 24시간 로그인 실패 ${num(o.failed_logins_24h)}회</a>
             <a href="#/users" data-users-state="suspended"><i data-lucide="user-x"></i>정지된 계정 ${num(u.suspended)}명</a>
+            <span class="ov-stat"><i data-lucide="footprints"></i>오늘 방문자 ${num(o.visitors_today)}명</span>
           </div>
         </section>
       </div>

@@ -109,6 +109,24 @@ class LoginEvent(Base):
     )
 
 
+class SiteVisit(Base):
+    """오늘 방문자 수 — 브라우저마다 익명 id 하나, 하루에 한 번만 센다 (로그인 화면의 '오늘 방문자').
+    IP 는 원문 대신 서명 키로 만든 해시만 남기고(같은 IP 의 부풀리기 제한용), 90일 뒤 지운다."""
+    __tablename__ = "site_visits"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    day: Mapped[date] = mapped_column(Date)
+    visitor_id: Mapped[str] = mapped_column(String(36))
+    ip_hash: Mapped[str | None] = mapped_column(String(64))
+    path: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (
+        UniqueConstraint("day", "visitor_id", name="uq_site_visit_day_visitor"),
+        Index("ix_site_visits_day_ip", "day", "ip_hash"),
+    )
+
+
 class OAuthAccount(Base):
     """사용자에 연결된 간편 로그인 계정. 한 사용자가 Google 과 카카오를 함께 연결할 수 있다."""
     __tablename__ = "oauth_accounts"
