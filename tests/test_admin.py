@@ -32,7 +32,9 @@ def user_id(client, headers) -> str:
 def test_admin_page_and_landing_are_served(client):
     page = client.get("/admin")
     assert page.status_code == 200 and "관리자 로그인" in page.text and page.headers["x-robots-tag"] == "noindex"
-    assert "Eureka" in client.get("/").text
+    landing = client.get("/").text
+    assert 'property="og:image" content="https://eurekai.cloud/app/og-image.png"' in landing  # 링크드인·카톡 미리보기
+    assert client.get("/app/og-image.png").headers["content-type"] == "image/png"
 
 
 def test_admin_paths_hidden_from_users(client, auth):
