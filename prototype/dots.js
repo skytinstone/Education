@@ -79,8 +79,11 @@ function dotField(canvas, o) {
     }
   }
 
+  // 화면 밖에 있는 캔버스는 그리지 않는다 (한 페이지에 여러 개일 때 CPU 절약)
+  let visible = true;
+  new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(canvas);
   function frame(now) {
-    draw((now - t0) / 1000);
+    if (visible) draw((now - t0) / 1000);
     requestAnimationFrame(frame);
   }
   if (reduceMotion) { draw(o.introSec + 2); new ResizeObserver(() => draw(o.introSec + 2)).observe(canvas); }

@@ -2,12 +2,13 @@
 
     uv run uvicorn education.api.main:app --reload
     → API 문서  http://127.0.0.1:8000/docs
+    → 소개 페이지 http://127.0.0.1:8000/
     → 프로토타입 http://127.0.0.1:8000/app/login.html
 """
 
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
@@ -39,5 +40,6 @@ app.mount("/app", StaticFiles(directory=ROOT / "prototype", html=True), name="ap
 
 
 @app.get("/", include_in_schema=False)
-def root() -> RedirectResponse:
-    return RedirectResponse("/app/login.html")
+def root() -> FileResponse:
+    """서비스 소개(랜딩) 페이지. 로그인·앱 화면은 /app/ 아래에 있다."""
+    return FileResponse(ROOT / "prototype" / "landing.html")

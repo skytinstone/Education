@@ -1,0 +1,784 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Eureka — 시험 준비를 AI로</title>
+<meta name="description" content="문제 생성부터 오답 분석, 약점 진단, 기출 기반 변형 문제까지. 검증 에이전트를 통과한 문제만 보여주는 시험 준비 AI 학습 에이전트, Eureka." />
+<meta property="og:title" content="Eureka — 시험 준비를 AI로" />
+<meta property="og:description" content="검증된 AI 문제, 틀린 이유까지 짚는 오답노트, 개념별 약점 분석. 수능 수학·과학부터 시작합니다." />
+<meta property="og:type" content="website" />
+<meta name="theme-color" content="#f7f8fb" />
+<!-- 이 페이지는 사이트 루트(/)에서 열린다 → 공용 파일은 /app/ 절대 경로로 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap" />
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<script src="/app/dots.js"></script>
+<style>
+  :root {
+    --bg: #f7f8fb;
+    --ink: #0f172a;
+    --ink-2: #475569;
+    --ink-3: #6b7280;
+    --line: rgba(15, 23, 42, 0.08);
+    --accent: #4f6bff;
+    --accent-soft: rgba(79, 107, 255, 0.1);
+    --ok: #16a34a;
+    --bad: #e11d48;
+    --warn: #f97316;
+
+    --math: #3b82f6;
+    --physics: #8b5cf6;
+    --chemistry: #14b8a6;
+    --biology: #22c55e;
+    --earth: #f59e0b;
+
+    --rainbow: linear-gradient(90deg, #ff5f6d, #ffb347, #5ee7a0, #4fc3ff, #6b7cff, #c06bff, #ff5f6d);
+    --glass-blur: blur(24px) saturate(170%);
+    --ease: cubic-bezier(.16, 1, .3, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; scroll-padding-top: 76px; }
+  body {
+    font-family: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    color: var(--ink); background: var(--bg);
+    -webkit-font-smoothing: antialiased; line-height: 1.5; word-break: keep-all;
+    overflow-x: hidden;
+  }
+  [hidden] { display: none !important; }
+  a { color: inherit; text-decoration: none; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+  [data-lucide] { width: 16px; height: 16px; stroke-width: 1.7; flex-shrink: 0; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 8px; }
+
+  .glass {
+    position: relative;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: var(--glass-blur); -webkit-backdrop-filter: var(--glass-blur);
+    box-shadow: 0 24px 64px rgba(31, 41, 80, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  }
+  .glass::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+    background: linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.35) 40%, rgba(15,23,42,.06));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+  }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- 상단 내비게이션 ---------- */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    transition: background .3s, box-shadow .3s;
+  }
+  .nav.scrolled {
+    background: rgba(247, 248, 251, 0.78);
+    backdrop-filter: blur(16px) saturate(160%); -webkit-backdrop-filter: blur(16px) saturate(160%);
+    box-shadow: 0 1px 0 var(--line);
+  }
+  .nav .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+  .brand-company { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 14px; letter-spacing: -0.025em; }
+  .brand-divider { width: 1px; height: 14px; background: rgba(15, 23, 42, 0.18); }
+  .brand-name { font-weight: 700; font-size: 17px; letter-spacing: -0.02em; }
+  .nav-links { display: flex; gap: 4px; margin-left: 8px; }
+  .nav-links a { padding: 6px 10px; border-radius: 8px; font-size: 14px; color: var(--ink-2); font-weight: 500; transition: color .15s, background .15s; }
+  .nav-links a:hover { color: var(--ink); background: rgba(15,23,42,.04); }
+  .nav-cta { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    height: 38px; padding: 0 16px; border-radius: 11px; font-size: 14.5px; font-weight: 600; white-space: nowrap;
+    transition: background .2s, transform .2s, box-shadow .2s;
+  }
+  .btn-dark { background: var(--ink); color: #fff; box-shadow: 0 6px 18px rgba(15,23,42,.18); }
+  .btn-dark:hover { background: #1e293b; transform: translateY(-1px); }
+  .btn-light { background: rgba(255,255,255,.75); box-shadow: inset 0 0 0 1px var(--line); }
+  .btn-light:hover { background: #fff; }
+  .btn-text { color: var(--ink-2); font-weight: 500; padding: 0 10px; }
+  .btn-text:hover { color: var(--ink); }
+  .btn-lg { height: 50px; padding: 0 22px; border-radius: 14px; font-size: 16px; }
+  .btn [data-lucide] { width: 17px; height: 17px; }
+  .btn:hover .arrow { transform: translateX(3px); }
+  .arrow { transition: transform .2s; }
+
+  /* ---------- 히어로 ---------- */
+  .hero { position: relative; padding: 132px 0 96px; overflow: hidden; }
+  .hero canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+  .hero .wrap { position: relative; z-index: 1; display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 5px 12px 5px 8px; border-radius: 999px; font-size: 13px; font-weight: 600; color: var(--ink-2);
+    background: rgba(255,255,255,.75); box-shadow: inset 0 0 0 1px var(--line);
+  }
+  .eyebrow i { width: 8px; height: 8px; border-radius: 50%; background: conic-gradient(#ff5f6d, #ffb347, #ffe259, #5ee7a0, #4fc3ff, #6b7cff, #c06bff, #ff5f6d); }
+  .hero h1 { margin-top: 22px; font-size: clamp(40px, 5.4vw, 66px); line-height: 1.12; font-weight: 800; letter-spacing: -0.045em; }
+  .hero h1 em {
+    font-style: normal; background: var(--rainbow) 0 0 / 200% 100%;
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    animation: flow 6s linear infinite;
+  }
+  @keyframes flow { to { background-position: -200% 0; } }
+  .hero .lead { margin-top: 22px; font-size: clamp(16px, 1.4vw, 18px); line-height: 1.7; color: var(--ink-2); max-width: 30em; }
+  .hero .cta { display: flex; gap: 10px; margin-top: 32px; flex-wrap: wrap; }
+  .hero .note { margin-top: 18px; font-size: 13px; color: var(--ink-3); display: flex; gap: 14px; flex-wrap: wrap; }
+  .hero .note span { display: inline-flex; align-items: center; gap: 5px; }
+  .hero .note [data-lucide] { width: 14px; height: 14px; color: var(--ok); }
+
+  /* 제품 미리보기: 질문 → 문제 생성 → 검증 → 풀이 */
+  .demo { border-radius: 26px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .demo-bar { display: flex; gap: 6px; padding: 2px 4px 4px; }
+  .demo-bar i { width: 9px; height: 9px; border-radius: 50%; background: rgba(15,23,42,.1); }
+  .ask {
+    align-self: flex-end; max-width: 86%;
+    background: var(--ink); color: #fff; font-size: 14px; padding: 10px 14px; border-radius: 16px 16px 4px 16px;
+    min-height: 41px;
+  }
+  .ask .caret { display: inline-block; width: 1.5px; height: 1em; background: #fff; vertical-align: -2px; margin-left: 1px; animation: blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .checks { display: flex; gap: 6px; flex-wrap: wrap; }
+  .check {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600;
+    padding: 4px 9px 4px 7px; border-radius: 999px; background: rgba(255,255,255,.8); color: var(--ink-3);
+    box-shadow: inset 0 0 0 1px var(--line); transition: color .3s, background .3s;
+  }
+  .check [data-lucide] { width: 13px; height: 13px; }
+  .check .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .check.done { color: var(--ok); background: rgba(22,163,74,.08); }
+  .problem { background: #fff; border-radius: 16px; padding: 16px 16px 14px; box-shadow: 0 1px 0 var(--line), 0 6px 20px rgba(31,41,80,.06); }
+  .problem .meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-3); }
+  .problem .meta .sw { width: 7px; height: 7px; border-radius: 50%; background: var(--math); }
+  .problem .meta .lv { margin-left: auto; font-weight: 600; color: var(--math); }
+  .problem .stem { margin-top: 10px; font-size: 15px; font-weight: 500; }
+  .math { font-family: "Times New Roman", "Cambria Math", serif; font-style: italic; font-size: 1.08em; white-space: nowrap; }
+  .math .up { font-size: .7em; vertical-align: .9em; font-style: normal; }
+  .math sup, .math sub { font-size: .7em; }
+  .math .int { font-style: normal; font-size: 1.35em; vertical-align: -.2em; margin-right: 1px; }
+  .math .lim { display: inline-flex; flex-direction: column; vertical-align: -.55em; font-size: .62em; line-height: 1.15; margin-right: 3px; font-style: normal; }
+  .choices { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 12px; }
+  .choice {
+    height: 38px; border-radius: 10px; display: grid; place-items: center; font-size: 13.5px;
+    box-shadow: inset 0 0 0 1px var(--line); transition: background .3s, box-shadow .3s, color .3s;
+  }
+  .choice.pick { background: rgba(22,163,74,.08); box-shadow: inset 0 0 0 1.5px var(--ok); color: var(--ok); font-weight: 600; }
+  .reply { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; color: var(--ink-2); line-height: 1.6; }
+  .reply .ai { width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0; background: conic-gradient(#ff5f6d, #ffb347, #ffe259, #5ee7a0, #4fc3ff, #6b7cff, #c06bff, #ff5f6d); display: grid; place-items: center; }
+  .reply .ai::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: #fff; }
+  .reply b { color: var(--ink); font-weight: 600; }
+  .step { transition: opacity .5s var(--ease), transform .5s var(--ease); }
+  .step.off { opacity: 0; transform: translateY(8px); }
+
+  /* ---------- 섹션 공통 ---------- */
+  section.block { padding: 104px 0; position: relative; }
+  .kicker { font-size: 13.5px; font-weight: 700; color: var(--accent); letter-spacing: -0.01em; }
+  .block h2 { margin-top: 10px; font-size: clamp(28px, 3.2vw, 40px); line-height: 1.25; font-weight: 750; letter-spacing: -0.035em; }
+  .block .sub { margin-top: 14px; font-size: 16.5px; line-height: 1.7; color: var(--ink-2); max-width: 36em; }
+  .center { text-align: center; }
+  .center .sub { margin-left: auto; margin-right: auto; }
+
+  .reveal { opacity: 0; transform: translateY(28px); transition: opacity .8s var(--ease), transform .8s var(--ease); transition-delay: var(--d, 0ms); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ---------- 핵심 기능 4가지 ---------- */
+  .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 48px; }
+  .feature {
+    background: rgba(255,255,255,.85); border-radius: 22px; padding: 28px;
+    box-shadow: inset 0 0 0 1px var(--line), 0 2px 12px rgba(31,41,80,.04);
+    display: flex; flex-direction: column; gap: 10px; overflow: hidden;
+  }
+  .feature .num { font-size: 12.5px; font-weight: 700; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .feature h3 { font-size: 21px; font-weight: 700; letter-spacing: -0.025em; }
+  .feature p { font-size: 15px; line-height: 1.65; color: var(--ink-2); }
+  .feature .viz { margin-top: auto; padding-top: 18px; }
+
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { font-size: 12.5px; font-weight: 600; padding: 5px 10px; border-radius: 999px; background: color-mix(in srgb, var(--c, var(--ink-3)) 11%, transparent); color: var(--c, var(--ink-2)); }
+
+  .mini-q { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--bg); font-size: 13.5px; }
+  .mini-q + .mini-q { margin-top: 8px; }
+  .mini-q .tag { margin-left: auto; }
+  .mini-q [data-lucide] { color: var(--ink-3); }
+
+  .bars { display: grid; gap: 10px; }
+  .bar-row { display: grid; grid-template-columns: 7.5em 1fr 3em; align-items: center; gap: 10px; font-size: 13px; }
+  .bar-row span:last-child { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .track { height: 7px; border-radius: 4px; background: rgba(15,23,42,.06); overflow: hidden; }
+  .track i { display: block; height: 100%; border-radius: 4px; background: var(--c); width: 0; transition: width 1.2s var(--ease) .2s; }
+  .in .track i { width: var(--w); }
+  .bar-row.weak span:first-child { font-weight: 600; }
+  .bar-row.weak span:last-child { color: var(--bad); }
+
+  .flow { display: flex; align-items: center; gap: 8px; }
+  .flow .box { flex: 1; text-align: center; padding: 12px 8px; border-radius: 14px; background: var(--bg); font-size: 13px; font-weight: 600; }
+  .flow .box small { display: block; font-weight: 500; color: var(--ink-3); font-size: 11.5px; margin-top: 2px; }
+  .flow > [data-lucide] { color: var(--ink-3); }
+  .seg { display: flex; gap: 3px; padding: 3px; border-radius: 11px; background: rgba(15,23,42,.05); margin-top: 10px; }
+  .seg span { flex: 1; text-align: center; font-size: 12.5px; font-weight: 600; padding: 6px 0; border-radius: 8px; color: var(--ink-3); }
+  .seg span.on { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(15,23,42,.08); }
+
+  /* ---------- 그 밖의 기능 ---------- */
+  .extras { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 16px; }
+  .extra { padding: 22px; border-radius: 20px; background: rgba(255,255,255,.6); box-shadow: inset 0 0 0 1px var(--line); }
+  .extra .ic { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.06), inset 0 0 0 1px var(--line); }
+  .extra .ic [data-lucide] { width: 18px; height: 18px; }
+  .extra h4 { margin-top: 14px; font-size: 15.5px; font-weight: 700; letter-spacing: -0.015em; }
+  .extra p { margin-top: 6px; font-size: 13.5px; line-height: 1.6; color: var(--ink-2); }
+
+  /* ---------- 검증 에이전트 ---------- */
+  .verify { background: var(--ink); color: #fff; border-radius: 32px; padding: 72px 56px; position: relative; overflow: hidden; }
+  .verify canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .55; pointer-events: none; }
+  .verify > * { position: relative; }
+  .verify .kicker { color: #9fb0ff; }
+  .verify .sub { color: rgba(255,255,255,.72); }
+  .pipeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 48px; counter-reset: p; }
+  .pipe {
+    position: relative; padding: 22px 20px; border-radius: 18px;
+    background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,.1);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  }
+  .pipe::before { counter-increment: p; content: "0" counter(p); font-size: 12px; font-weight: 700; color: rgba(255,255,255,.45); font-variant-numeric: tabular-nums; }
+  .pipe:not(:last-child)::after {
+    content: ""; position: absolute; top: 50%; right: -11px; width: 8px; height: 8px; z-index: 1;
+    border-top: 1.5px solid rgba(255,255,255,.4); border-right: 1.5px solid rgba(255,255,255,.4); transform: translateY(-50%) rotate(45deg);
+  }
+  .pipe [data-lucide] { display: block; width: 22px; height: 22px; margin-top: 14px; color: #fff; }
+  .pipe h4 { margin-top: 12px; font-size: 16px; font-weight: 700; }
+  .pipe p { margin-top: 6px; font-size: 13.5px; line-height: 1.6; color: rgba(255,255,255,.66); }
+  .pipe.pass { background: rgba(22,163,74,.16); box-shadow: inset 0 0 0 1px rgba(74,222,128,.35); }
+  .pipe.pass [data-lucide] { color: #4ade80; }
+  .verify .footnote { margin-top: 24px; font-size: 13px; color: rgba(255,255,255,.55); display: flex; gap: 8px; align-items: center; }
+  .verify .footnote [data-lucide] { width: 15px; height: 15px; }
+
+  /* ---------- 사용 흐름 ---------- */
+  .steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 48px; }
+  .stepc { padding: 26px; border-radius: 22px; background: rgba(255,255,255,.85); box-shadow: inset 0 0 0 1px var(--line); }
+  .stepc .n {
+    width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+    font-size: 14px; font-weight: 700; color: #fff; background: var(--ink);
+  }
+  .stepc h4 { margin-top: 18px; font-size: 18px; font-weight: 700; letter-spacing: -0.02em; }
+  .stepc p { margin-top: 8px; font-size: 14.5px; line-height: 1.65; color: var(--ink-2); }
+  .stepc .chiprow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+  .timeline { display: flex; align-items: center; gap: 0; margin-top: 18px; }
+  .timeline .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 4px rgba(249,115,22,.15); flex-shrink: 0; }
+  .timeline .dot.x { background: var(--bad); box-shadow: 0 0 0 4px rgba(225,29,72,.13); }
+  .timeline .seg-line { flex: 1; height: 2px; background: repeating-linear-gradient(90deg, rgba(15,23,42,.15) 0 4px, transparent 4px 8px); }
+  .timeline-labels { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--ink-3); }
+
+  /* ---------- 과목 ---------- */
+  .subjects { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 44px; }
+  .subj { padding: 20px 18px; border-radius: 18px; background: #fff; box-shadow: inset 0 0 0 1px var(--line); position: relative; overflow: hidden; }
+  .subj::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--c); }
+  .subj b { display: block; font-size: 16px; font-weight: 700; letter-spacing: -0.02em; }
+  .subj small { display: block; margin-top: 4px; font-size: 12.5px; color: var(--ink-3); line-height: 1.5; }
+  .soon { margin-top: 20px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; font-size: 13.5px; color: var(--ink-3); }
+  .soon .tag { background: rgba(15,23,42,.05); color: var(--ink-2); font-weight: 500; }
+  .course-note {
+    margin: 28px auto 0; max-width: 680px; display: flex; gap: 14px; align-items: center; text-align: left;
+    padding: 18px 20px; border-radius: 18px; background: rgba(255,255,255,.7); box-shadow: inset 0 0 0 1px var(--line);
+    font-size: 14.5px; line-height: 1.6; color: var(--ink-2);
+  }
+  .course-note [data-lucide] { width: 22px; height: 22px; color: var(--accent); }
+  .course-note b { color: var(--ink); }
+
+  /* ---------- 데이터 원칙 ---------- */
+  .promises { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 48px; margin-top: 40px; }
+  .promise { display: flex; gap: 16px; padding: 22px 0; border-top: 1px solid var(--line); }
+  .promise [data-lucide] { width: 20px; height: 20px; margin-top: 2px; color: var(--ink); }
+  .promise h4 { font-size: 16px; font-weight: 700; letter-spacing: -0.015em; }
+  .promise p { margin-top: 4px; font-size: 14.5px; line-height: 1.65; color: var(--ink-2); }
+
+  /* ---------- FAQ ---------- */
+  .faq { max-width: 760px; margin: 40px auto 0; }
+  .faq details { border-bottom: 1px solid var(--line); }
+  .faq summary {
+    list-style: none; cursor: pointer; padding: 22px 4px; display: flex; align-items: center; gap: 12px;
+    font-size: 16.5px; font-weight: 650; letter-spacing: -0.015em;
+  }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary [data-lucide] { margin-left: auto; color: var(--ink-3); transition: transform .3s var(--ease); }
+  .faq details[open] summary [data-lucide] { transform: rotate(45deg); }
+  .faq details p { padding: 0 4px 22px; font-size: 15px; line-height: 1.75; color: var(--ink-2); }
+
+  /* ---------- 마지막 CTA ---------- */
+  .final { margin: 0 auto; padding: 88px 24px; border-radius: 32px; text-align: center; position: relative; overflow: hidden; }
+  .final canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+  .final > *:not(canvas) { position: relative; }
+  .final h2 { font-size: clamp(30px, 3.6vw, 46px); line-height: 1.2; }
+  .final .cta { display: flex; gap: 10px; justify-content: center; margin-top: 30px; flex-wrap: wrap; }
+
+  footer.site { padding: 48px 0 56px; font-size: 13px; color: var(--ink-3); }
+  footer.site .wrap { display: flex; align-items: center; gap: 20px; flex-wrap: wrap; }
+  footer.site nav { display: flex; gap: 18px; margin-left: auto; }
+  footer.site a:hover { color: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .reveal, .step { opacity: 1; transform: none; transition: none; }
+    .hero h1 em { animation: none; }
+    .track i { transition: none; }
+  }
+
+  /* ---------- 반응형 ---------- */
+  @media (max-width: 1000px) {
+    .hero .wrap { grid-template-columns: 1fr; gap: 48px; }
+    .hero { padding-top: 112px; }
+    .demo { max-width: 560px; width: 100%; margin: 0 auto; }
+    .extras { grid-template-columns: repeat(2, 1fr); }
+    .pipeline { grid-template-columns: repeat(2, 1fr); }
+    .pipe:nth-child(2)::after { display: none; }
+    .subjects { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (max-width: 760px) {
+    .wrap { padding: 0 16px; }
+    .nav-links { display: none; }
+    .nav .btn-text { display: none; }
+    .brand-company, .brand-divider { display: none; }
+    section.block { padding: 72px 0; }
+    .features, .steps, .promises { grid-template-columns: 1fr; }
+    .feature { padding: 22px; }
+    .verify { padding: 48px 22px; border-radius: 24px; }
+    .pipeline { grid-template-columns: 1fr; }
+    .pipe::after { display: none; }
+    .subjects { grid-template-columns: repeat(2, 1fr); }
+    .choices { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .final { border-radius: 24px; padding: 64px 20px; }
+    footer.site nav { margin-left: 0; }
+  }
+  @media (max-width: 480px) {
+    .extras { grid-template-columns: 1fr; }
+    .hero .cta .btn { flex: 1; }
+    .bar-row { grid-template-columns: 6.5em 1fr 2.6em; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===================== 내비게이션 ===================== -->
+<header class="nav" id="nav">
+  <div class="wrap">
+    <a class="brand" href="/" aria-label="Eureka 홈">
+      <span class="brand-company">Horcrux Technologies</span>
+      <span class="brand-divider" aria-hidden="true"></span>
+      <span class="brand-name">Eureka</span>
+    </a>
+    <nav class="nav-links" aria-label="페이지 안내">
+      <a href="#features">기능</a>
+      <a href="#verify">검증</a>
+      <a href="#how">학습 흐름</a>
+      <a href="#subjects">과목</a>
+      <a href="#faq">자주 묻는 질문</a>
+    </nav>
+    <div class="nav-cta" data-guest>
+      <a class="btn btn-text" href="/app/login.html">로그인</a>
+      <a class="btn btn-dark" href="/app/login.html#signup">시작하기</a>
+    </div>
+    <div class="nav-cta" data-member hidden>
+      <a class="btn btn-dark" href="/app/index.html">학습 이어가기 <i data-lucide="arrow-right" class="arrow"></i></a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <!-- ===================== 히어로 ===================== -->
+  <section class="hero">
+    <canvas id="hero-dots" aria-hidden="true"></canvas>
+    <div class="wrap">
+      <div class="pitch">
+        <span class="eyebrow reveal"><i></i>시험 준비 AI 학습 에이전트</span>
+        <h1 class="reveal">시험 준비를<br /><em>AI</em>로, 제대로.</h1>
+        <p class="lead reveal">원하는 개념과 난이도를 말하면 문제를 만들고, 틀린 이유를 짚어 다시 풀게 하고, 약한 개념을 찾아 정리해 줘요. 모든 문제는 검증 에이전트를 통과한 것만 보여드려요.</p>
+        <div class="cta reveal" data-guest>
+          <a class="btn btn-dark btn-lg" href="/app/login.html#signup">지금 시작하기 <i data-lucide="arrow-right" class="arrow"></i></a>
+          <a class="btn btn-light btn-lg" href="#features">기능 둘러보기</a>
+        </div>
+        <div class="cta reveal" data-member hidden>
+          <a class="btn btn-dark btn-lg" href="/app/index.html">학습 이어가기 <i data-lucide="arrow-right" class="arrow"></i></a>
+        </div>
+        <div class="note reveal">
+          <span><i data-lucide="circle-check"></i>Google · 카카오로 바로 가입</span>
+          <span><i data-lucide="circle-check"></i>설치 없이 웹에서</span>
+        </div>
+      </div>
+
+      <!-- 제품 미리보기 (실제 화면 흐름을 재현한 데모) -->
+      <div class="demo glass reveal" aria-label="문제 생성 예시" role="img">
+        <div class="demo-bar" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="ask" id="demo-ask"><span id="demo-text"></span><span class="caret"></span></div>
+        <div class="checks step off" id="demo-checks">
+          <span class="check" data-check><i data-lucide="loader" class="spin"></i>문제 생성</span>
+          <span class="check" data-check><i data-lucide="loader" class="spin"></i>독립 재풀이</span>
+          <span class="check" data-check><i data-lucide="loader" class="spin"></i>코드 검산</span>
+        </div>
+        <div class="problem step off" id="demo-problem">
+          <div class="meta"><span class="sw"></span>미적분 · 치환적분<span class="lv">3점</span></div>
+          <p class="stem">
+            <span class="math"><span class="int">∫</span><span class="lim"><span>1</span><span>0</span></span>2x e<sup>x²</sup> dx</span>
+            의 값은?
+          </p>
+          <div class="choices">
+            <span class="choice" data-c="1"><span class="math">e − 1</span></span>
+            <span class="choice"><span class="math">e</span></span>
+            <span class="choice"><span class="math">e + 1</span></span>
+            <span class="choice"><span class="math">2e − 1</span></span>
+            <span class="choice"><span class="math">(e−1)/2</span></span>
+          </div>
+        </div>
+        <div class="reply step off" id="demo-reply">
+          <span class="ai" aria-hidden="true"></span>
+          <p><b>정답이에요!</b> <span class="math">t = x²</span>으로 치환하면 <span class="math">dt = 2x dx</span>, 구간도 0 → 1 그대로라 <span class="math">∫ e<sup>t</sup> dt = e − 1</span>. 이 개념의 정답률이 <b>58% → 64%</b>로 올랐어요.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 핵심 기능 ===================== -->
+  <section class="block" id="features">
+    <div class="wrap">
+      <div class="center">
+        <div class="kicker reveal">핵심 기능</div>
+        <h2 class="reveal">풀고, 틀리고, 다시 푸는<br />공부의 모든 단계를 한곳에서</h2>
+        <p class="sub reveal">문제를 찾고, 오답을 옮겨 적고, 약점을 정리하던 시간을 공부에 쓰세요.</p>
+      </div>
+
+      <div class="features">
+        <article class="feature reveal">
+          <span class="num">01</span>
+          <h3>말하면 만들어지는 문제</h3>
+          <p>과목·개념·난이도·문항 수를 평소 말투로 적으면 문제와 정답, 단계별 해설을 함께 만들어요. 객관식, 단답형, 수치형, 서술형까지.</p>
+          <div class="viz">
+            <div class="mini-q"><i data-lucide="message-square"></i>미적분 치환적분 3점짜리 5문제 내줘<span class="tag" style="--c:var(--math)">수학</span></div>
+            <div class="mini-q"><i data-lucide="message-square"></i>중화반응 양적 관계, 조금 어렵게<span class="tag" style="--c:var(--chemistry)">화학I</span></div>
+          </div>
+        </article>
+
+        <article class="feature reveal">
+          <span class="num">02</span>
+          <h3>틀린 이유까지 남는 오답노트</h3>
+          <p>틀린 문제는 자동으로 오답노트에 담기고, 왜 틀렸는지 분류해요. 같은 개념을 다른 모양으로 바꾼 변형 문제로 다시 확인해요.</p>
+          <div class="viz tags">
+            <span class="tag" style="--c:var(--bad)">개념 부족</span>
+            <span class="tag" style="--c:var(--warn)">적용 실수</span>
+            <span class="tag" style="--c:var(--physics)">계산 실수</span>
+            <span class="tag" style="--c:var(--math)">문제 오독</span>
+            <span class="tag" style="--c:var(--chemistry)">함정</span>
+            <span class="tag" style="--c:var(--earth)">시간 부족</span>
+          </div>
+        </article>
+
+        <article class="feature reveal">
+          <span class="num">03</span>
+          <h3>개념 단위로 보이는 약점</h3>
+          <p>푼 기록을 단원이 아니라 개념 단위로 모아 정답률을 계산해요. 가장 약한 개념부터 내 기록에 맞춘 개념 정리와 암기 카드를 만들어요.</p>
+          <div class="viz bars" aria-label="개념별 정답률 예시">
+            <div class="bar-row weak"><span>정적분 함수</span><span class="track" style="--c:var(--bad); --w:42%"><i></i></span><span>42%</span></div>
+            <div class="bar-row"><span>중화 반응</span><span class="track" style="--c:var(--chemistry); --w:61%"><i></i></span><span>61%</span></div>
+            <div class="bar-row"><span>운동량 보존</span><span class="track" style="--c:var(--physics); --w:78%"><i></i></span><span>78%</span></div>
+            <div class="bar-row"><span>등차수열</span><span class="track" style="--c:var(--math); --w:92%"><i></i></span><span>92%</span></div>
+          </div>
+        </article>
+
+        <article class="feature reveal">
+          <span class="num">04</span>
+          <h3>기출을 닮은 새 문제</h3>
+          <p>가지고 있는 기출이나 교재 페이지를 PDF·사진으로 올리면 출제 구조를 분석해, 같은 수준이거나 그보다 어려운 새 문제를 만들어요.</p>
+          <div class="viz">
+            <div class="flow" aria-label="기출 기반 생성 흐름">
+              <div class="box">기출 업로드<small>PDF · 사진</small></div>
+              <i data-lucide="chevron-right"></i>
+              <div class="box">구조 분석<small>개념 · 형식 · 함정</small></div>
+              <i data-lucide="chevron-right"></i>
+              <div class="box">새 문제<small>검증 후 제공</small></div>
+            </div>
+            <div class="seg" aria-hidden="true"><span>더 쉽게</span><span>비슷하게</span><span class="on">더 어렵게</span></div>
+          </div>
+        </article>
+      </div>
+
+      <div class="extras">
+        <div class="extra reveal">
+          <span class="ic"><i data-lucide="pen-line"></i></span>
+          <h4>서술형 풀이 확인</h4>
+          <p>손글씨 풀이를 사진이나 펜으로 올리면 처음 틀린 단계를 짚어 줘요.</p>
+        </div>
+        <div class="extra reveal">
+          <span class="ic"><i data-lucide="layers"></i></span>
+          <h4>개념 정리 · 암기 카드</h4>
+          <p>내 풀이와 오답을 반영한 개념 정리를 만들고, 외울 것은 카드로 넘겨요.</p>
+        </div>
+        <div class="extra reveal">
+          <span class="ic"><i data-lucide="bell-ring"></i></span>
+          <h4>잊기 전에 알림</h4>
+          <p>틀린 지 1·3·7일째 복습, 시험 D-day, 연속 학습을 매일 챙겨요.</p>
+        </div>
+        <div class="extra reveal">
+          <span class="ic"><i data-lucide="book-marked"></i></span>
+          <h4>내 교재에 맞춰</h4>
+          <p>쓰는 교재를 검색해 고르면 그 교재의 범위와 문제 형식에 맞춰 출제해요.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 검증 에이전트 ===================== -->
+  <section class="block" id="verify" style="padding-top: 24px">
+    <div class="wrap">
+      <div class="verify">
+        <canvas id="verify-dots" aria-hidden="true"></canvas>
+        <div class="kicker reveal">검증 에이전트</div>
+        <h2 class="reveal">틀린 문제로 공부하는 일은 없도록,<br />모든 문제를 한 번 더 풀어 봐요</h2>
+        <p class="sub reveal">AI가 만든 문제는 그대로 보여주지 않아요. 만든 쪽과 독립된 검증 에이전트가 다시 풀고, 계산 문제는 코드로 답을 확인한 뒤 통과한 문제만 학습자에게 전달해요.</p>
+        <div class="pipeline">
+          <div class="pipe reveal"><i data-lucide="sparkles"></i><h4>문제 생성</h4><p>개념·난이도·형식에 맞춰 문제, 정답, 해설을 만들어요.</p></div>
+          <div class="pipe reveal"><i data-lucide="repeat"></i><h4>독립 재풀이</h4><p>해설을 보지 않은 다른 에이전트가 처음부터 다시 풀어요.</p></div>
+          <div class="pipe reveal"><i data-lucide="terminal"></i><h4>코드 검산</h4><p>계산이 필요한 문제는 코드로 실행해 답을 맞춰 봐요.</p></div>
+          <div class="pipe pass reveal"><i data-lucide="shield-check"></i><h4>통과한 문제만</h4><p>답이 일치하지 않으면 버리고, 통과한 문제만 보여줘요.</p></div>
+        </div>
+        <p class="footnote reveal"><i data-lucide="flag"></i>그래도 이상한 문제가 보이면 신고해 주세요. 두 명이 신고한 문제는 바로 숨기고 운영자가 확인해요.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 학습 흐름 ===================== -->
+  <section class="block" id="how">
+    <div class="wrap">
+      <div class="center">
+        <div class="kicker reveal">학습 흐름</div>
+        <h2 class="reveal">목표를 정하면,<br />나머지는 Eureka가 챙겨요</h2>
+      </div>
+      <div class="steps">
+        <div class="stepc reveal">
+          <span class="n">1</span>
+          <h4>프로젝트 만들기</h4>
+          <p>준비하는 시험, 쓰는 교재, 시험 날짜를 적어요. 범위에 맞춰 개념 트리가 만들어지고 D-day가 시작돼요.</p>
+          <div class="chiprow">
+            <span class="tag" style="--c:var(--math)">2027 수능 미적분 · D-24</span>
+            <span class="tag" style="--c:var(--chemistry)">화학I 중간고사 · D-12</span>
+          </div>
+        </div>
+        <div class="stepc reveal">
+          <span class="n">2</span>
+          <h4>대화하듯 풀기</h4>
+          <p>원하는 문제를 요청해 풀고, 모르는 건 바로 물어봐요. 틀린 문제는 이유와 함께 오답노트에 쌓여요.</p>
+          <div class="chiprow">
+            <span class="tag" style="--c:var(--ok)">정답 8</span>
+            <span class="tag" style="--c:var(--bad)">오답 2 → 오답노트</span>
+          </div>
+        </div>
+        <div class="stepc reveal">
+          <span class="n">3</span>
+          <h4>잊기 전에 다시</h4>
+          <p>틀린 문제는 1·3·7일 간격으로 다시 풀도록 알려 드려요. 맞히면 오답노트에서 졸업해요.</p>
+          <div class="timeline" aria-hidden="true">
+            <span class="dot x"></span><span class="seg-line"></span><span class="dot"></span><span class="seg-line"></span><span class="dot"></span><span class="seg-line"></span><span class="dot"></span>
+          </div>
+          <div class="timeline-labels" aria-hidden="true"><span>틀린 날</span><span>1일</span><span>3일</span><span>7일</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 과목 ===================== -->
+  <section class="block" id="subjects" style="padding-top: 24px">
+    <div class="wrap center">
+      <div class="kicker reveal">지원 과목</div>
+      <h2 class="reveal">수능 수학 · 과학탐구부터</h2>
+      <p class="sub reveal">고등 교육과정 기준 개념 트리 위에서 문제를 만들고 약점을 분석해요.</p>
+      <div class="subjects">
+        <div class="subj reveal" style="--c:var(--math)"><b>수학</b><small>수학I · 수학II<br />미적분 · 확률과 통계</small></div>
+        <div class="subj reveal" style="--c:var(--physics)"><b>물리학I</b><small>역학과 에너지<br />물질과 전자기장 · 파동</small></div>
+        <div class="subj reveal" style="--c:var(--chemistry)"><b>화학I</b><small>화학의 첫걸음<br />원자의 세계 · 역동적 반응</small></div>
+        <div class="subj reveal" style="--c:var(--biology)"><b>생명과학I</b><small>항상성과 몸의 기능<br />유전 · 생태계</small></div>
+        <div class="subj reveal" style="--c:var(--earth)"><b>지구과학I</b><small>고체 지구 · 대기와 해양<br />우주</small></div>
+      </div>
+      <div class="soon reveal"><span>준비 중</span><span class="tag">CPA</span><span class="tag">의전원</span><span class="tag">대학 전공</span><span class="tag">영어</span><span class="tag">한국어</span></div>
+      <div class="course-note reveal">
+        <i data-lucide="network"></i>
+        <span><b>목록에 없는 시험도 괜찮아요.</b> 시험 이름과 교재, 출제 범위를 적으면 AI가 단원·개념 트리를 짜서 나만의 코스를 만들어요.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 데이터 원칙 ===================== -->
+  <section class="block" style="padding-top: 24px">
+    <div class="wrap">
+      <div class="kicker reveal">데이터 원칙</div>
+      <h2 class="reveal">내 공부 기록은 나만 봐요</h2>
+      <div class="promises">
+        <div class="promise reveal"><i data-lucide="lock"></i><div><h4>내 기록은 나에게만</h4><p>풀이 기록, 오답노트, 대화는 본인 계정에서만 보여요. 다른 사람의 데이터는 있는지조차 알 수 없어요.</p></div></div>
+        <div class="promise reveal"><i data-lucide="file-lock-2"></i><div><h4>올린 기출은 올린 사람만</h4><p>업로드한 기출과 그것을 본보기로 만든 문제는 올린 사람에게만 보여요.</p></div></div>
+        <div class="promise reveal"><i data-lucide="copyright"></i><div><h4>원문 대신 새 문제</h4><p>기출 원문은 출제 구조를 분석하는 데만 쓰고, 학습 화면에는 새로 만든 문제만 보여줘요.</p></div></div>
+        <div class="promise reveal"><i data-lucide="image-off"></i><div><h4>사진 속 정보는 지워요</h4><p>프로필 사진은 새로 만들어 저장해 촬영 위치나 기기 정보가 남지 않아요.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== FAQ ===================== -->
+  <section class="block" id="faq" style="padding-top: 24px">
+    <div class="wrap">
+      <div class="center">
+        <div class="kicker reveal">자주 묻는 질문</div>
+        <h2 class="reveal">궁금한 점이 있나요?</h2>
+      </div>
+      <div class="faq">
+        <details class="reveal">
+          <summary>AI가 만든 문제, 정말 믿어도 되나요?<i data-lucide="plus"></i></summary>
+          <p>문제를 만든 에이전트와 별도인 검증 에이전트가 해설 없이 다시 풀고, 계산 문제는 코드로 실행해 답을 맞춰 봐요. 두 결과가 일치한 문제만 보여드려요. 그래도 이상한 문제를 발견하면 문제 화면에서 신고해 주세요. 두 명이 신고하면 바로 숨겨지고 운영자가 확인해요.</p>
+        </details>
+        <details class="reveal">
+          <summary>어떤 과목을 공부할 수 있나요?<i data-lucide="plus"></i></summary>
+          <p>지금은 수능 수학(수학I·II, 미적분, 확률과 통계)과 과학탐구 4과목(물리학I, 화학I, 생명과학I, 지구과학I)의 공식 코스를 제공해요. 그 밖의 시험은 범위를 적어 직접 코스를 만들 수 있고, CPA·의전원·대학 전공·영어·한국어 코스를 준비하고 있어요.</p>
+        </details>
+        <details class="reveal">
+          <summary>교육과정이 바뀌면 어떻게 되나요?<i data-lucide="plus"></i></summary>
+          <p>현재 개념 트리는 2015 개정 교육과정 기준이에요. 2028학년도 수능부터 적용되는 2022 개정 교육과정은 버전을 나눠 추가할 예정이라, 응시하는 해에 맞는 범위로 공부할 수 있어요.</p>
+        </details>
+        <details class="reveal">
+          <summary>제가 올린 기출문제를 다른 사람도 보나요?<i data-lucide="plus"></i></summary>
+          <p>아니요. 올린 자료와 그것을 바탕으로 만든 문제는 올린 사람에게만 보여요. 기출 원문은 출제 구조를 분석하는 데만 쓰이고, 학습 화면에는 새로 만든 문제가 나와요.</p>
+        </details>
+        <details class="reveal">
+          <summary>휴대폰에서도 쓸 수 있나요?<i data-lucide="plus"></i></summary>
+          <p>네. 별도 설치 없이 휴대폰, 태블릿, PC의 웹 브라우저에서 바로 쓸 수 있어요. 서술형 풀이는 태블릿 펜으로 직접 써서 확인받을 수도 있어요.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== 마지막 CTA ===================== -->
+  <section class="block" style="padding-top: 24px">
+    <div class="wrap">
+      <div class="final glass">
+        <canvas id="final-dots" aria-hidden="true"></canvas>
+        <div class="kicker reveal">Eureka</div>
+        <h2 class="reveal">다음 시험까지,<br />Eureka와 함께 준비해요</h2>
+        <div class="cta reveal" data-guest>
+          <a class="btn btn-dark btn-lg" href="/app/login.html#signup">지금 시작하기 <i data-lucide="arrow-right" class="arrow"></i></a>
+          <a class="btn btn-light btn-lg" href="/app/login.html">로그인</a>
+        </div>
+        <div class="cta reveal" data-member hidden>
+          <a class="btn btn-dark btn-lg" href="/app/index.html">학습 이어가기 <i data-lucide="arrow-right" class="arrow"></i></a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site">
+  <div class="wrap">
+    <span class="brand"><span class="brand-company">Horcrux Technologies</span><span class="brand-divider" aria-hidden="true"></span><span class="brand-name" style="font-size:15px">Eureka</span></span>
+    <span>© 2026 Horcrux Technologies</span>
+    <nav aria-label="약관">
+      <a href="/app/terms.html">이용약관</a>
+      <a href="/app/privacy.html"><b>개인정보처리방침</b></a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // 로그인한 사람에게는 '학습 이어가기' (토큰은 앱이 만료 시 지운다)
+  let member = false;
+  try { member = !!localStorage.getItem("eureka.token"); } catch { /* 저장소 없음 */ }
+  if (member) {
+    $$("[data-guest]").forEach((el) => (el.hidden = true));
+    $$("[data-member]").forEach((el) => (el.hidden = false));
+  }
+
+  lucide.createIcons();
+
+  // 스크롤하면 내비게이션에 유리 배경
+  const nav = $("#nav");
+  const onScroll = () => nav.classList.toggle("scrolled", scrollY > 8);
+  addEventListener("scroll", onScroll, { passive: true });
+  onScroll();
+
+  // 등장 효과: 같은 묶음 안에서 시간차
+  $$(".reveal").forEach((el) => {
+    const sib = [...el.parentElement.children].filter((x) => x.classList.contains("reveal"));
+    el.style.setProperty("--d", `${Math.min(sib.indexOf(el), 6) * 80}ms`);
+  });
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+  }, { threshold: 0.12, rootMargin: "0px 0px -6% 0px" });
+  $$(".reveal").forEach((el) => io.observe(el));
+
+  // ---------- 히어로 데모: 질문 입력 → 검증 → 문제 → 풀이 ----------
+  const QUESTION = "미적분 치환적분 3점짜리 문제 내줘";
+  const text = $("#demo-text"), checks = $$("[data-check]");
+  const steps = ["#demo-checks", "#demo-problem", "#demo-reply"].map((s) => $(s));
+  const answer = $(".choice[data-c]");
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const setCheck = (el, done) => {
+    el.classList.toggle("done", done);
+    el.querySelector("svg, i").outerHTML = `<i data-lucide="${done ? "circle-check" : "loader"}" class="${done ? "" : "spin"}"></i>`;
+  };
+  function finalState() {
+    text.textContent = QUESTION;
+    $(".ask .caret").remove();
+    checks.forEach((c) => setCheck(c, true));
+    steps.forEach((s) => s.classList.remove("off"));
+    answer.classList.add("pick");
+    lucide.createIcons();
+  }
+  async function play() {
+    for (;;) {
+      text.textContent = "";
+      steps.forEach((s) => s.classList.add("off"));
+      checks.forEach((c) => setCheck(c, false));
+      answer.classList.remove("pick");
+      lucide.createIcons();
+      await wait(900);
+      for (const ch of QUESTION) { text.textContent += ch; await wait(55); }
+      await wait(400);
+      steps[0].classList.remove("off");
+      for (const c of checks) { await wait(650); setCheck(c, true); lucide.createIcons(); }
+      await wait(300);
+      steps[1].classList.remove("off");
+      await wait(1400);
+      answer.classList.add("pick");
+      await wait(500);
+      steps[2].classList.remove("off");
+      await wait(6000);
+    }
+  }
+  if (reduce) finalState(); else play();
+
+  // ---------- 무지개 도트 ----------
+  const demo = $(".demo");
+  const heroText = [".hero .eyebrow", ".hero h1", ".hero .lead", ".hero .cta:not([hidden])", ".hero .note"].map((s) => $(s));
+  dotField($("#hero-dots"), {
+    gap: 18, baseR: 1, peakR: 2.4, baseAlpha: 0.1, peakAlpha: 0.55, light: 60,
+    wavelength: 90, speed: 1.1, hueSpeed: 25, reach: 0.7, introSec: 1.3,
+    focus: () => {
+      const c = $("#hero-dots").getBoundingClientRect(), r = demo.getBoundingClientRect();
+      return [r.left - c.left + r.width / 2, r.top - c.top + r.height / 2];
+    },
+    clear: () => {
+      const c = $("#hero-dots").getBoundingClientRect();
+      return heroText.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left - c.left, right: r.right - c.left, top: r.top - c.top, bottom: r.bottom - c.top };
+      });
+    },
+  });
+  dotField($("#verify-dots"), {
+    gap: 16, baseR: 0.8, peakR: 1.8, baseAlpha: 0.08, peakAlpha: 0.6, light: 66,
+    wavelength: 70, speed: 1.2, hueSpeed: 30, introSec: 1.6, edges: true,
+    focus: (W, H) => [W / 2, H / 2],
+  });
+  dotField($("#final-dots"), {
+    gap: 14, baseR: 0.8, peakR: 2, baseAlpha: 0.12, peakAlpha: 0.75, light: 58,
+    wavelength: 60, speed: 1.4, hueSpeed: 40, introSec: 1.8, edges: true,
+    focus: (W, H) => [W / 2, H / 2],
+  });
+})();
+</script>
+</body>
+</html>
