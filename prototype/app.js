@@ -693,7 +693,7 @@
       title: ex ? "풀이를 준비하는 중" : "문제를 준비하는 중",
       steps: ex ? ["질문 이해하기", "단계별로 풀기", "검산하기", "그래프·화면 준비"]
         : ["요청 이해하기", "문제 만들기", "다른 AI가 다시 풀어 검산", "화면 준비"],
-      expectMs: Store.mode === "api" ? (ex ? 25000 : 45000) : 900,
+      expectMs: Store.mode === "api" ? (ex ? 18000 : 30000) : 900,
       run: () => done.catch(() => id), // 실패해도 대화에 '답변을 만들지 못했어요'가 남으니 그 대화를 연다
     }).then((realId = id) => {
       if (location.hash === `#/chat/${realId}`) renderChat(realId);
@@ -1459,7 +1459,7 @@
       try {
         const sid = await withAIProgress({
           title: `기출을 닮은 문제 ${count}개를 만드는 중`,
-          steps: ["기출 스타일 분석", "새 문제 만들기", "다른 AI가 다시 풀어 검산", "화면 준비"], expectMs: 60000,
+          steps: ["기출 스타일 분석", "새 문제 만들기", "다른 AI가 다시 풀어 검산", "화면 준비"], expectMs: 35000,
           run: () => Store.generateFromPast(id, { level, count }),
         });
         toast("새 문제를 만들었어요");
@@ -1492,7 +1492,6 @@
               <stop offset="0" stop-color="#4fc3ff"/><stop offset=".5" stop-color="#6b7cff"/><stop offset="1" stop-color="#c06bff"/></linearGradient></defs>
             <circle cx="60" cy="60" r="${R}" class="track"/>
             <circle cx="60" cy="60" r="${R}" class="bar" stroke-dasharray="${LEN}" stroke-dashoffset="${LEN}"/>
-            <g class="orbit"><circle cx="60" cy="60" r="${R}" class="comet" stroke-dasharray="${LEN * 0.12} ${LEN}"/></g>
           </svg>
           <div class="ai-pct"><b>0</b><small>%</small></div>
         </div>

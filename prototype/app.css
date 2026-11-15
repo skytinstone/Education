@@ -976,9 +976,6 @@ body.work-full-open { overflow: hidden; }
 .ai-ring circle { fill: none; stroke-width: 9; }
 .ai-ring .track { stroke: rgba(15,23,42,.07); }
 .ai-ring .bar { stroke: url(#ai-grad); stroke-linecap: round; }
-.ai-ring .comet { stroke: rgba(255,255,255,.95); stroke-width: 4; stroke-linecap: round; filter: drop-shadow(0 0 4px rgba(107,124,255,.9)); }
-.ai-ring .orbit { transform-origin: 60px 60px; animation: ai-orbit 1.3s linear infinite; }
-@keyframes ai-orbit { to { transform: rotate(360deg); } }
 .ai-pct { position: absolute; inset: 0; display: grid; place-content: center; grid-auto-flow: column; align-items: baseline; gap: 2px; }
 .ai-pct b { font-size: 34px; font-weight: 800; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
 .ai-pct small { font-size: 14px; font-weight: 600; color: var(--ink-3); }
@@ -996,7 +993,7 @@ body.work-full-open { overflow: hidden; }
 .ai-steps li.done i::after { content: ""; position: absolute; left: 5px; top: 2.5px; width: 4px; height: 8px; border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg); }
 .ai-foot { margin-top: 18px; font-size: 12px; color: var(--ink-3); }
 @media (prefers-reduced-motion: reduce) {
-  .ai-ring .orbit, .ai-steps li.now i::after { animation: none; }
+  .ai-steps li.now i::after { animation: none; }
   .ai-card { transition: none; }
 }
 

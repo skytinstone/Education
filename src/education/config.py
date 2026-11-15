@@ -30,8 +30,10 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model_generate: str = "gpt-6.1-sol"
     openai_model_verify: str = "gpt-6.1-sol"
-    openai_effort_generate: str = "high"
-    openai_effort_verify: str = "high"
+    # 추론 강도: high 는 문제 하나에 1분 넘게 걸려 medium 이 기본 (틀린 문제는 독립 재풀이 검산이 거른다).
+    # 더 깊게 풀게 하려면 .env 에 OPENAI_EFFORT_GENERATE=high / OPENAI_EFFORT_VERIFY=high
+    openai_effort_generate: str = "medium"
+    openai_effort_verify: str = "medium"
     ai_max_attempts: int = 2  # 검증에 실패하면 문제당 다시 만드는 최대 횟수
 
     # 학교 검색 (나이스 교육정보 개방 포털) — 없어도 되지만 키가 있으면 한 번에 더 많이 찾는다
