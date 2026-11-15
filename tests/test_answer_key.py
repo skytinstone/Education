@@ -163,3 +163,16 @@ def test_deleting_problem_sheet_removes_its_answer_file(client, auth, monkeypatc
     upload_answers(client, auth, pid, mid, [AnswerEntry(number=1, answer="1", explanation=None)], monkeypatch)
     assert client.delete(f"/api/materials/{mid}", headers=auth).status_code == 204
     assert client.get(f"/api/projects/{pid}/materials", headers=auth).json() == []
+
+
+def test_project_workspace_merges_problems_and_answers(client, auth, new_user, monkeypatch, background_db):
+    pid, mid = setup_material(client, auth, monkeypatch)
+    upload_answers(client, auth, pid, mid, [AnswerEntry(number=3, answer="④", explanation=None)], monkeypatch)
+    w = client.get(f"/api/projects/{pid}/workspace", headers=auth).json()
+    assert [x["kind"] for x in w["materials"]] == ["past_exam", "answer_sheet"]
+    rows = {x["number"]: x for x in w["problems"]}
+    assert [x["number"] for x in w["problems"]] == [1, 2, 3, 4]            # 자료별 번호순
+    assert (rows[1]["answer"], rows[1]["answer_source"]) == ("3", "printed")  # 시험지에 인쇄된 정답
+    assert (rows[3]["answer"], rows[3]["answer_source"]) == ("4", "file")     # 정답 파일에서 1:1
+    assert rows[4]["answer_source"] is None and rows[4]["answer"] == ""
+    assert client.get(f"/api/projects/{pid}/workspace", headers=new_user()).status_code == 404

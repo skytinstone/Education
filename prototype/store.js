@@ -544,6 +544,7 @@ const Store = (() => {
 
     // ---------- 기출 업로드 · 기출 기반 생성 (서버 모드 전용) ----------
     listMaterials: (projectId) => api(`/projects/${projectId}/materials`),
+    workspace: (projectId) => api(`/projects/${projectId}/workspace`),
     pastProblems: (projectId) => api(`/projects/${projectId}/past-problems`),
     // kind: past_exam(기출·시험지) | textbook(교재 페이지)
     uploadMaterial(projectId, file, rightsConfirmed, kind = "past_exam", answerFor = null) {

@@ -168,6 +168,8 @@
     view.hidden = !page;
     view.onclick = null;
     view.onchange = null;
+    view.onkeydown = null;
+    $(".wrap").classList.toggle("wide", page === "project");
     if (!page) renderHome(params);
     else if (page === "chat") renderChat(a);
     else if (page === "project") renderProject(a);
@@ -175,6 +177,7 @@
     else if (page === "library") renderLibrary(a ?? "concepts", b);
     else if (page === "settings") renderSettings(params);
     else if (page === "answer-key") renderAnswerKey(a);
+    else if (page === "exam") renderExam(a, params);
     else if (page === "admin") { location.href = "/admin"; return; }
     else return go("/");
     renderSidebar();
@@ -1333,7 +1336,19 @@
     hit.addEventListener("pointerleave", () => { hov.hidden = true; tip.hidden = true; });
   }
 
-  // ================= 프로젝트 =================
+  // ================= 프로젝트: 작업 공간 (올린 문제 · 문제와 정답 · 분석 리포트) =================
+  const MATERIAL_STATUS = { uploaded: ["분석 대기", "clock"], extracting: ["AI가 읽는 중", "loader"], ready: ["완료", "circle-check"], failed: ["실패", "circle-alert"] };
+  const SRC_LABEL = { printed: "시험지", file: "정답 파일", ai: "AI 풀이" };
+  const ANS_STATUS = {
+    sheet: ["정답표", "ok"], confirmed: ["정답 확인", "ok"], verified: ["검산 완료", "ok"],
+    conflict: ["정답표와 다름", "warn"], uncertain: ["확인 필요", "warn"], failed: ["풀이 실패", "bad"],
+  };
+  const QTYPE_NAME = { multiple_choice: "객관식", short_answer: "단답형", text: "주관식", numeric: "수치형", essay: "서술형" };
+  const DIFF_NAME = ["기본", "쉬움", "보통", "어려움", "최고난도"];
+  const wsState = {}; // 프로젝트별 { sel: 자료 id | "all", view: "list" | "erd", open: Set }
+  const ansLabel = (q, a = q.answer) => (!a ? "–" : q.choices ? (CIRC[Number(a) - 1] ?? a) : a);
+  const hasAnswer = (q) => !!q.answer && !["uncertain", "failed"].includes(q.answer_status);
+
   function renderProject(id) {
     const p = Store.project(id);
     if (!p) { toast("프로젝트를 찾을 수 없어요"); return go("/"); }
@@ -1341,172 +1356,439 @@
     const n = daysLeft(p.examDate);
     const acc = Store.accuracy({ projectId: id });
     const tries = Store.state.attempts.filter((a) => a.projectId === id).length;
+    const right = Store.state.attempts.filter((a) => a.projectId === id && a.correct).length;
     const open = Store.openNotes().filter((w) => w.projectId === id).length;
     const weak = Store.conceptStats({ projectId: id }).slice(0, 3);
     const sessions = Store.state.sessions.filter((s) => s.projectId === id).sort((a, b) => b.updatedAt - a.updatedAt);
     const units = p.unitIds.length ? p.unitIds : childrenOf(p.subjectId).map((u) => u.id);
+    const api = Store.mode === "api";
+    wsState[id] ??= { sel: "all", view: "list", open: new Set() };
+    const chip = (icon, text) => `<span class="ws-chip"><i data-lucide="${icon}"></i>${esc(text)}</span>`;
 
     view.innerHTML = `
-      <div class="page-head">
-        <div>
-          <h1><i data-lucide="folder" style="color:${COLOR[d]}"></i>${esc(p.name)}</h1>
-          <p>${esc(concept(p.subjectId).name)} · ${esc(qtypeLabel(p))}${p.goal ? ` · 목표 ${esc(p.goal)}` : ""}${p.examDate ? ` · 시험일 ${p.examDate}` : ""}${p.textbook ? ` · 교재 ${esc(p.textbook)}` : ""}</p>
-        </div>
-        <div class="page-actions">
-          <a class="btn-primary" href="#/?project=${id}" style="text-decoration:none"><i data-lucide="square-pen"></i>이 프로젝트에서 새 학습</a>
-          <button class="icon-btn soft" id="project-more" aria-label="프로젝트 메뉴"><i data-lucide="ellipsis"></i></button>
-        </div>
-      </div>
-
-      <div class="stats">
-        <div class="wstat"><b>${n == null ? "–" : ddayLabel(n)}</b><span>시험까지</span></div>
-        <div class="wstat"><b>${tries}</b><span>푼 문제</span></div>
-        <div class="wstat"><b>${pct(acc)}</b><span>정답률</span></div>
-        <a class="stat" href="#/notes?project=${id}" style="text-decoration:none;color:inherit"><b style="color:${open ? "var(--warn)" : "inherit"}">${open}</b><span>남은 오답 →</span></a>
-      </div>
-
-      <section class="glass-card past-panel" style="--c:${COLOR[d]}">
-        <div class="past-head">
-          <h3><i data-lucide="file-stack"></i>기출 기반 문제 만들기</h3>
-          ${Store.mode === "api" ? '<button class="btn-ghost glassy" id="add-material"><i data-lucide="upload"></i>기출 올리기</button>' : ""}
-        </div>
-        ${Store.mode === "api" ? `
-          <div id="materials" class="materials"><p class="mini">불러오는 중…</p></div>
-          <div class="gen-row">
-            <span>기출보다</span>
-            <div class="seg" id="gen-level">${[["easier", "쉽게"], ["same", "비슷하게"], ["harder", "어렵게"]].map(([k, v]) => `<button type="button" data-level="${k}" class="${k === "same" ? "on" : ""}">${v}</button>`).join("")}</div>
-            <select class="select" id="gen-count" aria-label="문항 수">${[1, 2, 3, 4, 5].map((n) => `<option value="${n}" ${n === 3 ? "selected" : ""}>${n}문제</option>`).join("")}</select>
-            <button class="btn-primary" id="gen-go"><i data-lucide="sparkles"></i>문제 만들기</button>
+      <section class="ws-head">
+        <div class="ws-top">
+          <span class="ws-icon" style="--c:${COLOR[d]}"><i data-lucide="folder-open"></i></span>
+          <div class="ws-title">
+            <h1>${esc(p.name)}</h1>
+            <div class="ws-meta">
+              ${chip("book-open", concept(p.subjectId)?.name ?? "코스")}${chip("list-checks", qtypeLabel(p))}
+              ${p.goal ? chip("flag", `목표 ${p.goal}`) : ""}${p.examDate ? chip("calendar", `시험일 ${p.examDate}`) : ""}
+              ${p.textbook ? chip("book-marked", p.textbook) : ""}
+            </div>
           </div>
-          <p class="mini" id="gen-status">기출이 없으면 프로젝트 범위와 약점을 바탕으로 만들어요. 만든 문제는 다른 AI가 다시 풀어 검증해요</p>
-          <div id="past-list"></div>`
-          : '<div class="ai-slot"><i data-lucide="info"></i><div>기출 업로드와 AI 문제 생성은 로그인해서 서버 화면(localhost:8000/app)으로 열었을 때 쓸 수 있어요.</div></div>'}
+          <div class="ws-actions">
+            ${api ? '<button class="btn-ghost" data-ws-upload><i data-lucide="upload"></i>기출 올리기</button>' : ""}
+            <a class="btn-primary" href="#/?project=${id}"><i data-lucide="square-pen"></i>이 프로젝트에서 새 학습</a>
+            <button class="icon-btn" id="project-more" aria-label="프로젝트 메뉴"><i data-lucide="ellipsis"></i></button>
+          </div>
+        </div>
+        <div class="ws-kpis">
+          <div><span>시험까지</span><b class="${n != null && n >= 0 && n <= 14 ? "warn" : ""}">${n == null ? "–" : ddayLabel(n)}</b><small>${p.examDate ? p.examDate : "시험일 미정"}</small></div>
+          <div><span>푼 문제</span><b>${tries}</b><small>맞힌 문제 ${right}</small></div>
+          <div><span>정답률</span><b>${pct(acc)}</b><small>이 프로젝트 기준</small></div>
+          <a href="#/notes?project=${id}"><span>남은 오답</span><b class="${open ? "warn" : ""}">${open}</b><small>오답노트 열기 →</small></a>
+          <div id="ws-kpi-files"><span>올린 문항</span><b>${api ? "…" : "–"}</b><small>정답 확보 –</small></div>
+        </div>
       </section>
 
-      <div class="cols">
+      ${api ? `
+      <div class="ws-grid">
+        <section class="panel ws-col ws-files">
+          <div class="ws-col-head"><h3><i data-lucide="layers"></i>올린 문제</h3>
+            <button class="icon-btn" data-ws-upload title="기출·교재 올리기" aria-label="기출 올리기"><i data-lucide="plus"></i></button></div>
+          <div id="ws-files"><p class="mini">불러오는 중…</p></div>
+        </section>
+        <section class="panel ws-col ws-sheet"><div id="ws-sheet"><p class="mini">불러오는 중…</p></div></section>
+        <aside class="panel ws-col ws-report">
+          <div id="ws-report"><p class="mini">분석하는 중…</p></div>
+          <div class="ws-gen">
+            <h4><i data-lucide="sparkles"></i>기출을 닮은 새 문제</h4>
+            <div class="seg small" id="gen-level">${[["easier", "쉽게"], ["same", "비슷하게"], ["harder", "어렵게"]].map(([k, v]) => `<button type="button" data-level="${k}" class="${k === "same" ? "on" : ""}">${v}</button>`).join("")}</div>
+            <div class="ws-gen-row">
+              <select class="select" id="gen-count" aria-label="문항 수">${[1, 2, 3, 4, 5].map((k) => `<option value="${k}" ${k === 3 ? "selected" : ""}>${k}문제</option>`).join("")}</select>
+              <button class="btn-ghost" id="gen-go"><i data-lucide="wand-sparkles"></i>만들기</button>
+            </div>
+            <p class="mini" id="gen-status">만든 문제는 다른 AI가 다시 풀어 검산한 뒤 대화로 열려요</p>
+          </div>
+        </aside>
+      </div>` : '<div class="ai-slot" style="margin-top:16px"><i data-lucide="info"></i><div>기출 업로드와 분석 리포트는 로그인해서 서버 화면으로 열었을 때 쓸 수 있어요.</div></div>'}
+
+      <div class="ws-bottom">
         <section class="panel">
           <h3><i data-lucide="target"></i>약점 TOP 3</h3>
           ${weak.length ? `<ul class="weak-list">${weak.map((w) => `
             <li style="--c:${COLOR[d]}">
-              <div class="row"><a href="#/library/concept/${w.conceptId}" style="color:inherit;text-decoration:none">${esc(concept(w.conceptId).name)}</a><span>${pct(w.accuracy)} · ${w.attempts}문제</span></div>
+              <div class="row"><a href="#/library/concept/${w.conceptId}" style="color:inherit;text-decoration:none">${esc(concept(w.conceptId)?.name ?? "")}</a><span>${pct(w.accuracy)} · ${w.attempts}문제</span></div>
               <div class="bar"><i style="width:${w.accuracy * 100}%"></i></div>
             </li>`).join("")}</ul>` : '<p class="mini">문제를 풀면 약점이 여기에 나타나요</p>'}
         </section>
         <section class="panel">
           <h3><i data-lucide="list-tree"></i>학습 범위</h3>
-          <div class="unit-list">${units.map((u) => `<span class="pill" style="--c:${COLOR[d]}">${esc(concept(u).name)}</span>`).join("")}</div>
+          <div class="unit-list">${units.map((u) => `<span class="pill" style="--c:${COLOR[d]}">${esc(concept(u)?.name ?? "")}</span>`).join("")}</div>
         </section>
-      </div>
-
-      <section class="panel" style="margin-top:12px">
-        <h3><i data-lucide="messages-square"></i>대화 ${sessions.length}개</h3>
-        ${sessions.length ? `<div class="list">${sessions.map((s) => `
-          <a href="#/chat/${s.id}"><i data-lucide="message-circle"></i>${esc(s.title)}<span>${relTime(s.updatedAt)}</span></a>`).join("")}</div>`
-          : '<p class="mini">아직 대화가 없어요. "이 프로젝트에서 새 학습"으로 시작해 보세요</p>'}
-      </section>`;
+        <section class="panel">
+          <h3><i data-lucide="messages-square"></i>대화 ${sessions.length}개</h3>
+          ${sessions.length ? `<div class="list">${sessions.slice(0, 6).map((s) => `
+            <a href="#/chat/${s.id}"><i data-lucide="message-circle"></i>${esc(s.title)}<span>${relTime(s.updatedAt)}</span></a>`).join("")}</div>`
+            : '<p class="mini">아직 대화가 없어요. "이 프로젝트에서 새 학습"으로 시작해 보세요</p>'}
+        </section>
+      </div>`;
     $("#project-more").addEventListener("click", (e) => projectMenu(e.currentTarget, id));
-    if (Store.mode === "api") bindPastPanel(id);
+    if (api) bindWorkspace(id);
   }
 
-  // 기출 자료 목록 (분석이 끝날 때까지 몇 초마다 새로고침) + 기출 기반 생성
-  const MATERIAL_STATUS = { uploaded: ["분석 대기", "clock"], extracting: ["AI가 읽는 중", "loader"], ready: ["완료", "circle-check"], failed: ["실패", "circle-alert"] };
-  function bindPastPanel(id) {
+  function bindWorkspace(id) {
     const here = () => navKey() === `project:${id}`;
-    async function loadMaterials() {
+    const st = wsState[id];
+    let data = null, timer = null;
+
+    async function load() {
       if (!here()) return;
-      let list;
-      try { list = await Store.listMaterials(id); } catch (e) { $("#materials").innerHTML = `<p class="mini">${esc(e.message)}</p>`; return; }
+      try { data = await Store.workspace(id); } catch (e) { $("#ws-files").innerHTML = `<p class="mini">${esc(e.message)}</p>`; return; }
       if (!here()) return;
-      const sheets = Object.fromEntries(list.filter((x) => x.kind === "answer_sheet").map((x) => [x.answer_for_id, x]));
-      const sheetRow = (s) => {
-        const [label, icon] = MATERIAL_STATUS[s.status];
-        const mp = s.answer_map;
-        return `
-          <div class="material answer-file ${s.status}">
-            <i data-lucide="corner-down-right"></i>
-            <div class="material-name"><b>정답 파일 · ${esc(s.filename)}</b>
-              <small>${s.status === "ready" && mp ? `${mp.total}문항 중 ${mp.matched}문항 정답 연결${mp.missing?.length ? ` · 정답 없는 번호 ${mp.missing.slice(0, 12).join(", ")}${mp.missing.length > 12 ? " …" : ""}` : " · 모든 문항 연결"}${mp.extra?.length ? ` · 문제지에 없는 번호 ${mp.extra.slice(0, 6).join(", ")}` : ""}` : s.status === "failed" ? "" : "AI가 정답 파일을 읽고 문항 번호와 맞추고 있어요"}</small></div>
-            <span class="status-pill ${s.status}"><i data-lucide="${icon}"></i>${s.status === "ready" && mp ? `${mp.matched}/${mp.total}` : label}</span>
-            <span></span>
-            <button class="icon-btn" data-del-material="${s.id}" aria-label="정답 파일 삭제" title="정답 파일 삭제"><i data-lucide="trash-2"></i></button>
-            ${s.error ? `<p class="material-error">${esc(s.error)}</p>` : ""}
+      if (st.sel !== "all" && !data.materials.some((x) => x.id === st.sel)) st.sel = "all";
+      draw();
+      clearTimeout(timer);
+      if (data.materials.some((x) => x.status === "uploaded" || x.status === "extracting" || x.answer_key_status === "running")) timer = setTimeout(load, 4000);
+    }
+    const sheets = () => data.materials.filter((x) => x.kind !== "answer_sheet");
+    const answerFileOf = (mid) => data.materials.find((x) => x.kind === "answer_sheet" && x.answer_for_id === mid);
+    const problemsOf = (mid) => data.problems.filter((q) => q.material_id === mid);
+
+    function draw() { drawKpi(); drawFiles(); drawSheet(); drawReport(); icons(); if (st.view === "erd") requestAnimationFrame(drawErdLines); }
+
+    function drawKpi() {
+      const total = data.problems.length, ok = data.problems.filter(hasAnswer).length;
+      $("#ws-kpi-files").innerHTML = `<span>올린 문항</span><b>${total}</b><small>정답 확보 ${total ? `${Math.round((ok / total) * 100)}%` : "–"} (${ok}/${total})</small>`;
+    }
+
+    function drawFiles() {
+      const list = sheets();
+      const allCount = data.problems.length;
+      $("#ws-files").innerHTML = `
+        <button class="ws-file ${st.sel === "all" ? "on" : ""}" data-ws-sel="all">
+          <span class="ws-file-ic"><i data-lucide="library"></i></span>
+          <span class="ws-file-main"><b>모든 자료</b><small>${list.length}개 파일 · ${allCount}문항</small></span>
+        </button>
+        ${list.map((m) => {
+          const [label, icon] = MATERIAL_STATUS[m.status];
+          const qs = problemsOf(m.id), ok = qs.filter(hasAnswer).length, af = answerFileOf(m.id);
+          return `
+          <div class="ws-file ${st.sel === m.id ? "on" : ""} ${m.status}" data-ws-sel="${m.id}" role="button" tabindex="0">
+            <span class="ws-file-ic"><i data-lucide="${m.content_type === "application/pdf" ? "file-text" : "image"}"></i></span>
+            <span class="ws-file-main">
+              <b title="${esc(m.filename)}">${esc(m.filename)}</b>
+              <small>${m.status === "ready" ? `${m.kind === "textbook" ? "교재" : "기출"} · ${qs.length}문항 · 정답 ${ok}/${qs.length}` : `<i data-lucide="${icon}" class="${m.status === "extracting" ? "spin" : ""}"></i>${label}`}</small>
+              ${af ? `<span class="ws-tag ${af.status === "failed" ? "bad" : ""}"><i data-lucide="link-2"></i>정답 파일 ${af.status === "ready" && af.answer_map ? `${af.answer_map.matched}/${af.answer_map.total}` : MATERIAL_STATUS[af.status][0]}</span>` : ""}
+              ${m.answer_key_status === "done" ? '<span class="ws-tag ok"><i data-lucide="file-check-2"></i>정답지</span>'
+                : m.answer_key_status === "running" ? '<span class="ws-tag"><i data-lucide="loader" class="spin"></i>정답지 만드는 중</span>' : ""}
+              ${m.error ? `<span class="ws-err">${esc(m.error)}</span>` : ""}
+            </span>
+            <button class="icon-btn ws-more" data-ws-menu="${m.id}" aria-label="자료 메뉴"><i data-lucide="ellipsis-vertical"></i></button>
           </div>`;
+        }).join("")}
+        ${list.length ? "" : '<div class="ws-empty"><i data-lucide="file-up"></i><b>아직 올린 기출이 없어요</b><span>PDF나 사진을 올리면 AI가 문항을 읽어 정답과 함께 정리해요</span><button class="btn-primary" data-ws-upload><i data-lucide="upload"></i>기출 올리기</button></div>'}`;
+    }
+
+    function drawSheet() {
+      const mat = st.sel === "all" ? null : data.materials.find((x) => x.id === st.sel);
+      const qs = mat ? problemsOf(mat.id) : data.problems;
+      const ok = qs.filter(hasAnswer).length;
+      const erdMat = mat ?? sheets().find((x) => x.status === "ready" && problemsOf(x.id).length);
+      const keyBtn = mat && mat.status === "ready" && mat.problem_count
+        ? (mat.answer_key_status === "done" ? `<a class="btn-ghost" href="#/answer-key/${mat.id}"><i data-lucide="file-check-2"></i>정답지</a>`
+          : mat.answer_key_status === "running" ? '<span class="ws-tag"><i data-lucide="loader" class="spin"></i>정답지 만드는 중</span>'
+          : `<button class="btn-ghost" data-ak-make="${mat.id}"><i data-lucide="file-pen-line"></i>정답지 만들기</button>`) : "";
+      $("#ws-sheet").innerHTML = `
+        <div class="ws-col-head">
+          <div><h3><i data-lucide="table-2"></i>${mat ? esc(mat.filename) : "모든 문제"}</h3><small>${qs.length}문항 · 정답 확보 ${ok}/${qs.length}</small></div>
+          <div class="ws-sheet-actions">
+            <div class="seg small"><button data-ws-view="list" class="${st.view === "list" ? "on" : ""}"><i data-lucide="rows-3"></i>문제·정답</button><button data-ws-view="erd" class="${st.view === "erd" ? "on" : ""}"><i data-lucide="network"></i>매핑 ERD</button></div>
+            ${keyBtn}
+          </div>
+        </div>
+        ${!qs.length ? '<div class="ws-empty"><i data-lucide="table-2"></i><b>아직 읽은 문항이 없어요</b><span>왼쪽에서 기출을 올리면 문항과 정답이 여기에 정리돼요</span></div>'
+          : st.view === "erd" ? erdHTML(erdMat, erdMat ? problemsOf(erdMat.id) : [], erdMat ? answerFileOf(erdMat.id) : null, !mat)
+          : listHTML(qs, !mat)}`;
+    }
+
+    function listHTML(qs, grouped) {
+      let lastMat = null;
+      return `<div class="ws-table" role="table" aria-label="문제와 정답">
+        <div class="ws-tr ws-th" role="row"><span>번호</span><span>문제</span><span>정답</span><span>출처</span><span>상태</span></div>
+        ${qs.map((q, i) => {
+          const head = grouped && q.material_id !== lastMat ? `<div class="ws-group">${esc(data.materials.find((x) => x.id === q.material_id)?.filename ?? "")}</div>` : "";
+          lastMat = q.material_id;
+          const [label, tone] = ANS_STATUS[q.answer_status] ?? ["정답 없음", "none"];
+          const opened = st.open.has(q.id);
+          return `${head}
+          <div class="ws-tr ${opened ? "open" : ""}" role="row" data-ws-row="${q.id}" tabindex="0">
+            <span class="no">${q.number ?? i + 1}</span>
+            <div class="stem"><div class="${opened ? "" : "clamp"}" data-math>${esc(q.stem)}</div>
+              ${opened && q.choices ? `<ol class="ws-choices">${q.choices.map((c, k) => `<li class="${String(k + 1) === q.answer ? "on" : ""}"><span>${CIRC[k]}</span><span data-math>${esc(c)}</span></li>`).join("")}</ol>` : ""}
+              <span class="ws-sub">${esc(QTYPE_NAME[q.problem_type] ?? "")} · 난이도 ${q.difficulty}${q.needs_figure ? " · 그림 문항" : ""}${concept(q.concept_ids?.[0]) ? ` · ${esc(concept(q.concept_ids[0]).name)}` : ""}</span>
+            </div>
+            <b class="ans ${q.answer ? "" : "none"}" data-math>${esc(ansLabel(q))}</b>
+            <span class="src">${q.answer_source ? `<i class="sd sd-${q.answer_source}"></i>${SRC_LABEL[q.answer_source]}` : "—"}</span>
+            <span class="ws-badge ${tone}">${label}</span>
+          </div>`;
+        }).join("")}
+      </div>`;
+    }
+
+    // ERD: 실제 테이블 구조대로 problems ─1:1─ problem_answers ─N:1─ answer_sheet
+    const ERD_MAX = 40;
+    function erdHTML(mat, qs, af, auto) {
+      if (!mat) return '<div class="ws-empty"><i data-lucide="network"></i><b>매핑을 그릴 문제지가 없어요</b></div>';
+      const rows = qs.slice(0, ERD_MAX);
+      const mp = af?.answer_map;
+      return `
+        ${auto ? `<p class="mini erd-note">자료를 고르지 않아 <b>${esc(mat.filename)}</b>의 매핑을 보여 드려요. 왼쪽에서 다른 자료를 고를 수 있어요</p>` : ""}
+        <div class="erd" id="erd">
+          <svg class="erd-lines" id="erd-lines" aria-hidden="true"></svg>
+          <div class="erd-ent">
+            <div class="erd-h"><i data-lucide="table"></i>problems<small>문제지 · ${qs.length} rows</small></div>
+            <div class="erd-c"><span><em>PK</em> id</span><span>number</span></div>
+            ${rows.map((q, i) => `<div class="erd-r" data-pr="${q.id}"><code>${esc(q.id.slice(0, 10))}</code><span>#${q.number ?? i + 1}</span></div>`).join("")}
+          </div>
+          <div class="erd-ent">
+            <div class="erd-h"><i data-lucide="table"></i>problem_answers<small>1 : 1</small></div>
+            <div class="erd-c"><span><em>FK</em> problem_id</span><span>answer</span><span>source</span></div>
+            ${rows.map((q, i) => `<div class="erd-r ${hasAnswer(q) ? "" : q.answer ? "warn" : "missing"}" data-ar="${q.id}" data-src="${q.answer_source ?? ""}">
+              <code>→ #${q.number ?? i + 1}</code><b data-math>${esc(ansLabel(q))}</b><span class="src">${q.answer_source ? `<i class="sd sd-${q.answer_source}"></i>${q.answer_source}` : "NULL"}</span></div>`).join("")}
+          </div>
+          <div class="erd-ent erd-sheet">
+            <div class="erd-h"><i data-lucide="table"></i>materials<small>answer_sheet · N : 1</small></div>
+            <div class="erd-c"><span><em>PK</em> id</span><span>filename</span></div>
+            <div class="erd-r ${af ? "" : "missing"}" data-sr><code>${af ? esc(af.id.slice(0, 8)) : "NULL"}</code><span>${af ? esc(af.filename) : "연결된 정답 파일 없음"}</span></div>
+            <div class="erd-kv">
+              <div><span>UNIQUE</span><b>answer_for_id</b></div>
+              <div><span>matched</span><b>${mp ? `${mp.matched} / ${mp.total}` : "–"}</b></div>
+              <div><span>missing</span><b>${mp?.missing?.length ? mp.missing.slice(0, 8).join(", ") : "–"}</b></div>
+              <div><span>extra</span><b>${mp?.extra?.length ? mp.extra.slice(0, 8).join(", ") : "–"}</b></div>
+            </div>
+            ${af ? "" : `<button class="btn-ghost erd-attach" data-attach-answer="${mat.id}"><i data-lucide="link-2"></i>정답 파일 연결</button>`}
+          </div>
+        </div>
+        <div class="erd-legend">
+          <span><i class="ln ok"></i>정답 연결 (1:1)</span><span><i class="ln warn"></i>확인 필요</span><span><i class="ln miss"></i>정답 없음 (NULL)</span>
+          <span><i class="sd sd-printed"></i>printed 시험지</span><span><i class="sd sd-file"></i>file 정답 파일</span><span><i class="sd sd-ai"></i>ai 풀이</span>
+          ${qs.length > ERD_MAX ? `<span class="mini">처음 ${ERD_MAX}개 행만 표시</span>` : ""}
+        </div>`;
+    }
+
+    function drawErdLines() {
+      const box = $("#erd"), svg = $("#erd-lines");
+      if (!box || !svg) return;
+      const R = box.getBoundingClientRect();
+      svg.setAttribute("width", R.width); svg.setAttribute("height", R.height);
+      const mid = (el, side) => { const r = el.getBoundingClientRect(); return [side === "r" ? r.right - R.left : r.left - R.left, r.top - R.top + r.height / 2]; };
+      const curve = ([x1, y1], [x2, y2], cls) => {
+        const dx = Math.max(24, (x2 - x1) / 2);
+        return `<path class="${cls}" d="M${x1},${y1} C${x1 + dx},${y1} ${x2 - dx},${y2} ${x2},${y2}"/><circle class="${cls}" cx="${x1}" cy="${y1}" r="2.5"/><circle class="${cls}" cx="${x2}" cy="${y2}" r="2.5"/>`;
       };
-      $("#materials").innerHTML = list.some((x) => x.kind !== "answer_sheet") ? list.filter((x) => x.kind !== "answer_sheet").map((m) => {
-        const [label, icon] = MATERIAL_STATUS[m.status];
-        return `
-          <div class="material ${m.status}">
-            <i data-lucide="${m.content_type === "application/pdf" ? "file-text" : "image"}"></i>
-            <div class="material-name"><b>${esc(m.filename)}</b><small>${m.kind === "textbook" ? "교재 페이지" : "기출·시험지"} · ${fmtSize(m.size_bytes)} · ${relTime(Date.parse(m.created_at))}</small></div>
-            <span class="status-pill ${m.status}"><i data-lucide="${icon}"></i>${label}${m.status === "ready" ? ` · ${m.problem_count}문제` : ""}</span>
-            ${m.status === "ready" && m.problem_count ? (m.answer_key_status === "running"
-              ? '<span class="status-pill extracting"><i data-lucide="loader" class="spin"></i>정답지 만드는 중</span>'
-              : m.answer_key_status === "done"
-                ? `<a class="ak-link" href="#/answer-key/${m.id}"><i data-lucide="file-check-2"></i>정답지 보기</a>`
-                : `<button class="ak-link" data-ak-make="${m.id}"><i data-lucide="file-pen-line"></i>${m.answer_key_status === "failed" ? "정답지 다시 시도" : "정답지 만들기"}</button>`) : ""}
-            <button class="icon-btn" data-del-material="${m.id}" aria-label="삭제" title="삭제"><i data-lucide="trash-2"></i></button>
-            ${m.error ? `<p class="material-error">${esc(m.error)}</p>` : ""}
-            ${m.status === "ready" && m.problem_count && !sheets[m.id] ? `<button class="attach-answer" data-attach-answer="${m.id}"><i data-lucide="file-plus-2"></i>정답 파일 연결<small>정답표·해설지를 올리면 문항 번호로 1:1로 맞춰요</small></button>` : ""}
-          </div>${sheets[m.id] ? sheetRow(sheets[m.id]) : ""}`;
-      }).join("") : '<p class="mini">아직 올린 기출이 없어요. 기출을 올리면 그 시험의 결을 따라 문제를 만들어요</p>';
-      icons();
-      if (list.some((m) => m.status === "uploaded" || m.status === "extracting" || m.answer_key_status === "running")) setTimeout(loadMaterials, 4000);
-      else loadPast();
-    }
-    async function loadPast() {
-      const past = await Store.pastProblems(id).catch(() => []);
-      if (!here() || !past.length) { if (here()) $("#past-list").innerHTML = ""; return; }
-      $("#past-list").innerHTML = `
-        <details class="past-preview"><summary><i data-lucide="chevron-right"></i>AI가 읽은 기출 문제 ${past.length}개</summary>
-          ${past.map((q) => `
-            <div class="past-item">
-              <div class="past-meta">${q.number ? `<b>${q.number}번</b>` : ""}<span>${esc(conceptLabel(q.concept_ids ? { ...q, conceptIds: q.concept_ids } : q))}</span>
-                ${q.has_answer ? '<span class="pill" style="--c:var(--ok)">정답 있음</span>' : '<span class="pill">정답 없음</span>'}
-                ${q.needs_figure ? '<span class="pill" style="--c:var(--warn)">그림 필요</span>' : ""}</div>
-              <p class="stem" data-math>${esc(q.stem)}</p>
-              ${q.choices ? `<ol class="past-choices">${q.choices.map((c) => `<li data-math>${esc(c)}</li>`).join("")}</ol>` : ""}
-            </div>`).join("")}
-        </details>`;
-      icons();
-    }
-    $("#add-material").addEventListener("click", () => uploadSheet(id, loadMaterials));
-    $("#gen-level").addEventListener("click", (e) => {
-      const b = e.target.closest("[data-level]");
-      if (b) $$("#gen-level [data-level]").forEach((x) => x.classList.toggle("on", x === b));
-    });
-    $("#materials").addEventListener("click", async (e) => {
-      const attach = e.target.closest("[data-attach-answer]");
-      if (attach) return uploadAnswerFile(id, attach.dataset.attachAnswer, loadMaterials);
-      const make = e.target.closest("[data-ak-make]");
-      if (make) {
-        make.disabled = true;
-        return makeAnswerKey(make.dataset.akMake).catch((err) => { toast(err.message); loadMaterials(); });
-      }
-      const del = e.target.closest("[data-del-material]");
-      if (del) confirmModal({
-        title: "올린 기출을 삭제할까요?", text: "원본 파일과 AI가 읽어 둔 기출 문제가 삭제돼요. 그것으로 만든 문제와 풀이 기록은 남아요.",
-        run: async () => { try { await Store.deleteMaterial(del.dataset.delMaterial); toast("삭제했어요"); } catch (err) { toast(err.message); } loadMaterials(); },
+      const sheetRow = $("[data-sr]", box);
+      let paths = "";
+      $$("[data-pr]", box).forEach((pr) => {
+        const ar = $(`[data-ar="${CSS.escape(pr.dataset.pr)}"]`, box);
+        if (!ar) return;
+        const cls = ar.classList.contains("missing") ? "miss" : ar.classList.contains("warn") ? "warn" : "ok";
+        paths += curve(mid(pr, "r"), mid(ar, "l"), cls);
+        if (ar.dataset.src === "file" && sheetRow) paths += curve(mid(ar, "r"), mid(sheetRow, "l"), "file");
       });
-    });
-    $("#gen-go").addEventListener("click", async (e) => {
-      const btn = e.currentTarget;
-      const level = $("#gen-level .on").dataset.level;
-      const count = Number($("#gen-count").value);
-      btn.disabled = true;
-      try {
-        const sid = await withAIProgress({
-          title: `기출을 닮은 문제 ${count}개를 만드는 중`,
-          steps: ["기출 스타일 분석", "새 문제 만들기", "다른 AI가 다시 풀어 검산", "화면 준비"], expectMs: 35000,
-          run: () => Store.generateFromPast(id, { level, count }),
-        });
-        toast("새 문제를 만들었어요");
-        go(`/chat/${sid}`);
-      } catch (err) {
-        toast(err.message);
-        if (here()) { btn.disabled = false; $("#gen-status").textContent = err.message; }
+      svg.innerHTML = paths;
+    }
+
+    function drawReport() {
+      const P = data.problems, total = P.length;
+      const host = $("#ws-report");
+      if (!total) {
+        host.innerHTML = `<div class="ws-col-head"><h3><i data-lucide="chart-pie"></i>분석 리포트</h3></div>
+          <div class="ws-empty small"><i data-lucide="chart-no-axes-column"></i><b>아직 분석할 문제가 없어요</b><span>기출을 올리면 출제 유형·난이도·정답 확보율을 정리해 드려요</span></div>
+          <button class="btn-primary ws-exam" disabled><i data-lucide="file-text"></i>시험 준비하기</button>`;
+        return;
       }
-    });
-    loadMaterials();
+      const tally = (f) => P.reduce((a, q) => { const k = f(q); a[k] = (a[k] ?? 0) + 1; return a; }, {});
+      const byConcept = Object.entries(tally((q) => concept(q.concept_ids?.[0])?.name ?? "분류 안 됨")).sort((a, b) => b[1] - a[1]);
+      const topC = byConcept.slice(0, 6), restC = byConcept.slice(6).reduce((a, [, n]) => a + n, 0);
+      const byDiff = [1, 2, 3, 4, 5].map((k) => P.filter((q) => q.difficulty === k).length);
+      const byType = Object.entries(tally((q) => QTYPE_NAME[q.problem_type] ?? "기타")).sort((a, b) => b[1] - a[1]);
+      const okN = P.filter(hasAnswer).length, warnN = P.filter((q) => ["conflict", "uncertain"].includes(q.answer_status)).length;
+      const noneN = total - okN - warnN;
+      const fig = P.filter((q) => q.needs_figure).length;
+      const avg = P.reduce((a, q) => a + q.difficulty, 0) / total;
+      const maxC = Math.max(...topC.map(([, n]) => n)), maxD = Math.max(1, ...byDiff);
+      const pctOf = (n) => `${Math.round((n / total) * 100)}%`;
+      host.innerHTML = `
+        <div class="ws-col-head"><div><h3><i data-lucide="chart-pie"></i>분석 리포트</h3><small>올린 문항 ${total}개 기준</small></div></div>
+        <ul class="ws-insights">
+          <li><i data-lucide="target"></i><span>가장 많이 나온 유형은 <b>${esc(topC[0][0])}</b> (${topC[0][1]}문항, ${pctOf(topC[0][1])})</span></li>
+          <li><i data-lucide="gauge"></i><span>평균 난이도 <b>${avg.toFixed(1)}</b> · ${avg >= 3.5 ? "어려운 문항 비중이 높아요" : avg >= 2.5 ? "중간 난도 중심이에요" : "기본 문항 위주예요"}</span></li>
+          <li><i data-lucide="${noneN || warnN ? "circle-alert" : "badge-check"}"></i><span>정답 확보 <b>${okN}/${total}</b>${noneN + warnN ? ` · ${noneN + warnN}문항은 정답 파일 연결이나 정답지로 채워 주세요` : " · 모든 문항의 정답이 있어요"}</span></li>
+          ${fig ? `<li><i data-lucide="image"></i><span>그림이 필요한 문항 <b>${fig}개</b> — 시험지에서는 원본을 함께 보세요</span></li>` : ""}
+        </ul>
+        <h4 class="ws-h4">출제 유형</h4>
+        <div class="ws-bars">${topC.map(([name, k]) => `
+          <div class="ws-bar"><span title="${esc(name)}">${esc(name)}</span><span class="track"><i style="width:${(k / maxC) * 100}%"></i></span><b>${k}</b></div>`).join("")}
+          ${restC ? `<div class="ws-bar muted"><span>그 밖의 유형</span><span class="track"><i style="width:${(restC / maxC) * 100}%"></i></span><b>${restC}</b></div>` : ""}</div>
+        <h4 class="ws-h4">난이도</h4>
+        <div class="ws-diff">${byDiff.map((k, i) => `<div title="${DIFF_NAME[i]} ${k}문항"><span class="col"><i style="height:${(k / maxD) * 100}%"></i></span><b>${k}</b><small>${DIFF_NAME[i]}</small></div>`).join("")}</div>
+        <h4 class="ws-h4">문항 형식</h4>
+        <div class="ws-types">${byType.map(([name, k]) => `<span>${esc(name)} <b>${k}</b></span>`).join("")}</div>
+        <h4 class="ws-h4">정답 확보</h4>
+        <div class="ws-stack" role="img" aria-label="정답 확인 ${okN}, 확인 필요 ${warnN}, 정답 없음 ${noneN}">
+          <i class="ok" style="flex:${okN}"></i><i class="warn" style="flex:${warnN}"></i><i class="none" style="flex:${noneN}"></i></div>
+        <div class="ws-stack-legend"><span><i class="ok"></i>확인 ${okN}</span><span><i class="warn"></i>확인 필요 ${warnN}</span><span><i class="none"></i>정답 없음 ${noneN}</span></div>
+        <button class="btn-primary ws-exam" data-exam><i data-lucide="file-text"></i>시험 준비하기</button>
+        <p class="mini ws-exam-note">올린 문제로 실제 시험지 형태를 만들어 인쇄하거나 PDF로 저장해요</p>`;
+    }
+
+    function examOptions() {
+      const mats = sheets().filter((x) => problemsOf(x.id).length);
+      const total = data.problems.length;
+      formModal({
+        title: "시험지 만들기", submit: "시험지 보기",
+        body: `
+          <div class="field"><label for="ex-scope">범위</label><select id="ex-scope" class="select">
+            <option value="all">모든 자료 (${total}문항)</option>
+            ${mats.map((x) => `<option value="${x.id}" ${st.sel === x.id ? "selected" : ""}>${esc(x.filename)} (${problemsOf(x.id).length}문항)</option>`).join("")}</select></div>
+          <div class="field"><label for="ex-n">문항 수</label><select id="ex-n" class="select">
+            ${[["all", "전체"], ["10", "10문항"], ["20", "20문항"], ["30", "30문항"]].map(([v, t]) => `<option value="${v}">${t}</option>`).join("")}</select></div>
+          <label class="check"><input type="checkbox" id="ex-shuffle" /> 문항 순서 섞기</label>
+          <label class="check"><input type="checkbox" id="ex-key" checked /> 마지막 장에 정답표 넣기</label>`,
+        onSubmit: (f) => {
+          const q = new URLSearchParams({ m: $("#ex-scope", f).value, n: $("#ex-n", f).value, key: $("#ex-key", f).checked ? "1" : "0" });
+          if ($("#ex-shuffle", f).checked) q.set("seed", String(Math.floor(Math.random() * 1e9)));
+          go(`/exam/${id}?${q}`);
+        },
+      });
+    }
+
+    function fileMenu(anchor, mid) {
+      const m = data.materials.find((x) => x.id === mid), af = answerFileOf(mid);
+      const ready = m.status === "ready" && m.problem_count;
+      openMenu(anchor, [
+        { label: m.filename, header: true },
+        ready && { icon: "link-2", label: af ? "정답 파일 바꾸기" : "정답 파일 연결", run: () => uploadAnswerFile(id, mid, load) },
+        ready && m.answer_key_status === "done" && { icon: "file-check-2", label: "정답지 보기", run: () => go(`/answer-key/${mid}`) },
+        ready && m.answer_key_status !== "running" && { icon: "file-pen-line", label: m.answer_key_status === "done" ? "정답지 다시 만들기" : "정답지 만들기", run: () => makeAnswerKey(mid).catch((err) => { toast(err.message); load(); }) },
+        "-",
+        af && { icon: "unlink", label: "정답 파일 빼기", danger: true, run: () => confirmModal({
+          title: "정답 파일을 뺄까요?", text: "정답 파일에서 가져온 정답과 해설을 거두고, 시험지에 인쇄돼 있던 정답으로 돌아가요.", action: "빼기",
+          run: async () => { try { await Store.deleteMaterial(af.id); toast("정답 파일을 뺐어요"); } catch (err) { toast(err.message); } load(); } }) },
+        { icon: "trash-2", label: "자료 삭제", danger: true, run: () => confirmModal({
+          title: "올린 자료를 삭제할까요?", text: "원본 파일과 AI가 읽어 둔 문항, 연결된 정답 파일이 삭제돼요. 그것으로 만든 문제와 풀이 기록은 남아요.",
+          run: async () => { try { await Store.deleteMaterial(mid); toast("삭제했어요"); } catch (err) { toast(err.message); } load(); } }) },
+      ]);
+    }
+
+    view.onclick = async (e) => {
+      const el = (s) => e.target.closest(s);
+      let x;
+      if (el("[data-ws-upload]")) return uploadSheet(id, load);
+      if ((x = el("[data-ws-menu]"))) { e.stopPropagation(); return fileMenu(x, x.dataset.wsMenu); }
+      if ((x = el("[data-ws-sel]"))) { st.sel = x.dataset.wsSel; st.open.clear(); drawFiles(); drawSheet(); icons(); if (st.view === "erd") requestAnimationFrame(drawErdLines); return; }
+      if ((x = el("[data-ws-view]"))) { st.view = x.dataset.wsView; drawSheet(); icons(); if (st.view === "erd") requestAnimationFrame(drawErdLines); return; }
+      if ((x = el("[data-ws-row]"))) { const k = x.dataset.wsRow; st.open.has(k) ? st.open.delete(k) : st.open.add(k); drawSheet(); icons(); return; }
+      if ((x = el("[data-attach-answer]"))) return uploadAnswerFile(id, x.dataset.attachAnswer, load);
+      if ((x = el("[data-ak-make]"))) { x.disabled = true; return makeAnswerKey(x.dataset.akMake).catch((err) => { toast(err.message); load(); }); }
+      if (el("[data-exam]")) return examOptions();
+      if ((x = el("[data-level]"))) { $$("#gen-level [data-level]").forEach((b) => b.classList.toggle("on", b === x)); return; }
+      if (el("#gen-go")) {
+        const btn = $("#gen-go"), level = $("#gen-level .on").dataset.level, count = Number($("#gen-count").value);
+        btn.disabled = true;
+        try {
+          const sid = await withAIProgress({
+            title: `기출을 닮은 문제 ${count}개를 만드는 중`,
+            steps: ["기출 스타일 분석", "새 문제 만들기", "다른 AI가 다시 풀어 검산", "화면 준비"], expectMs: 35000,
+            run: () => Store.generateFromPast(id, { level, count }),
+          });
+          toast("새 문제를 만들었어요");
+          go(`/chat/${sid}`);
+        } catch (err) { toast(err.message); if (here()) { btn.disabled = false; $("#gen-status").textContent = err.message; } }
+      }
+    };
+    view.onkeydown = (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const t = e.target.closest("[data-ws-sel], [data-ws-row]");
+      if (t && !e.target.closest("button")) { e.preventDefault(); t.click(); }
+    };
+    const ro = new ResizeObserver(() => { if (st.view === "erd" && here()) drawErdLines(); });
+    ro.observe($("#ws-sheet"));
+    load();
+  }
+
+  // ================= 시험지 (올린 문제로 실제 시험지 형태) =================
+  const seeded = (seed) => () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  async function renderExam(projectId, params) {
+    const p = Store.project(projectId);
+    if (!p) { toast("프로젝트를 찾을 수 없어요"); return go("/"); }
+    view.innerHTML = '<p class="mini">시험지를 준비하는 중…</p>';
+    let w;
+    try { w = await Store.workspace(projectId); } catch (e) { view.innerHTML = `<p class="mini">${esc(e.message)}</p>`; return; }
+    if (route().parts[0] !== "exam") return;
+    const scope = params.get("m") ?? "all";
+    let list = w.problems.filter((q) => scope === "all" || q.material_id === scope);
+    if (params.get("seed")) {
+      const rnd = seeded(Number(params.get("seed")));
+      list = list.map((q) => [rnd(), q]).sort((a, b) => a[0] - b[0]).map(([, q]) => q);
+    }
+    const nParam = params.get("n");
+    if (nParam && nParam !== "all") list = list.slice(0, Number(nParam));
+    const withKey = params.get("key") !== "0";
+    const pts = (q) => (q.difficulty >= 4 ? 4 : q.difficulty >= 2 ? 3 : 2);
+    const totalPts = list.reduce((a, q) => a + pts(q), 0);
+    const minutes = Math.max(10, Math.round(list.length * 3));
+    const subject = concept(p.subjectId)?.name ?? "";
+    const year = new Date().getFullYear() + 1;
+    const scopeName = scope === "all" ? "" : w.materials.find((x) => x.id === scope)?.filename ?? "";
+
+    view.innerHTML = `
+      <div class="exam-toolbar print-hide">
+        <a class="ak-back" href="#/project/${projectId}"><i data-lucide="arrow-left"></i>프로젝트로</a>
+        <span class="mini">${list.length}문항 · ${totalPts}점${scopeName ? ` · ${esc(scopeName)}` : ""}</span>
+        <div class="page-actions">
+          <button class="btn-ghost" data-exam-shuffle><i data-lucide="shuffle"></i>다시 섞기</button>
+          <button class="btn-primary" data-exam-print><i data-lucide="printer"></i>인쇄 · PDF 저장</button>
+        </div>
+      </div>
+      ${!list.length ? '<div class="empty"><i data-lucide="file-x"></i><b>시험지에 넣을 문항이 없어요</b></div>' : `
+      <article class="exam-paper">
+        <header class="exam-cover">
+          <div class="exam-kicker">${year}학년도 대비 · Eureka 모의시험</div>
+          <h1>${esc(subject || p.name)} 영역</h1>
+          <div class="exam-name">${esc(p.name)}</div>
+          <table class="exam-id"><tr><th>성명</th><td></td><th>수험번호</th><td></td><th>점수</th><td></td></tr></table>
+          <div class="exam-info"><span>${list.length}문항</span><span>${totalPts}점 만점</span><span>시험 시간 ${minutes}분</span></div>
+          <ul class="exam-rules"><li>문항에 따라 배점이 다르니 각 물음 끝의 배점을 참고하세요.</li><li>답은 문제지 여백이나 별도 답안지에 쓰고, 마지막 장의 정답표로 채점하세요.</li></ul>
+        </header>
+        <div class="exam-body">
+          ${list.map((q, i) => `
+            <section class="exam-q">
+              <div class="exam-qh"><b>${i + 1}.</b><span data-math>${esc(q.stem)}</span><em class="exam-pts">[${pts(q)}점]</em></div>
+              ${q.choices ? `<ol class="exam-choices ${q.choices.every((c) => c.length <= 8) ? "inline" : ""}">${q.choices.map((c, k) => `<li><span class="c">${CIRC[k]}</span><span data-math>${esc(c)}</span></li>`).join("")}</ol>`
+                : '<div class="exam-blank">답 : <span></span></div>'}
+              ${q.needs_figure ? '<p class="exam-note">※ 그림이 필요한 문항이에요. 원본 시험지를 함께 보세요.</p>' : ""}
+            </section>`).join("")}
+        </div>
+        <footer class="exam-foot">— 끝 —</footer>
+      </article>
+      ${withKey ? `
+      <article class="exam-paper exam-key">
+        <h2>정답표</h2>
+        <p class="mini">${esc(p.name)} · ${list.length}문항 · 정답이 확인되지 않은 문항은 '–'</p>
+        <div class="exam-key-grid">${list.map((q, i) => `<div><span>${i + 1}</span><b data-math>${esc(hasAnswer(q) ? ansLabel(q) : "–")}</b></div>`).join("")}</div>
+      </article>` : ""}`}`;
+    icons();
+    view.onclick = (e) => {
+      if (e.target.closest("[data-exam-print]")) return window.print();
+      if (e.target.closest("[data-exam-shuffle]")) {
+        const q = new URLSearchParams(params);
+        q.set("seed", String(Math.floor(Math.random() * 1e9)));
+        location.hash = `#/exam/${projectId}?${q}`;
+      }
+    };
   }
 
   // ================= AI 작업 진행 팝업 =================

@@ -129,6 +129,39 @@ def list_materials(project_id: UUID, user: CurrentUser, db: DB) -> list[Material
     return [MaterialOut.model_validate(x) for x in rows]
 
 
+@router.get("/{project_id}/workspace")
+def project_workspace(project_id: UUID, user: CurrentUser, db: DB) -> dict:
+    """프로젝트 작업 공간 — 올린 자료, 그 문항과 1:1 정답(출처·검증 상태)을 한 번에. 올린 사람에게만."""
+    project = owned(db, m.Project, project_id, user)
+    mats = list(db.scalars(select(m.Material).where(m.Material.project_id == project.id).order_by(m.Material.created_at)))
+    if any([jobs.heal(db, x) for x in mats]):
+        db.commit()
+    sheet_ids = [x.id for x in mats if x.kind != "answer_sheet"]
+    problems = list(db.scalars(select(m.Problem).where(m.Problem.material_id.in_(sheet_ids), m.Problem.owner_user_id == user.id)
+                                .order_by(m.Problem.created_at))) if sheet_ids else []
+    rows = {r.problem_id: r for r in db.scalars(select(m.ProblemAnswer).where(
+        m.ProblemAnswer.problem_id.in_([x.id for x in problems])))} if problems else {}
+    out = []
+    for p in problems:
+        row, meta = rows.get(p.id), p.generation_meta or {}
+        if row and row.sheet_answer:
+            source = "file" if row.sheet_material_id else "printed"
+        elif row and row.ai_answer:
+            source = "ai"
+        else:
+            source = None
+        out.append({
+            "id": p.id, "material_id": str(p.material_id), "number": answer_key.number_of(p), "stem": p.stem,
+            "choices": p.choices, "problem_type": p.problem_type, "difficulty": p.difficulty, "concept_ids": p.concept_ids,
+            "needs_figure": bool(meta.get("needs_figure")),
+            "answer": p.answer or (row.ai_answer if row else "") or "", "answer_source": source,
+            "answer_status": (row.status if row else None) or ("sheet" if p.answer else None),
+            "has_solution": bool(row and (row.ai_solution or row.sheet_explanation)),
+        })
+    out.sort(key=lambda x: (x["material_id"], x["number"] if x["number"] is not None else 10_000))
+    return {"materials": [MaterialOut.model_validate(x).model_dump(mode="json") for x in mats], "problems": out}
+
+
 @router.get("/{project_id}/past-problems")
 def list_past_problems(project_id: UUID, user: CurrentUser, db: DB) -> list[PastProblemOut]:
     project = owned(db, m.Project, project_id, user)
