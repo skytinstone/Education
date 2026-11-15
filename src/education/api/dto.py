@@ -308,6 +308,19 @@ class PastProblemOut(ProblemOut):
     needs_figure: bool
 
 
+class AskTurn(BaseModel):
+    q: str = Field(max_length=500)
+    a: str = Field(max_length=2000)
+
+
+class AskIn(BaseModel):
+    """정답지에서 고른 부분에 대해 묻기 (드래그 → 답변)."""
+    problem_id: str = Field(min_length=1, max_length=64)
+    question: str = Field(min_length=1, max_length=500)
+    quote: str = Field(default="", max_length=2000)
+    history: list[AskTurn] = Field(default_factory=list, max_length=6)
+
+
 class GenerateIn(BaseModel):
     """기출 기반 문제 만들기 — 기출보다 쉽게 / 비슷하게 / 어렵게."""
     level: Literal["easier", "same", "harder"] = "same"

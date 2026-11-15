@@ -9,13 +9,13 @@ from sqlalchemy.orm import Session
 
 from education.api.deps import DB, CurrentUser, owned
 from education.api.dto import (
-    GenerateIn, MaterialOut, PastProblemOut, ProjectIn, ProjectOut, ProjectPatch, ProjectSummary, SessionDetail,
+    AskIn, GenerateIn, MaterialOut, PastProblemOut, ProjectIn, ProjectOut, ProjectPatch, ProjectSummary, SessionDetail,
 )
 from education.api.routers.sessions import session_detail
 from education.db import models as m
 from education.db.session import session_factory
 from education.schemas import ConceptLevel
-from education.services import answer_key, generator, jobs, learning, materials, quota, tutor
+from education.services import answer_key, explain, generator, jobs, learning, materials, quota, tutor
 from education.services.llm import LLMError, get_llm
 
 router = APIRouter(prefix="/projects", tags=["프로젝트"])
@@ -224,6 +224,40 @@ def get_answer_key(material_id: UUID, user: CurrentUser, db: DB) -> dict:
     if jobs.heal(db, material):
         db.commit()
     return answer_key.view(db, material)
+
+
+@material_router.post("/{material_id}/ask")
+def ask_about_answer_key(material_id: UUID, body: AskIn, user: CurrentUser, db: DB) -> dict:
+    """정답지의 문항·해설에서 고른 부분에 대해 묻는다 ('더 자세히', '그래프로' 등). 풀이·그래프·검산 형식으로 답한다."""
+    material = owned(db, m.Material, material_id, user)
+    problem = db.get(m.Problem, body.problem_id)
+    if problem is None or problem.material_id != material.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "문항을 찾을 수 없어요")
+    llm = get_llm()
+    if llm is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 설정되지 않아 답변할 수 없어요")
+    quota.check(db, user)
+    row = db.get(m.ProblemAnswer, problem.id)
+    no = answer_key.number_of(problem)
+    lines = [f"{no}번 문항: {problem.stem}" if no is not None else f"문항: {problem.stem}"]
+    if problem.choices:
+        lines.append("보기: " + " / ".join(f"{k + 1}) {c}" for k, c in enumerate(problem.choices)))
+    answer = problem.answer or (row.ai_answer if row else "")
+    if answer:
+        lines.append(f"정답: {answer}")
+    if row and row.sheet_explanation:
+        lines.append(f"정답 파일 해설: {row.sheet_explanation}")
+    if row and row.ai_solution:
+        lines.append(f"해설: {row.ai_solution}")
+    try:
+        line, payload = explain.ask_about(db, llm, user, question=body.question.strip(), quote=body.quote.strip(),
+                                          context="\n".join(lines), history=[(t.q, t.a) for t in body.history])
+    except LLMError as e:
+        db.commit()  # 실패한 호출 기록은 남긴다
+        log.warning("정답지 질문 답변 실패: %s", e)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, "답변을 만들지 못했어요. 잠시 후 다시 시도해 주세요") from e
+    db.commit()
+    return {"line": line, "explanation": payload}
 
 
 # ---------- 기출 기반 문제 만들기 ----------

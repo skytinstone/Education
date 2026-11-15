@@ -176,3 +176,41 @@ def test_project_workspace_merges_problems_and_answers(client, auth, new_user, m
     assert (rows[3]["answer"], rows[3]["answer_source"]) == ("4", "file")     # 정답 파일에서 1:1
     assert rows[4]["answer_source"] is None and rows[4]["answer"] == ""
     assert client.get(f"/api/projects/{pid}/workspace", headers=new_user()).status_code == 404
+
+
+def test_ask_about_selected_part_uses_problem_context(client, auth, new_user, monkeypatch, background_db, db):
+    """정답지에서 드래그한 부분을 인용해 묻기: 문항·정답·해설과 인용·이전 대화를 AI 에게 넘기고 풀이 형식으로 답한다."""
+    from education.services.explain import Check, Explanation, Step
+    from education.services.llm import LLMResult, Usage
+
+    _, mid = setup_material(client, auth, monkeypatch)
+    llm = solve_llm()
+    monkeypatch.setattr(answer_key, "get_llm", lambda: llm)
+    monkeypatch.setattr(projects_router, "get_llm", lambda: llm)
+    client.post(f"/api/materials/{mid}/answer-key", headers=auth)
+    first = client.get(f"/api/materials/{mid}/answer-key", headers=auth).json()["items"][0]
+
+    prompts = []
+
+    class AskLLM:
+        def structured(self, *, model, effort, instructions, prompt, schema, max_output_tokens=16000):
+            assert schema is Explanation and "인용" in instructions
+            prompts.append(prompt)
+            return LLMResult(data=Explanation(summary="로그를 나눠 써요.", principle="", steps=[Step(title="쪼개기", text="$5$예요.", math="")],
+                                              result="5", graph=None, check=Check(kind="none", expr="", answer="", a="", b="")),
+                             usage=Usage(model="gpt-6.1-sol", input_tokens=10, output_tokens=10))
+
+    monkeypatch.setattr(projects_router, "get_llm", lambda: AskLLM())
+    body = {"problem_id": first["id"], "question": "더 자세히 설명해 줘", "quote": "로그의 성질을 써요",
+            "history": [{"q": "왜 5예요?", "a": "32 는 2의 5제곱이에요."}]}
+    r = client.post(f"/api/materials/{mid}/ask", headers=auth, json=body)
+    assert r.status_code == 200, r.text
+    assert r.json()["explanation"]["summary"] == "로그를 나눠 써요." and r.json()["explanation"]["check"]["status"] == "unchecked"
+    p = prompts[0]
+    assert "1번 문항: 1번 문제" in p and "로그의 성질을 써요" in p and "왜 5예요?" in p and "더 자세히 설명해 줘" in p
+    assert db.scalar(select(m.LLMCall).where(m.LLMCall.purpose == "ask")) is not None
+
+    # 다른 자료의 문항, 남의 자료는 묻지 못한다
+    assert client.post(f"/api/materials/{mid}/ask", headers=auth, json={**body, "problem_id": "nope"}).status_code == 404
+    other = new_user()
+    assert client.post(f"/api/materials/{mid}/ask", headers=other, json=body).status_code == 404

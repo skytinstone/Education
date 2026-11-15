@@ -559,6 +559,9 @@ const Store = (() => {
     // 정답지 — 만들기 시작(백그라운드) / 정답·해설 보기
     startAnswerKey: (id) => api(`/materials/${id}/answer-key`, { method: "POST" }),
     answerKey: (id) => api(`/materials/${id}/answer-key`),
+    // 정답지에서 고른 부분(인용)에 대해 묻기 → { line, explanation }
+    askAnswerKey: (id, body) => (local ? Promise.reject(new Error("서버에 연결했을 때 쓸 수 있어요"))
+      : api(`/materials/${id}/ask`, { method: "POST", body })),
     async generateFromPast(projectId, { level, count }) {
       const s = toSession(await api(`/projects/${projectId}/generate`, { method: "POST", body: { level, count } }));
       state.sessions.push(s);

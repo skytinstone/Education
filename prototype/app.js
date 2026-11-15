@@ -21,6 +21,11 @@
     .replace(/\\int/g, "∫").replace(/\\log/g, "log").replace(/\\times/g, "×").replace(/\\cap/g, "∩").replace(/\\mid/g, "|")
     .replace(/[{}\\]/g, "").replace(/\s+/g, " ").trim());
   const DAY = 864e5;
+  // 정답처럼 $…$ 없이 LaTeX 만 담긴 짧은 글: 수식 기호가 있으면 $…$ 로 감싸 KaTeX 가 그리게 한다 (한글이 섞이면 그대로)
+  const texAns = (a) => {
+    const t = String(a).trim();
+    return !t.includes("$") && !/[가-힣]/.test(t) && /[\\^_{}=]/.test(t) ? `$${t}$` : t;
+  };
 
   // 분야(domain) 색·이름 — 공식 5개 + 사용자 코스 분야 (없는 키는 회색, 이름은 코스의 분야 이름)
   const TEMPLATE_DOMAINS = ["math", "physics", "chemistry", "biology", "earth_science"];
@@ -1346,7 +1351,7 @@
   const QTYPE_NAME = { multiple_choice: "객관식", short_answer: "단답형", text: "주관식", numeric: "수치형", essay: "서술형" };
   const DIFF_NAME = ["기본", "쉬움", "보통", "어려움", "최고난도"];
   const wsState = {}; // 프로젝트별 { sel: 자료 id | "all", view: "list" | "erd", open: Set }
-  const ansLabel = (q, a = q.answer) => (!a ? "–" : q.choices ? (CIRC[Number(a) - 1] ?? a) : a);
+  const ansLabel = (q, a = q.answer) => (!a ? "–" : q.choices ? (CIRC[Number(a) - 1] ?? a) : texAns(a));
   const hasAnswer = (q) => !!q.answer && !["uncertain", "failed"].includes(q.answer_status);
 
   function renderProject(id) {
@@ -1914,7 +1919,7 @@
     failed: ["풀이 실패", "circle-x", "bad", "이 문항은 풀지 못했어요"],
     none: ["아직 없음", "circle-dashed", "", ""],
   };
-  const akLabel = (it, a = it.answer) => (!a ? "–" : it.choices ? `${CIRC[Number(a) - 1] ?? a}` : a);
+  const akLabel = (it, a = it.answer) => (!a ? "–" : it.choices ? `${CIRC[Number(a) - 1] ?? a}` : texAns(a));
   let akTimer = null;
 
   async function renderAnswerKey(materialId) {
@@ -1929,6 +1934,7 @@
     const need = (c.conflict ?? 0) + (c.uncertain ?? 0) + (c.failed ?? 0);
 
     view.innerHTML = `
+      <div class="ak-card">
       <div class="page-head ak-head">
         <div>
           <a class="ak-back" href="#/project/${mat.project_id}"><i data-lucide="arrow-left"></i>프로젝트로</a>
@@ -1941,34 +1947,38 @@
             <button class="btn-primary" data-ak-print><i data-lucide="printer"></i>인쇄 · PDF 저장</button>` : ""}
         </div>
       </div>
-      ${running ? `<div class="ak-progress panel"><i data-lucide="loader" class="spin"></i><div><b>정답지를 만들고 있어요</b><p>문항마다 직접 풀고, 정답표가 없는 문항은 한 번 더 풀어 검산해요. 문항 수에 따라 1~3분 정도 걸려요.</p></div></div>` : ""}
-      ${!has && !running ? `<div class="empty"><i data-lucide="file-pen-line"></i><b>${mat.answer_key_status === "failed" ? esc(mat.answer_key_error ?? "정답지를 만들지 못했어요") : "아직 정답지가 없어요"}</b>
-        <p>문항마다 정답과 단계별 해설을 만들고, 정답표가 없는 문항은 한 번 더 풀어 검산해요.</p>
-        <button class="btn-primary" data-ak-start><i data-lucide="sparkles"></i>정답지 만들기</button></div>` : ""}
       ${has ? `
         <div class="ak-summary">
           <span class="ak-chip ok"><i data-lucide="badge-check"></i>정답 확인 ${(c.confirmed ?? 0) + (c.verified ?? 0) + (c.sheet ?? 0)}</span>
           ${need ? `<span class="ak-chip warn"><i data-lucide="triangle-alert"></i>확인 필요 ${need}</span>` : '<span class="ak-chip">모든 문항이 확인됐어요</span>'}
           <span class="mini">정답표가 있던 문항은 AI 풀이와 맞춰 봤고, 없던 문항은 두 번 풀어 비교했어요</span>
         </div>
+      ` : ""}
+      </div>
+      ${running ? `<div class="ak-progress panel"><i data-lucide="loader" class="spin"></i><div><b>정답지를 만들고 있어요</b><p>문항마다 직접 풀고, 정답표가 없는 문항은 한 번 더 풀어 검산해요. 문항 수에 따라 1~3분 정도 걸려요.</p></div></div>` : ""}
+      ${!has && !running ? `<div class="empty"><i data-lucide="file-pen-line"></i><b>${mat.answer_key_status === "failed" ? esc(mat.answer_key_error ?? "정답지를 만들지 못했어요") : "아직 정답지가 없어요"}</b>
+        <p>문항마다 정답과 단계별 해설을 만들고, 정답표가 없는 문항은 한 번 더 풀어 검산해요.</p>
+        <button class="btn-primary" data-ak-start><i data-lucide="sparkles"></i>정답지 만들기</button></div>` : ""}
+      ${has ? `
         <section class="panel ak-quick">
           <h3><i data-lucide="table-2"></i>빠른 정답</h3>
           <div class="ak-grid">${key.items.map((it, n) => `
             <a href="#ak-${it.id}" class="ak-cell ${AK_STATUS[it.status][2]}" data-ak-jump="${it.id}" title="${esc(AK_STATUS[it.status][0])}">
-              <span>${it.number ?? n + 1}</span><b>${esc(akLabel(it))}</b></a>`).join("")}</div>
+              <span>${it.number ?? n + 1}</span><b data-math>${esc(akLabel(it))}</b></a>`).join("")}</div>
         </section>
         <div class="ak-list">${key.items.map((it, n) => {
           const [label, icon, tone, note] = AK_STATUS[it.status];
           return `
-          <article class="panel ak-item" id="ak-${it.id}">
+          <article class="panel ak-item" id="ak-${it.id}" data-problem-id="${esc(it.id)}" data-number="${it.number ?? n + 1}">
             <div class="ak-item-head"><b>${it.number ?? n + 1}번</b>
               <span class="ak-badge ${tone}"><i data-lucide="${icon}"></i>${label}</span>
               ${it.from_answer_file ? '<span class="ak-badge"><i data-lucide="link-2"></i>정답 파일</span>' : ""}
-              ${it.needs_figure ? '<span class="ak-badge"><i data-lucide="image"></i>그림 문항</span>' : ""}</div>
+              ${it.needs_figure ? '<span class="ak-badge"><i data-lucide="image"></i>그림 문항</span>' : ""}
+              <button type="button" class="ak-ask" data-ak-ask="${esc(it.id)}" data-number="${it.number ?? n + 1}" title="이 문항에 대해 AI 에게 묻기 (해설을 드래그해도 돼요)"><i data-lucide="message-square-quote"></i>질문하기</button></div>
             <p class="stem" data-math>${esc(it.stem)}</p>
             ${it.choices ? `<ol class="ak-choices">${it.choices.map((ch, k) => `<li class="${String(k + 1) === it.answer ? "on" : ""}"><span>${CIRC[k]}</span><span data-math>${esc(ch)}</span></li>`).join("")}</ol>` : ""}
             <div class="ak-answer"><span>정답</span><b data-math>${esc(akLabel(it))}</b>
-              ${it.status === "conflict" ? `<small>시험지 정답 ${esc(akLabel(it, it.sheet_answer))} · AI 풀이 ${esc(akLabel(it, it.ai_answer))}</small>` : ""}
+              ${it.status === "conflict" ? `<small data-math>시험지 정답 ${esc(akLabel(it, it.sheet_answer))} · AI 풀이 ${esc(akLabel(it, it.ai_answer))}</small>` : ""}
               ${note && tone !== "ok" ? `<small>${esc(note)}</small>` : ""}</div>
             ${it.sheet_explanation ? `<div class="ak-solution ak-sheet-sol"><span>정답 파일 해설</span>${it.sheet_explanation.split(/\n+/).filter(Boolean).map((l) => `<p data-math>${esc(l)}</p>`).join("")}</div>` : ""}
             ${it.solution ? `<div class="ak-solution"><span>${it.sheet_explanation ? "AI 해설" : "해설"}</span>${it.solution.split(/\n+/).filter(Boolean).map((l) => `<p data-math>${esc(l)}</p>`).join("")}</div>` : ""}
@@ -1980,11 +1990,184 @@
       const jump = e.target.closest("[data-ak-jump]");
       if (jump) { e.preventDefault(); $(`#ak-${CSS.escape(jump.dataset.akJump)}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
       if (e.target.closest("[data-ak-print]")) return window.print();
+      const askBtn = e.target.closest("[data-ak-ask]");
+      if (askBtn) return openAsk({ problemId: askBtn.dataset.akAsk, number: askBtn.dataset.number });
       if (e.target.closest("[data-ak-start], [data-ak-rebuild]")) {
         makeAnswerKey(materialId).catch((err) => { toast(err.message); renderAnswerKey(materialId); });
       }
     };
     if (running) akTimer = setTimeout(() => renderAnswerKey(materialId), 4000);
+  }
+
+  // ================= 답변: 정답지에서 드래그한 부분을 인용해 AI 에게 이어 묻기 =================
+  // 글을 고르면 '답변' 버튼이 뜨고, 누르면 오른쪽 대화 창에 인용으로 붙는다. 답은 풀이·그래프·검산 형식(explanationHTML).
+  const ASK_PRESETS = [["더 자세히 설명해 줘", "list-plus"], ["그래프로 그려 줘", "chart-spline"],
+    ["왜 이렇게 되는지 알려 줘", "circle-help"], ["비슷한 예제로 보여 줘", "copy-plus"]];
+  const akAsk = { materialId: null, problemId: null, number: null, quote: "", turns: [], busy: false, seq: 0 };
+  let askPop = null;
+
+  // 고른 글 → 문항 + 인용 글. KaTeX 수식은 화면 글자 대신 원래 LaTeX($…$)로 바꿔 AI 가 식을 정확히 읽게 한다
+  function selectedQuote() {
+    const sel = getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
+    const range = sel.getRangeAt(0).cloneRange();
+    const el = (n) => (n.nodeType === 1 ? n : n.parentElement);
+    const item = el(range.startContainer)?.closest(".ak-item");
+    if (!item || item !== el(range.endContainer)?.closest(".ak-item")) return null;
+    const k0 = el(range.startContainer).closest(".katex"), k1 = el(range.endContainer).closest(".katex");
+    if (k0) range.setStartBefore(k0);
+    if (k1) range.setEndAfter(k1);
+    const frag = range.cloneContents();
+    frag.querySelectorAll(".katex").forEach((k) => {
+      const tex = k.querySelector('annotation[encoding="application/x-tex"]')?.textContent;
+      k.replaceWith(tex ? ` $${tex.trim()}$ ` : k.textContent);
+    });
+    const text = frag.textContent.replace(/\s+/g, " ").trim();
+    if (text.length < 2) return null;
+    return { problemId: item.dataset.problemId, number: item.dataset.number, text: text.slice(0, 1500),
+      rect: sel.getRangeAt(0).getBoundingClientRect() };
+  }
+
+  function hideAskPop() { askPop?.remove(); askPop = null; }
+  function showAskPop() {
+    hideAskPop();
+    if (route().parts[0] !== "answer-key") return;
+    const q = selectedQuote();
+    if (!q) return;
+    askPop = document.createElement("button");
+    askPop.type = "button";
+    askPop.className = "ask-pop";
+    askPop.innerHTML = '<i data-lucide="message-square-quote"></i>답변';
+    document.body.append(askPop);
+    lucide.createIcons();
+    const w = askPop.offsetWidth, h = askPop.offsetHeight;
+    const left = Math.min(innerWidth - w - 8, Math.max(8, q.rect.left + q.rect.width / 2 - w / 2));
+    const top = q.rect.top - h - 10 > 8 ? q.rect.top - h - 10 : q.rect.bottom + 10;
+    askPop.style.left = `${left}px`;
+    askPop.style.top = `${top}px`;
+    askPop.onmousedown = (e) => e.preventDefault(); // 누르는 순간 선택이 풀리지 않게
+    askPop.onclick = () => {
+      hideAskPop();
+      getSelection().removeAllRanges();
+      openAsk({ problemId: q.problemId, number: q.number, quote: q.text });
+    };
+  }
+  const popLater = (e, ms = 0) => { if (!e.target.closest?.(".ask-pop, .ask-panel")) setTimeout(showAskPop, ms); };
+  document.addEventListener("mouseup", (e) => popLater(e));
+  document.addEventListener("touchend", (e) => popLater(e, 350));
+  document.addEventListener("keyup", (e) => { if (e.shiftKey || e.key === "Shift") popLater(e); });
+  document.addEventListener("selectionchange", () => { if (askPop && getSelection().isCollapsed) hideAskPop(); });
+  document.addEventListener("scroll", hideAskPop, true);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $(".ask-panel")) closeAsk(); });
+  window.addEventListener("hashchange", () => {
+    hideAskPop();
+    const [page, id] = route().parts;
+    if (page !== "answer-key" || id !== akAsk.materialId) closeAsk(); // 다른 화면·다른 정답지로 가면 닫는다
+  });
+
+  function openAsk({ problemId, number, quote = "" }) {
+    const materialId = route().parts[1];
+    if (akAsk.materialId !== materialId || akAsk.problemId !== problemId) {
+      Object.assign(akAsk, { materialId, problemId, number, turns: [] }); // 다른 문항이면 새 대화
+    }
+    akAsk.quote = quote;
+    let panel = $(".ask-panel");
+    if (!panel) {
+      panel = document.createElement("aside");
+      panel.className = "ask-panel";
+      panel.setAttribute("role", "dialog");
+      panel.setAttribute("aria-label", "답변");
+      document.body.append(panel);
+      document.body.classList.add("ask-open");
+      panel.addEventListener("click", onAskClick);
+      panel.addEventListener("submit", (e) => { e.preventDefault(); sendAsk($("#ask-input").value); });
+      panel.addEventListener("input", (e) => { if (e.target.id === "ask-input") autoGrow(e.target); });
+      panel.addEventListener("keydown", (e) => {
+        if (e.target.id === "ask-input" && e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); sendAsk(e.target.value); }
+      });
+    }
+    renderAsk();
+    $("#ask-input")?.focus();
+  }
+
+  function closeAsk() {
+    $(".ask-panel")?.remove();
+    document.body.classList.remove("ask-open");
+  }
+
+  const autoGrow = (t) => { t.style.height = "auto"; t.style.height = `${Math.min(160, t.scrollHeight)}px`; };
+
+  function renderAsk({ keepDraft = true } = {}) {
+    const panel = $(".ask-panel");
+    if (!panel) return;
+    const draft = keepDraft ? ($("#ask-input")?.value ?? "") : "";
+    const turns = akAsk.turns.map((t) => `
+      <div class="ask-turn">
+        <div class="ask-user">${t.quote ? `<blockquote data-math>${esc(t.quote)}</blockquote>` : ""}<p>${esc(t.q)}</p></div>
+        <div class="ask-bot">${t.e ? explanationHTML(t.e, t.key)
+          : t.error ? `<p class="ask-err"><i data-lucide="circle-alert"></i>${esc(t.error)} <button type="button" data-ask-retry="${t.key}">다시 묻기</button></p>`
+          : '<div class="ask-typing"><i></i><i></i><i></i><span>풀이를 정리하고 있어요</span></div>'}</div>
+      </div>`).join("");
+    panel.innerHTML = `
+      <header class="ask-head">
+        <div><b><i data-lucide="message-square-quote"></i>답변</b><small>${akAsk.number ? `${esc(akAsk.number)}번 문항` : "이 문항"}에 대해 물어보세요</small></div>
+        <button type="button" class="icon-btn" data-ask-close aria-label="닫기"><i data-lucide="x"></i></button>
+      </header>
+      <div class="ask-thread">${turns || `<div class="ask-empty"><i data-lucide="text-select"></i>
+        <p>정답지에서 궁금한 수식이나 풀이를 <b>드래그</b>하면 '답변' 버튼이 떠요.<br>그 부분을 인용해 더 자세한 설명이나 그래프를 부탁할 수 있어요.</p></div>`}</div>
+      <form class="ask-form">
+        ${akAsk.quote ? `<div class="ask-quote"><i data-lucide="corner-down-right"></i><span data-math>${esc(akAsk.quote)}</span>
+          <button type="button" data-ask-unquote aria-label="인용 빼기"><i data-lucide="x"></i></button></div>` : ""}
+        <div class="ask-presets">${ASK_PRESETS.map(([q, ic]) => `<button type="button" data-ask-preset="${esc(q)}" ${akAsk.busy ? "disabled" : ""}><i data-lucide="${ic}"></i>${esc(q)}</button>`).join("")}</div>
+        <div class="ask-box">
+          <textarea id="ask-input" rows="1" maxlength="500" placeholder="${akAsk.quote ? "인용한 부분에 대해 물어보세요" : "이 문항에 대해 물어보세요"}">${esc(draft)}</textarea>
+          <button type="submit" class="ask-send" aria-label="보내기" ${akAsk.busy ? "disabled" : ""}><i data-lucide="arrow-up"></i></button>
+        </div>
+      </form>`;
+    icons();
+    const input = $("#ask-input");
+    if (input) autoGrow(input);
+    const th = $(".ask-thread", panel);
+    th.scrollTop = th.scrollHeight;
+  }
+
+  function onAskClick(e) {
+    if (e.target.closest("[data-ask-close]")) return closeAsk();
+    if (e.target.closest("[data-ask-unquote]")) { akAsk.quote = ""; return renderAsk(); }
+    const preset = e.target.closest("[data-ask-preset]");
+    if (preset) return sendAsk(preset.dataset.askPreset);
+    const retry = e.target.closest("[data-ask-retry]");
+    if (retry) {
+      const i = akAsk.turns.findIndex((t) => t.key === retry.dataset.askRetry);
+      if (i < 0 || akAsk.busy) return;
+      const [t] = akAsk.turns.splice(i, 1);
+      akAsk.quote = t.quote;
+      sendAsk(t.q);
+    }
+  }
+
+  // 지난 답은 요약·단계 글만 짧게 넘긴다 (이어 묻기의 맥락)
+  const askSummary = (e) => [e.summary, ...(e.steps ?? []).map((s) => `${s.title}: ${s.text}`), e.result && `답: ${e.result}`]
+    .filter(Boolean).join(" ").slice(0, 1900);
+
+  async function sendAsk(text) {
+    const q = String(text ?? "").trim();
+    if (!q || akAsk.busy) return;
+    const history = akAsk.turns.filter((t) => t.e).slice(-6).map((t) => ({ q: t.q.slice(0, 500), a: askSummary(t.e) }));
+    const turn = { q: q.slice(0, 500), quote: akAsk.quote, key: `ask-${++akAsk.seq}` };
+    const ctx = { materialId: akAsk.materialId, problemId: akAsk.problemId };
+    akAsk.turns.push(turn);
+    akAsk.quote = "";
+    akAsk.busy = true;
+    renderAsk({ keepDraft: false });
+    try {
+      const res = await Store.askAnswerKey(ctx.materialId, { problem_id: ctx.problemId, question: turn.q, quote: turn.quote, history });
+      turn.e = res.explanation;
+    } catch (err) {
+      turn.error = err.message || "답변을 만들지 못했어요";
+    }
+    akAsk.busy = false;
+    if (akAsk.materialId === ctx.materialId && akAsk.problemId === ctx.problemId) renderAsk();
   }
 
   document.addEventListener("click", (e) => { if (e.target.closest("[data-print-notes]")) window.print(); });
