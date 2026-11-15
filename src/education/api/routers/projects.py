@@ -86,16 +86,31 @@ def delete_project(project_id: UUID, user: CurrentUser, db: DB) -> Response:
 @router.post("/{project_id}/materials", status_code=status.HTTP_201_CREATED)
 def upload_material(project_id: UUID, user: CurrentUser, db: DB, background: BackgroundTasks,
                           file: Annotated[UploadFile, File()], rights_confirmed: Annotated[bool, Form()] = False,
-                          kind: Annotated[Literal["past_exam", "textbook"], Form()] = "past_exam",
+                          kind: Annotated[Literal["past_exam", "textbook", "answer_sheet"], Form()] = "past_exam",
+                          answer_for: Annotated[UUID | None, Form()] = None,
                           open_session=Depends(session_factory)) -> MaterialOut:
-    """기출·시험지 또는 교재 페이지(PDF·사진)를 올리면 백그라운드에서 AI 가 문제를 뽑는다. 상태는 GET 으로 확인."""
+    """기출·시험지 또는 교재 페이지(PDF·사진)를 올리면 백그라운드에서 AI 가 문제를 뽑는다. 상태는 GET 으로 확인.
+    정답 파일(kind=answer_sheet)은 answer_for 로 어느 문제지의 정답인지 정한다 — 문제지 하나에 정답 파일 하나(새로 올리면 교체)."""
     project = owned(db, m.Project, project_id, user)
     if not rights_confirmed:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "학습용으로 쓸 수 있는 자료인지 확인해 주세요")
+    target = None
+    if kind == "answer_sheet":
+        target = owned(db, m.Material, answer_for, user) if answer_for else None
+        if target is None or target.project_id != project.id or target.kind == "answer_sheet":
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "정답 파일을 붙일 문제지를 골라 주세요")
+        if target.status != "ready" or not target.problem_count:
+            raise HTTPException(status.HTTP_409_CONFLICT, "문제지의 문항을 다 읽은 뒤에 정답 파일을 올려 주세요")
     data = file.file.read()
     if error := materials.validate_upload(file.content_type or "", data):
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, error)
+    if target is not None:
+        old = db.scalar(select(m.Material).where(m.Material.answer_for_id == target.id))
+        if old is not None:  # 1:1 — 예전 정답 파일은 거두고 지운다
+            _remove_material(db, old)
+            db.flush()
     material = materials.save_upload(user, project, file.filename or "upload", file.content_type, data, rights_confirmed, kind)
+    material.answer_for_id = target.id if target else None
     db.add(material)
     db.commit()
     background.add_task(materials.process, material.id, open_session)
@@ -123,13 +138,23 @@ def list_past_problems(project_id: UUID, user: CurrentUser, db: DB) -> list[Past
 material_router = APIRouter(prefix="/materials", tags=["프로젝트"])
 
 
-@material_router.delete("/{material_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_material(material_id: UUID, user: CurrentUser, db: DB) -> Response:
-    """올린 파일과 거기서 뽑은 기출 문제를 지운다 (그것으로 새로 만든 문제와 풀이 기록은 남는다)."""
-    material = owned(db, m.Material, material_id, user)
-    db.execute(delete(m.Problem).where(m.Problem.material_id == material.id, m.Problem.source == "past_exam"))
+def _remove_material(db: Session, material: m.Material) -> None:
+    if material.kind == "answer_sheet":
+        answer_key.unmap_answer_sheet(db, material)  # 그 파일에서 온 정답만 거둔다
+    else:
+        sheet = db.scalar(select(m.Material).where(m.Material.answer_for_id == material.id))
+        if sheet is not None:
+            (materials.UPLOAD_DIR / sheet.storage_path).unlink(missing_ok=True)
+        db.execute(delete(m.Problem).where(m.Problem.material_id == material.id, m.Problem.source == "past_exam"))
     (materials.UPLOAD_DIR / material.storage_path).unlink(missing_ok=True)
     db.delete(material)
+
+
+@material_router.delete("/{material_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_material(material_id: UUID, user: CurrentUser, db: DB) -> Response:
+    """올린 파일과 거기서 뽑은 기출 문제를 지운다 (그것으로 새로 만든 문제와 풀이 기록은 남는다).
+    문제지를 지우면 붙어 있던 정답 파일도 함께, 정답 파일만 지우면 그 정답만 거둔다."""
+    _remove_material(db, owned(db, m.Material, material_id, user))
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

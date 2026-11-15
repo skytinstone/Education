@@ -561,6 +561,7 @@
   });
 
   prompt.addEventListener("input", () => (send.disabled = !prompt.value.trim()));
+  bindVoice($("#composer"));
   $("#composer").addEventListener("submit", (e) => {
     e.preventDefault();
     const text = prompt.value.trim();
@@ -583,17 +584,121 @@
     prompt.focus();
   });
 
+  // ================= 음성 입력: 브라우저 음성 인식 + 마이크 음량 미니 게이지 =================
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let voice = null; // 지금 듣고 있는 입력창 { btn, stop }
+  const MIC_ICON = '<i data-lucide="mic"></i>', STOP_ICON = '<i data-lucide="square"></i>';
+  const voiceMeterHTML = '<span class="voice-meter" hidden aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>';
+
+  function bindVoice(form) {
+    const btn = $("[data-mic]", form);
+    if (!btn) return;
+    btn.addEventListener("click", () => (voice?.btn === btn ? voice.stop() : startVoice(form, btn)));
+  }
+
+  async function startVoice(form, btn) {
+    if (!SpeechRec) return toast("이 브라우저는 음성 입력을 지원하지 않아요. Chrome·Edge·Safari에서 써 주세요");
+    voice?.stop();
+    const input = $("input", form), meter = $(".voice-meter", form), bars = $$("i", meter);
+    const placeholder = input.placeholder;
+    const base = input.value.trim() ? `${input.value.trimEnd()} ` : "";
+    const rec = new SpeechRec();
+    rec.lang = "ko-KR";
+    rec.interimResults = true;   // 말하는 동안 글자를 바로 보여 준다
+    rec.continuous = false;      // 말을 멈추면 끝난다
+    let finalText = "", stream = null, ctx = null, raf = 0, ended = false;
+    const hint = document.createElement("span");
+    hint.className = "voice-hint";
+    hint.textContent = "듣고 있어요 · 다시 누르면 멈춰요";
+    form.append(hint);
+
+    const cleanup = () => {
+      if (ended) return;
+      ended = true;
+      cancelAnimationFrame(raf);
+      stream?.getTracks().forEach((t) => t.stop());
+      ctx?.close().catch(() => {});
+      hint.remove();
+      meter.hidden = true;
+      btn.classList.remove("listening");
+      btn.innerHTML = MIC_ICON;
+      btn.setAttribute("aria-label", "음성 입력");
+      input.placeholder = placeholder;
+      lucide.createIcons();
+      if (voice?.btn === btn) voice = null;
+    };
+    voice = { btn, stop: () => { try { rec.stop(); } catch { /* 이미 끝남 */ } cleanup(); } };
+
+    btn.classList.add("listening");
+    btn.innerHTML = STOP_ICON;
+    btn.setAttribute("aria-label", "음성 입력 멈추기");
+    input.placeholder = "말씀하세요…";
+    meter.hidden = false;
+    lucide.createIcons();
+
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
+      }
+      input.value = base + finalText + interim;
+      input.dispatchEvent(new Event("input", { bubbles: true })); // 보내기 버튼 켜기
+    };
+    rec.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") toast("마이크 권한을 허용해 주세요 (주소창의 자물쇠 → 마이크)");
+      else if (e.error === "no-speech") toast("목소리가 들리지 않았어요. 다시 눌러 말해 주세요");
+      else if (e.error === "audio-capture") toast("마이크를 찾지 못했어요");
+      else if (e.error !== "aborted") toast("음성을 알아듣지 못했어요. 다시 해 주세요");
+    };
+    rec.onend = () => { cleanup(); input.focus(); };
+    try { rec.start(); } catch { cleanup(); return toast("음성 입력을 시작하지 못했어요"); }
+
+    // 미니 음성 게이지: 말소리 대역(약 200Hz~3.5kHz)을 다섯 칸으로 나눠 높이로
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+      if (ended) return stream.getTracks().forEach((t) => t.stop());
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const an = ctx.createAnalyser();
+      an.fftSize = 512;
+      an.smoothingTimeConstant = 0.6;
+      ctx.createMediaStreamSource(stream).connect(an);
+      const freq = new Uint8Array(an.frequencyBinCount);
+      const hz = ctx.sampleRate / an.fftSize;
+      const lo = Math.max(1, Math.round(200 / hz)), hi = Math.round(3500 / hz), span = (hi - lo) / bars.length;
+      const tick = () => {
+        an.getByteFrequencyData(freq);
+        bars.forEach((b, i) => {
+          let sum = 0;
+          for (let k = Math.floor(lo + i * span); k < lo + (i + 1) * span; k++) sum += freq[k];
+          const v = Math.min(1, sum / span / 170);
+          b.style.height = `${4 + v * 16}px`;
+        });
+        raf = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch { /* 게이지 없이도 음성 입력은 된다 */ }
+  }
+  window.addEventListener("hashchange", () => voice?.stop());
+
   // ================= 대화 =================
   // 질문을 보내고 답을 기다린다. 새 대화면 바로 그 대화로 이동하고, 서버가 진짜 id 를 주면 주소를 바꾼다
+  // 계산·설명 질문인지 (서버 explain.is_explain_request 와 같은 기준의 간단판 — 팝업 문구에만 쓴다)
+  const explainLike = (t) => !/\d+\s*(문제|문항|개)|문제\s*(를|좀)?\s*(내|만들|줘)|모의고사|출제/.test(t)
+    && /계산|구해|풀어|적분|미분|값은|얼마|증명|왜|설명|어떻게|원리|그래프|극한|∫|√/.test(t);
   function ask({ sessionId = null, projectId = null, text }) {
     const { id, done } = Store.sendMessage({ sessionId, projectId, text });
-    if (!sessionId) go(`/chat/${id}`);
-    const refresh = (realId = id) => {
-      if (navKey() !== `chat:${id}`) return;
-      if (realId !== id) location.replace(`#/chat/${realId}`);
-      else renderChat(id);
-    };
-    done.then(refresh, () => refresh());
+    const ex = explainLike(text);
+    withAIProgress({
+      title: ex ? "풀이를 준비하는 중" : "문제를 준비하는 중",
+      steps: ex ? ["질문 이해하기", "단계별로 풀기", "검산하기", "그래프·화면 준비"]
+        : ["요청 이해하기", "문제 만들기", "다른 AI가 다시 풀어 검산", "화면 준비"],
+      expectMs: Store.mode === "api" ? (ex ? 25000 : 45000) : 900,
+      run: () => done.catch(() => id), // 실패해도 대화에 '답변을 만들지 못했어요'가 남으니 그 대화를 연다
+    }).then((realId = id) => {
+      if (location.hash === `#/chat/${realId}`) renderChat(realId);
+      else go(`/chat/${realId}`);
+    });
     return id;
   }
 
@@ -855,7 +960,10 @@
     };
     setBtn();
     try {
-      w.review = await Store.reviewSolution(pid, w.tab === "type" ? { text } : { image });
+      w.review = await withAIProgress({
+        title: "풀이를 확인하는 중", steps: ["풀이 읽기", "단계별로 확인", "처음 틀린 단계 찾기"], expectMs: 20000,
+        run: () => Store.reviewSolution(pid, w.tab === "type" ? { text } : { image }),
+      });
       const box = $(`[data-work-panel="${pid}"] [data-work-review]`);
       if (box) { box.innerHTML = reviewHTML(w.review, w.tab, pid); icons(); }
     } catch (err) { toast(err.message); }
@@ -895,7 +1003,11 @@
     if (box.classList.contains("busy")) return true;
     box.classList.add("busy");
     try {
-      const r = await Store.answer({ problemId: box.dataset.problem, answer, ...ctx });
+      const essay = ptype(Store.problem(box.dataset.problem)) === "essay" && Store.mode === "api";
+      const r = essay
+        ? await withAIProgress({ title: "서술형 답안을 채점하는 중", steps: ["답안 읽기", "채점 기준과 비교", "점수·피드백 정리"], expectMs: 20000,
+            run: () => Store.answer({ problemId: box.dataset.problem, answer, ...ctx }) })
+        : await Store.answer({ problemId: box.dataset.problem, answer, ...ctx });
       redraw(box, { answer, correct: r.correct, score: r.score, feedback: r.feedback });
       if (r.resolved) toast("오답을 극복했어요");
     } catch (err) {
@@ -986,6 +1098,8 @@
   }
 
   function renderChat(id, { keepScroll = false } = {}) {
+    if (voice && !document.body.contains(voice.btn)) voice.stop();
+    if (voice?.btn.closest("#chat-form")) voice.stop(); // 입력창을 새로 그리기 전에 듣기를 멈춘다
     const s = Store.session(id);
     if (!s) { toast("대화를 찾을 수 없어요"); return go("/"); }
     const scroll = contentEl.scrollTop;
@@ -1010,6 +1124,8 @@
         </div>
         <form class="composer glass chat-composer" id="chat-form">
           <input id="chat-input" placeholder="이어서 물어보세요" autocomplete="off" />
+          ${voiceMeterHTML}
+          <button type="button" class="icon-btn mic-btn" data-mic title="음성 입력" aria-label="음성 입력"><i data-lucide="mic"></i></button>
           <button type="submit" class="send" disabled aria-label="보내기"><i data-lucide="arrow-up"></i></button>
         </form>
       </div>`;
@@ -1026,6 +1142,7 @@
       $("#chat-input").focus();
     });
     $("#chat-more").addEventListener("click", (e) => chatMenu(e.currentTarget, id));
+    bindVoice($("#chat-form"));
 
     const ctx = { projectId: s.projectId, sessionId: s.id };
     const redraw = () => renderChat(id, { keepScroll: true });
@@ -1263,7 +1380,22 @@
       let list;
       try { list = await Store.listMaterials(id); } catch (e) { $("#materials").innerHTML = `<p class="mini">${esc(e.message)}</p>`; return; }
       if (!here()) return;
-      $("#materials").innerHTML = list.length ? list.map((m) => {
+      const sheets = Object.fromEntries(list.filter((x) => x.kind === "answer_sheet").map((x) => [x.answer_for_id, x]));
+      const sheetRow = (s) => {
+        const [label, icon] = MATERIAL_STATUS[s.status];
+        const mp = s.answer_map;
+        return `
+          <div class="material answer-file ${s.status}">
+            <i data-lucide="corner-down-right"></i>
+            <div class="material-name"><b>정답 파일 · ${esc(s.filename)}</b>
+              <small>${s.status === "ready" && mp ? `${mp.total}문항 중 ${mp.matched}문항 정답 연결${mp.missing?.length ? ` · 정답 없는 번호 ${mp.missing.slice(0, 12).join(", ")}${mp.missing.length > 12 ? " …" : ""}` : " · 모든 문항 연결"}${mp.extra?.length ? ` · 문제지에 없는 번호 ${mp.extra.slice(0, 6).join(", ")}` : ""}` : s.status === "failed" ? "" : "AI가 정답 파일을 읽고 문항 번호와 맞추고 있어요"}</small></div>
+            <span class="status-pill ${s.status}"><i data-lucide="${icon}"></i>${s.status === "ready" && mp ? `${mp.matched}/${mp.total}` : label}</span>
+            <span></span>
+            <button class="icon-btn" data-del-material="${s.id}" aria-label="정답 파일 삭제" title="정답 파일 삭제"><i data-lucide="trash-2"></i></button>
+            ${s.error ? `<p class="material-error">${esc(s.error)}</p>` : ""}
+          </div>`;
+      };
+      $("#materials").innerHTML = list.some((x) => x.kind !== "answer_sheet") ? list.filter((x) => x.kind !== "answer_sheet").map((m) => {
         const [label, icon] = MATERIAL_STATUS[m.status];
         return `
           <div class="material ${m.status}">
@@ -1277,7 +1409,8 @@
                 : `<button class="ak-link" data-ak-make="${m.id}"><i data-lucide="file-pen-line"></i>${m.answer_key_status === "failed" ? "정답지 다시 시도" : "정답지 만들기"}</button>`) : ""}
             <button class="icon-btn" data-del-material="${m.id}" aria-label="삭제" title="삭제"><i data-lucide="trash-2"></i></button>
             ${m.error ? `<p class="material-error">${esc(m.error)}</p>` : ""}
-          </div>`;
+            ${m.status === "ready" && m.problem_count && !sheets[m.id] ? `<button class="attach-answer" data-attach-answer="${m.id}"><i data-lucide="file-plus-2"></i>정답 파일 연결<small>정답표·해설지를 올리면 문항 번호로 1:1로 맞춰요</small></button>` : ""}
+          </div>${sheets[m.id] ? sheetRow(sheets[m.id]) : ""}`;
       }).join("") : '<p class="mini">아직 올린 기출이 없어요. 기출을 올리면 그 시험의 결을 따라 문제를 만들어요</p>';
       icons();
       if (list.some((m) => m.status === "uploaded" || m.status === "extracting" || m.answer_key_status === "running")) setTimeout(loadMaterials, 4000);
@@ -1305,11 +1438,12 @@
       if (b) $$("#gen-level [data-level]").forEach((x) => x.classList.toggle("on", x === b));
     });
     $("#materials").addEventListener("click", async (e) => {
+      const attach = e.target.closest("[data-attach-answer]");
+      if (attach) return uploadAnswerFile(id, attach.dataset.attachAnswer, loadMaterials);
       const make = e.target.closest("[data-ak-make]");
       if (make) {
         make.disabled = true;
-        try { await Store.startAnswerKey(make.dataset.akMake); toast("정답지를 만들기 시작했어요. 다 되면 알림으로 알려 드려요"); } catch (err) { toast(err.message); }
-        return loadMaterials();
+        return makeAnswerKey(make.dataset.akMake).catch((err) => { toast(err.message); loadMaterials(); });
       }
       const del = e.target.closest("[data-del-material]");
       if (del) confirmModal({
@@ -1322,24 +1456,139 @@
       const level = $("#gen-level .on").dataset.level;
       const count = Number($("#gen-count").value);
       btn.disabled = true;
-      btn.innerHTML = '<i data-lucide="loader" class="spin"></i>만드는 중…';
-      $("#gen-status").textContent = `문제 ${count}개를 만들고 다른 AI가 검증하고 있어요. 1~2분 정도 걸려요`;
-      icons();
       try {
-        const sid = await Store.generateFromPast(id, { level, count });
+        const sid = await withAIProgress({
+          title: `기출을 닮은 문제 ${count}개를 만드는 중`,
+          steps: ["기출 스타일 분석", "새 문제 만들기", "다른 AI가 다시 풀어 검산", "화면 준비"], expectMs: 60000,
+          run: () => Store.generateFromPast(id, { level, count }),
+        });
         toast("새 문제를 만들었어요");
         go(`/chat/${sid}`);
       } catch (err) {
         toast(err.message);
-        if (here()) { btn.disabled = false; btn.innerHTML = '<i data-lucide="sparkles"></i>문제 만들기'; $("#gen-status").textContent = err.message; icons(); }
+        if (here()) { btn.disabled = false; $("#gen-status").textContent = err.message; }
       }
     });
     loadMaterials();
   }
 
+  // ================= AI 작업 진행 팝업 =================
+  // 배경을 흐리게 덮고, 회전하는 원형 진행률과 단계를 보여 준다. 서버 처리가 끝나야 닫히고 결과를 연다.
+  // - p.set(0~1): 서버가 알려 준 실제 진행률 (정답지·업로드처럼)  - p.step(i): 단계 표시
+  // - 실제 진행률이 없으면 예상 시간(expectMs)에 맞춰 90%까지 천천히 차오르고, 응답이 오면 100%
+  const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  function withAIProgress({ title, steps = ["준비하기", "AI가 처리하기", "결과 정리하기"], expectMs = 20000, run }) {
+    const R = 52, LEN = 2 * Math.PI * R;
+    const el = document.createElement("div");
+    el.className = "ai-progress";
+    el.setAttribute("role", "dialog");
+    el.setAttribute("aria-modal", "true");
+    el.setAttribute("aria-label", title);
+    el.innerHTML = `
+      <div class="ai-card">
+        <div class="ai-ring">
+          <svg viewBox="0 0 120 120" aria-hidden="true">
+            <defs><linearGradient id="ai-grad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#4fc3ff"/><stop offset=".5" stop-color="#6b7cff"/><stop offset="1" stop-color="#c06bff"/></linearGradient></defs>
+            <circle cx="60" cy="60" r="${R}" class="track"/>
+            <circle cx="60" cy="60" r="${R}" class="bar" stroke-dasharray="${LEN}" stroke-dashoffset="${LEN}"/>
+            <g class="orbit"><circle cx="60" cy="60" r="${R}" class="comet" stroke-dasharray="${LEN * 0.12} ${LEN}"/></g>
+          </svg>
+          <div class="ai-pct"><b>0</b><small>%</small></div>
+        </div>
+        <h2>${esc(title)}</h2>
+        <p class="ai-now" aria-live="polite"></p>
+        <ol class="ai-steps">${steps.map((s) => `<li><i></i><span>${esc(s)}</span></li>`).join("")}</ol>
+        <p class="ai-foot">처리가 끝나면 결과를 바로 보여 드려요</p>
+      </div>`;
+    document.body.append(el);
+    requestAnimationFrame(() => el.classList.add("in"));
+
+    const bar = $(".bar", el), pctEl = $(".ai-pct b", el), nowEl = $(".ai-now", el), items = $$(".ai-steps li", el);
+    const t0 = performance.now();
+    let real = null, shown = 0, stepIdx = 0, stepForced = false, finished = false, raf;
+    const paint = () => {
+      const t = performance.now() - t0;
+      const est = 0.9 * (1 - Math.exp(-t / (expectMs / 2.2)));  // 예상 시간의 약 90% 시점에 80%쯤
+      const target = finished ? 1 : Math.min(0.97, Math.max(real ?? 0, real == null ? est : 0));
+      shown += (target - shown) * (finished ? 0.25 : 0.06);
+      if (finished && 1 - shown < 0.004) shown = 1;
+      bar.style.strokeDashoffset = LEN * (1 - shown);
+      pctEl.textContent = Math.round(shown * 100);
+      if (!stepForced && !finished) stepIdx = Math.min(steps.length - 1, Math.floor(shown * steps.length * 1.05));
+      items.forEach((li, i) => li.className = finished || i < stepIdx ? "done" : i === stepIdx ? "now" : "");
+      nowEl.textContent = finished ? "완료했어요" : `${steps[stepIdx]}…`;
+      if (!finished || shown < 1) raf = requestAnimationFrame(paint);
+    };
+    raf = requestAnimationFrame(paint);
+
+    // 마우스를 따라 카드가 살짝 기울어진다
+    const card = $(".ai-card", el);
+    const tilt = (e) => {
+      if (reduceMotion) return;
+      const r = card.getBoundingClientRect();
+      const dx = (e.clientX - (r.left + r.width / 2)) / innerWidth, dy = (e.clientY - (r.top + r.height / 2)) / innerHeight;
+      card.style.transform = `perspective(900px) rotateY(${dx * 14}deg) rotateX(${-dy * 14}deg)`;
+    };
+    el.addEventListener("pointermove", tilt);
+
+    const p = {
+      set: (x) => { real = Math.max(0, Math.min(1, x)); },
+      step: (i) => { stepForced = true; stepIdx = Math.max(stepIdx, Math.min(steps.length - 1, i)); },
+    };
+    const close = () => new Promise((resolve) => {
+      el.classList.remove("in");
+      el.classList.add("out");
+      setTimeout(() => { cancelAnimationFrame(raf); el.remove(); resolve(); }, 260);
+    });
+    const minShow = new Promise((r) => setTimeout(r, 650)); // 너무 빨리 끝나도 깜빡이지 않게
+    return Promise.resolve().then(() => run(p)).then(async (result) => {
+      await minShow;
+      finished = true;
+      await new Promise((r) => setTimeout(r, 520));
+      await close();
+      return result;
+    }, async (err) => { await close(); throw err; });
+  }
+
+  // 서버 작업이 끝날 때까지 몇 초마다 확인 (onTick 으로 진행률 반영)
+  async function waitFor(fetch, done, { every = 2500, timeout = 10 * 60_000, onTick } = {}) {
+    const end = Date.now() + timeout;
+    for (;;) {
+      const v = await fetch();
+      onTick?.(v);
+      if (done(v)) return v;
+      if (Date.now() > end) throw new Error("시간이 오래 걸리고 있어요. 잠시 후 다시 확인해 주세요");
+      await new Promise((r) => setTimeout(r, every));
+    }
+  }
+
+  // 정답지 만들기: 실제 진행률(풀이를 마친 문항 수)을 보여 주고, 끝나면 정답지를 연다
+  function makeAnswerKey(materialId) {
+    return withAIProgress({
+      title: "정답지를 만드는 중",
+      steps: ["문항 읽기", "문항마다 직접 풀기", "정답표와 맞춰 보고 검산", "해설 정리"], expectMs: 90000,
+      run: async (p) => {
+        await Store.startAnswerKey(materialId);
+        p.step(1);
+        const key = await waitFor(() => Store.answerKey(materialId), (k) => k.material.answer_key_status !== "running", {
+          every: 3000,
+          onTick: (k) => {
+            const total = k.material.problem_count || k.items.length || 1;
+            p.set(0.05 + 0.9 * (k.material.answer_key_done / total));
+            if (k.material.answer_key_done) p.step(k.material.answer_key_done >= total ? 3 : 2);
+          },
+        });
+        if (key.material.answer_key_status === "failed") throw new Error(key.material.answer_key_error ?? "정답지를 만들지 못했어요");
+        return key;
+      },
+    }).then(() => (location.hash === `#/answer-key/${materialId}` ? renderAnswerKey(materialId) : go(`/answer-key/${materialId}`)));
+  }
+
   // ================= 정답지 =================
   const CIRC = "①②③④⑤⑥⑦⑧⑨";
   const AK_STATUS = {
+    sheet: ["정답표", "file-check", "ok", ""],
     confirmed: ["정답 확인", "badge-check", "ok", "시험지 정답과 AI 풀이가 같아요"],
     verified: ["검산 완료", "badge-check", "ok", "두 번 풀어 같은 답이 나왔어요"],
     conflict: ["정답표와 다름", "triangle-alert", "warn", "시험지 정답과 AI 풀이가 달라요. 한 번 확인해 주세요"],
@@ -1367,6 +1616,7 @@
           <a class="ak-back" href="#/project/${mat.project_id}"><i data-lucide="arrow-left"></i>프로젝트로</a>
           <h1><i data-lucide="file-check-2"></i>정답지</h1>
           <p>${esc(mat.filename)} · ${key.items.length}문항${mat.answer_key_at ? ` · ${relTime(Date.parse(mat.answer_key_at))} 만듦` : ""}</p>
+          ${key.answer_file ? `<p class="ak-file"><i data-lucide="link-2"></i>정답 파일 <b>${esc(key.answer_file.filename)}</b>${key.answer_file.map ? ` · ${key.answer_file.map.matched}/${key.answer_file.map.total}문항 1:1 연결` : ""}</p>` : ""}
         </div>
         <div class="page-actions ak-actions">
           ${has && !running ? `<button class="btn-ghost" data-ak-rebuild><i data-lucide="refresh-cw"></i>다시 만들기</button>
@@ -1379,7 +1629,7 @@
         <button class="btn-primary" data-ak-start><i data-lucide="sparkles"></i>정답지 만들기</button></div>` : ""}
       ${has ? `
         <div class="ak-summary">
-          <span class="ak-chip ok"><i data-lucide="badge-check"></i>정답 확인 ${(c.confirmed ?? 0) + (c.verified ?? 0)}</span>
+          <span class="ak-chip ok"><i data-lucide="badge-check"></i>정답 확인 ${(c.confirmed ?? 0) + (c.verified ?? 0) + (c.sheet ?? 0)}</span>
           ${need ? `<span class="ak-chip warn"><i data-lucide="triangle-alert"></i>확인 필요 ${need}</span>` : '<span class="ak-chip">모든 문항이 확인됐어요</span>'}
           <span class="mini">정답표가 있던 문항은 AI 풀이와 맞춰 봤고, 없던 문항은 두 번 풀어 비교했어요</span>
         </div>
@@ -1395,13 +1645,15 @@
           <article class="panel ak-item" id="ak-${it.id}">
             <div class="ak-item-head"><b>${it.number ?? n + 1}번</b>
               <span class="ak-badge ${tone}"><i data-lucide="${icon}"></i>${label}</span>
+              ${it.from_answer_file ? '<span class="ak-badge"><i data-lucide="link-2"></i>정답 파일</span>' : ""}
               ${it.needs_figure ? '<span class="ak-badge"><i data-lucide="image"></i>그림 문항</span>' : ""}</div>
             <p class="stem" data-math>${esc(it.stem)}</p>
             ${it.choices ? `<ol class="ak-choices">${it.choices.map((ch, k) => `<li class="${String(k + 1) === it.answer ? "on" : ""}"><span>${CIRC[k]}</span><span data-math>${esc(ch)}</span></li>`).join("")}</ol>` : ""}
             <div class="ak-answer"><span>정답</span><b data-math>${esc(akLabel(it))}</b>
               ${it.status === "conflict" ? `<small>시험지 정답 ${esc(akLabel(it, it.sheet_answer))} · AI 풀이 ${esc(akLabel(it, it.ai_answer))}</small>` : ""}
               ${note && tone !== "ok" ? `<small>${esc(note)}</small>` : ""}</div>
-            ${it.solution ? `<div class="ak-solution"><span>해설</span>${it.solution.split(/\n+/).filter(Boolean).map((l) => `<p data-math>${esc(l)}</p>`).join("")}</div>` : ""}
+            ${it.sheet_explanation ? `<div class="ak-solution ak-sheet-sol"><span>정답 파일 해설</span>${it.sheet_explanation.split(/\n+/).filter(Boolean).map((l) => `<p data-math>${esc(l)}</p>`).join("")}</div>` : ""}
+            ${it.solution ? `<div class="ak-solution"><span>${it.sheet_explanation ? "AI 해설" : "해설"}</span>${it.solution.split(/\n+/).filter(Boolean).map((l) => `<p data-math>${esc(l)}</p>`).join("")}</div>` : ""}
           </article>`;
         }).join("")}</div>` : ""}`;
     icons();
@@ -1411,8 +1663,7 @@
       if (jump) { e.preventDefault(); $(`#ak-${CSS.escape(jump.dataset.akJump)}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
       if (e.target.closest("[data-ak-print]")) return window.print();
       if (e.target.closest("[data-ak-start], [data-ak-rebuild]")) {
-        try { await Store.startAnswerKey(materialId); toast("정답지를 만들기 시작했어요"); } catch (err) { return toast(err.message); }
-        renderAnswerKey(materialId);
+        makeAnswerKey(materialId).catch((err) => { toast(err.message); renderAnswerKey(materialId); });
       }
     };
     if (running) akTimer = setTimeout(() => renderAnswerKey(materialId), 4000);
@@ -1679,7 +1930,11 @@
       noteBusy.add(id);
       draw(NOTE_BUSY);
       try {
-        const r = await Store.createNote(id);
+        const r = await withAIProgress({
+          title: "내 맞춤 개념 정리를 만드는 중",
+          steps: ["내 풀이·오답 살펴보기", "핵심 정리 쓰기", "검증 에이전트 확인", "암기 카드 넣기"], expectMs: 70000,
+          run: () => Store.createNote(id),
+        });
         noteCache[id] = r.note;
         toast(r.added_cards.length ? `암기 카드 ${r.added_cards.length}장을 덱에 넣었어요` : "개념 정리를 새로 만들었어요");
       } catch (err) { toast(err.message); }
@@ -2369,14 +2624,14 @@
   const isoAfter = (days) => new Date(Date.now() + days * DAY - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
 
   // 파일 고르기 영역 (마법사·업로드 창 공용). onChange(files) 로 바뀐 목록을 알린다
-  function dropzoneHTML() {
+  function dropzoneHTML({ kinds = true, multiple = true } = {}) {
     return `
-      <div class="chips mat-kind">
+      ${kinds ? `<div class="chips mat-kind">
         <label><input type="radio" name="mat-kind" value="past_exam" checked /><span>기출·시험지</span></label>
         <label><input type="radio" name="mat-kind" value="textbook" /><span>교재 페이지</span></label>
-      </div>
+      </div>` : ""}
       <label class="dropzone" data-drop>
-        <input type="file" accept=".pdf,image/png,image/jpeg,image/webp" multiple hidden />
+        <input type="file" accept=".pdf,image/png,image/jpeg,image/webp" ${multiple ? "multiple" : ""} hidden />
         <i data-lucide="upload-cloud"></i>
         <b>파일을 끌어다 놓거나 눌러서 고르세요</b>
         <span>PDF(30쪽 이하) 또는 사진 · 파일당 20MB까지 · 여러 개 가능</span>
@@ -2413,11 +2668,11 @@
   }
 
   async function uploadAll(projectId, files, kind = "past_exam") {
-    let ok = 0;
+    const made = [];
     for (const f of files) {
-      try { await Store.uploadMaterial(projectId, f, true, kind); ok++; } catch (e) { toast(`${f.name}: ${e.message}`); }
+      try { made.push(await Store.uploadMaterial(projectId, f, true, kind)); } catch (e) { toast(`${f.name}: ${e.message}`); }
     }
-    return ok;
+    return made;
   }
 
   // 글로 적으면 알아듣는 부분 — 과목·목표·시험일·범위
@@ -2640,11 +2895,13 @@
       if (title.length < 2) return invalid($("#nc-title"), "코스 이름을 적어 주세요");
       if (scope.length < 2) return invalid($("#nc-scope"), "출제 범위를 붙여넣어 주세요");
       btn.disabled = true;
-      btn.innerHTML = '<i data-lucide="loader-circle" class="spin"></i>AI가 단원·개념을 정리하는 중… (30초~1분)';
-      icons();
       try {
-        const c = await Store.createCourse({ title, scope_text: scope, exam: $("#nc-exam").value.trim(),
-          level: $("input[name=nc-level]:checked", body)?.value ?? "", textbook: w.textbook.trim(), textbook_isbn: w.isbn });
+        const c = await withAIProgress({
+          title: "나만의 코스를 만드는 중",
+          steps: ["출제 범위 읽기", "단원 나누기", "개념 정리하기"], expectMs: 40000,
+          run: () => Store.createCourse({ title, scope_text: scope, exam: $("#nc-exam").value.trim(),
+            level: $("input[name=nc-level]:checked", body)?.value ?? "", textbook: w.textbook.trim(), textbook_isbn: w.isbn }),
+        });
         loadConcepts();
         panel.hidden = true;
         w.subjectPicked = true;
@@ -2726,7 +2983,54 @@
         const btn = $("[data-up]", f);
         btn.disabled = true;
         btn.textContent = "올리는 중…";
-        uploadAll(projectId, files, $("input[name=mat-kind]:checked", f)?.value).then((n) => { closeOverlays(); if (n) toast(`${n}개를 올렸어요. AI가 문제를 읽는 중이에요`); onDone(); });
+        const kind = $("input[name=mat-kind]:checked", f)?.value;
+        closeOverlays();
+        withAIProgress({
+          title: `${files.length}개 자료를 읽는 중`,
+          steps: ["파일 올리기", "AI가 문항 읽기", "개념·난이도 분류"], expectMs: 30000 + files.length * 15000,
+          run: async (p) => {
+            const mats = await uploadAll(projectId, files, kind);
+            if (!mats.length) return [];
+            p.step(1);
+            const ids = new Set(mats.map((x) => x.id));
+            return waitFor(() => Store.listMaterials(projectId).then((l) => l.filter((x) => ids.has(x.id))),
+              (l) => l.every((x) => x.status === "ready" || x.status === "failed"),
+              { onTick: (l) => p.set(0.1 + 0.85 * (l.filter((x) => x.status === "ready" || x.status === "failed").length / ids.size)) });
+          },
+        }).then((l) => {
+          const ok = l.filter((x) => x.status === "ready");
+          if (ok.length) toast(`${ok.length}개 자료에서 문항 ${ok.reduce((a, x) => a + x.problem_count, 0)}개를 읽었어요`);
+          l.filter((x) => x.status === "failed").forEach((x) => toast(`${x.filename}: ${x.error ?? "읽지 못했어요"}`));
+        }).catch((err) => toast(err.message)).finally(onDone);
+        return false;
+      },
+    });
+  }
+
+  // 정답 파일(정답표·해설지) 올리기 — 문제지 하나에 하나, 문항 번호로 1:1 매칭
+  function uploadAnswerFile(projectId, materialId, onDone) {
+    const files = [];
+    openSheet({
+      title: "정답 파일 연결", body: `<p class="modal-text">이 문제지의 정답표나 해설지를 올려 주세요. AI가 번호·정답·해설을 읽어 문항과 1:1로 맞춰요. 이미 연결된 정답 파일이 있으면 새 파일로 바뀌어요.</p>${dropzoneHTML({ kinds: false, multiple: false })}`,
+      footer: `<div class="modal-foot"><button type="button" class="btn-ghost" data-close>취소</button><button type="submit" class="btn-primary" data-up disabled>연결하기</button></div>`,
+      onMount(f) { bindDropzone(f, files, () => { if (files.length > 1) files.splice(0, files.length - 1); $("[data-up]", f).disabled = !files.length; }); },
+      onSubmit(f) {
+        if (!$("[data-rights]", f).checked) { toast("학습용으로 쓸 수 있는 자료인지 확인해 주세요"); return false; }
+        const file = files[0];
+        closeOverlays();
+        withAIProgress({
+          title: "정답 파일을 문항과 맞추는 중",
+          steps: ["정답 파일 올리기", "번호·정답·해설 읽기", "문항과 1:1 매칭"], expectMs: 25000,
+          run: async (p) => {
+            const mat = await Store.uploadMaterial(projectId, file, true, "answer_sheet", materialId);
+            p.step(1);
+            return waitFor(() => Store.listMaterials(projectId).then((l) => l.find((x) => x.id === mat.id)),
+              (x) => !x || x.status === "ready" || x.status === "failed");
+          },
+        }).then((x) => {
+          if (x?.status === "ready") toast(`${x.answer_map.total}문항 중 ${x.answer_map.matched}문항의 정답을 연결했어요`);
+          else if (x?.status === "failed") toast(x.error ?? "정답 파일을 읽지 못했어요");
+        }).catch((err) => toast(err.message)).finally(onDone);
         return false;
       },
     });

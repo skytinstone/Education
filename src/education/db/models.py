@@ -221,6 +221,32 @@ class Problem(Base):
         return [c.id for c in self.concepts]
 
 
+class ProblemAnswer(Base):
+    """올린 문제지의 문항 하나 ↔ 정답 하나 (problem_id 가 기본키라 1:1).
+
+    정답의 출처를 나눠 둔다: 문제지·정답 파일에 적힌 답(sheet_*), AI 가 푼 답과 해설(ai_*), 정답을 모르고 다시 푼 답(check_answer).
+    problems.answer·verification 은 이 행에서 계산한다 (services/answer_key.py refresh)."""
+    __tablename__ = "problem_answers"
+
+    problem_id: Mapped[str] = mapped_column(ForeignKey("problems.id", ondelete="CASCADE"), primary_key=True)
+    material_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("materials.id", ondelete="CASCADE"), index=True)
+    number: Mapped[int | None]
+    sheet_answer: Mapped[str] = mapped_column(String(200), server_default="")
+    printed_answer: Mapped[str] = mapped_column(String(200), server_default="")  # 문제지에 인쇄돼 있던 정답 (정답 파일을 빼면 이것으로 돌아감)
+    sheet_explanation: Mapped[str | None] = mapped_column(Text)
+    # 정답이 별도 정답 파일에서 왔으면 그 자료 (문제지에 인쇄된 정답이면 비어 있음)
+    sheet_material_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("materials.id", ondelete="SET NULL"), index=True)
+    ai_answer: Mapped[str | None] = mapped_column(String(200))
+    ai_solution: Mapped[str | None] = mapped_column(Text)
+    check_answer: Mapped[str | None] = mapped_column(String(200))
+    # sheet(정답만) · confirmed · conflict · verified · uncertain · failed
+    status: Mapped[str | None] = mapped_column(String(12))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    __table_args__ = (CheckConstraint(
+        "status IN ('sheet', 'confirmed', 'conflict', 'verified', 'uncertain', 'failed')", name="problem_answer_status"),)
+
+
 class ProblemConcept(Base):
     __tablename__ = "problem_concepts"
 
@@ -267,15 +293,20 @@ class Material(Base):
     error: Mapped[str | None] = mapped_column(Text)
     problem_count: Mapped[int] = mapped_column(server_default="0")
     rights_confirmed: Mapped[bool] = mapped_column(Boolean)  # "학습용으로 쓸 수 있는 자료" 확인
-    kind: Mapped[str] = mapped_column(String(12), server_default="past_exam")  # past_exam | textbook
+    kind: Mapped[str] = mapped_column(String(12), server_default="past_exam")  # past_exam | textbook | answer_sheet
+    # 정답 파일(answer_sheet)이면 어느 문제지의 정답인지 — 문제지 하나에 정답 파일 하나 (UNIQUE, 1:1)
+    answer_for_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("materials.id", ondelete="CASCADE"), unique=True)
+    # 정답 파일 매핑 결과: {"matched": n, "total": 문제 수, "missing": [정답 없는 번호], "extra": [문제지에 없는 번호]}
+    answer_map: Mapped[dict | None] = mapped_column(JSONB)
     # 정답지 (services/answer_key.py): 없음(null) → running → done | failed
     answer_key_status: Mapped[str | None] = mapped_column(String(12))
     answer_key_error: Mapped[str | None] = mapped_column(Text)
     answer_key_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    answer_key_done: Mapped[int] = mapped_column(server_default="0")  # 진행률: 풀이를 마친 문항 수
     created_at: Mapped[datetime] = created_at()
 
     __table_args__ = (CheckConstraint("status IN ('uploaded', 'extracting', 'ready', 'failed')", name="material_status"),
-                      CheckConstraint("kind IN ('past_exam', 'textbook')", name="material_kind"),
+                      CheckConstraint("kind IN ('past_exam', 'textbook', 'answer_sheet')", name="material_kind"),
                       CheckConstraint("answer_key_status IN ('running', 'done', 'failed')", name="material_answer_key_status"))
 
 

@@ -363,7 +363,7 @@ const Store = (() => {
         : (sessionId
             ? api(`/sessions/${id}/messages`, { method: "POST", body: { text } }).then((msgs) => {
                 msgs.forEach((msg) => msg.problems.forEach(mergeProblem));
-                s.messages.splice(-1, 1, ...msgs.map((msg) => ({ role: msg.role, text: msg.text, problemIds: msg.problems.map((p) => p.id), at: Date.parse(msg.created_at) })));
+                s.messages.splice(-1, 1, ...msgs.map((msg) => ({ role: msg.role, text: msg.text, problemIds: msg.problems.map((p) => p.id), explanation: msg.explanation ?? null, at: Date.parse(msg.created_at) })));
                 s.updatedAt = Date.now();
                 return id;
               })
@@ -546,11 +546,12 @@ const Store = (() => {
     listMaterials: (projectId) => api(`/projects/${projectId}/materials`),
     pastProblems: (projectId) => api(`/projects/${projectId}/past-problems`),
     // kind: past_exam(기출·시험지) | textbook(교재 페이지)
-    uploadMaterial(projectId, file, rightsConfirmed, kind = "past_exam") {
+    uploadMaterial(projectId, file, rightsConfirmed, kind = "past_exam", answerFor = null) {
       const form = new FormData();
       form.append("file", file);
       form.append("rights_confirmed", rightsConfirmed ? "true" : "false");
       form.append("kind", kind);
+      if (answerFor) form.append("answer_for", answerFor);
       return api(`/projects/${projectId}/materials`, { method: "POST", form });
     },
     deleteMaterial: (id) => api(`/materials/${id}`, { method: "DELETE" }),

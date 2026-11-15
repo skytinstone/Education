@@ -287,6 +287,9 @@ class MaterialOut(Out):
     error: str | None
     problem_count: int
     answer_key_status: str | None = None  # 정답지: null · running · done · failed
+    answer_key_done: int = 0               # 정답지 진행률 (풀이를 마친 문항 수)
+    answer_for_id: UUID | None = None      # 정답 파일이면 어느 문제지의 정답인지 (1:1)
+    answer_map: dict | None = None         # 정답 파일 매핑 결과 {matched, total, missing, extra}
     created_at: datetime
 
 

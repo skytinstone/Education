@@ -97,3 +97,69 @@ def test_normalizes_answers():
     assert answer_key.normalize(p, "③") == "3" and answer_key.normalize(p, "정답은 4번") == "4" and answer_key.normalize(p, "9") == ""
     s = m.Problem(choices=None)
     assert answer_key.same(s, "1/2", "0.5") and answer_key.same(s, "√2", "√ 2") and not answer_key.same(s, "3", "4")
+
+
+# ---------- 정답 파일 ↔ 문제지 1:1 ----------
+from education.services.materials import AnswerEntry, AnswerSheet  # noqa: E402
+
+
+def upload_answers(client, auth, pid, mid, entries, monkeypatch):
+    llm = QueueLLM(AnswerSheet=[AnswerSheet(entries=entries)])
+    monkeypatch.setattr(materials, "get_llm", lambda: llm)
+    return client.post(f"/api/projects/{pid}/materials", headers=auth, files={"file": ("정답.png", b"\x89PNG\r\n\x1a\n" + b"0" * 64, "image/png")},
+                       data={"rights_confirmed": "true", "kind": "answer_sheet", "answer_for": mid})
+
+
+def test_answer_file_maps_one_to_one_by_number(client, auth, monkeypatch, background_db, db):
+    pid, mid = setup_material(client, auth, monkeypatch)
+    r = upload_answers(client, auth, pid, mid, [
+        AnswerEntry(number=1, answer="①", explanation="정답 파일 해설: $x=1$"),
+        AnswerEntry(number=3, answer="⑤", explanation=None),
+        AnswerEntry(number=7, answer="2", explanation=None),   # 문제지에 없는 번호
+    ], monkeypatch)
+    assert r.status_code == 201, r.text
+    sheet = client.get(f"/api/projects/{pid}/materials", headers=auth).json()[-1]
+    assert sheet["kind"] == "answer_sheet" and sheet["answer_for_id"] == mid and sheet["status"] == "ready"
+    assert sheet["answer_map"] == {"matched": 2, "total": 4, "missing": [2, 4], "extra": [7]}
+
+    rows = {r.number: r for r in db.scalars(select(m.ProblemAnswer).where(m.ProblemAnswer.material_id == mid))}
+    assert len(rows) == 4                                   # 문항 하나에 정답 행 하나
+    assert rows[1].sheet_answer == "1" and rows[1].printed_answer == "3" and rows[1].sheet_explanation.startswith("정답 파일")
+    assert rows[3].sheet_answer == "5" and str(rows[3].sheet_material_id) == sheet["id"]
+    p3 = db.get(m.Problem, rows[3].problem_id)
+    assert p3.answer == "5" and p3.verification == VerificationStatus.VERIFIED   # 정답이 생겨 연습에 쓸 수 있다
+
+    key = client.get(f"/api/materials/{mid}/answer-key", headers=auth).json()
+    assert key["answer_file"]["filename"] == "정답.png"
+    assert [(i["number"], i["answer"], i["from_answer_file"]) for i in key["items"]] == [(1, "1", True), (2, "2", False), (3, "5", True), (4, "", False)]
+
+    # 정답 파일은 문제지 하나에 하나 — 새로 올리면 교체된다
+    upload_answers(client, auth, pid, mid, [AnswerEntry(number=4, answer="2", explanation=None)], monkeypatch)
+    sheets = [x for x in client.get(f"/api/projects/{pid}/materials", headers=auth).json() if x["kind"] == "answer_sheet"]
+    assert len(sheets) == 1 and sheets[0]["answer_map"]["matched"] == 1
+    db.expire_all()
+    rows = {r.number: r for r in db.scalars(select(m.ProblemAnswer).where(m.ProblemAnswer.material_id == mid))}
+    assert rows[1].sheet_answer == "3" and rows[3].sheet_answer == "" and rows[4].sheet_answer == "2"  # 예전 파일 정답은 거둠
+
+    # 정답 파일을 지우면 문제지에 인쇄돼 있던 정답으로 돌아간다
+    assert client.delete(f"/api/materials/{sheets[0]['id']}", headers=auth).status_code == 204
+    db.expire_all()
+    rows = {r.number: r for r in db.scalars(select(m.ProblemAnswer).where(m.ProblemAnswer.material_id == mid))}
+    assert rows[4].sheet_answer == "" and rows[1].sheet_answer == "3"
+
+
+def test_answer_file_needs_a_ready_problem_sheet(client, auth, monkeypatch, background_db, db):
+    pid, mid = setup_material(client, auth, monkeypatch)
+    no_target = client.post(f"/api/projects/{pid}/materials", headers=auth, files={"file": ("a.png", b"\x89PNG\r\n\x1a\n" + b"0" * 64, "image/png")},
+                            data={"rights_confirmed": "true", "kind": "answer_sheet"})
+    assert no_target.status_code == 422
+    db.get(m.Material, mid).status = "extracting"
+    db.flush()
+    assert upload_answers(client, auth, pid, mid, [], monkeypatch).status_code == 409
+
+
+def test_deleting_problem_sheet_removes_its_answer_file(client, auth, monkeypatch, background_db, db):
+    pid, mid = setup_material(client, auth, monkeypatch)
+    upload_answers(client, auth, pid, mid, [AnswerEntry(number=1, answer="1", explanation=None)], monkeypatch)
+    assert client.delete(f"/api/materials/{mid}", headers=auth).status_code == 204
+    assert client.get(f"/api/projects/{pid}/materials", headers=auth).json() == []

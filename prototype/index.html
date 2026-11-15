@@ -456,7 +456,8 @@
             <button type="button" class="icon-btn" title="자료 첨부"><i data-lucide="plus"></i></button>
             <button type="button" class="chip" id="project-chip" title="어느 프로젝트에서 공부할지 고르기"></button>
             <input id="prompt" placeholder="미적분 치환적분 3점짜리 5문제 내줘" autocomplete="off" />
-            <button type="button" class="icon-btn" title="음성 입력"><i data-lucide="mic"></i></button>
+            <span class="voice-meter" hidden aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+            <button type="button" class="icon-btn mic-btn" data-mic title="음성 입력" aria-label="음성 입력"><i data-lucide="mic"></i></button>
             <button type="submit" class="send" id="send" disabled><i data-lucide="arrow-up"></i></button>
           </form>
         </section>
