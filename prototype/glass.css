@@ -22,16 +22,7 @@
   --surface: var(--lg-bg);
 }
 
-/* ---------- 배경: 유리 뒤에 은은한 빛, 도트는 조용하게 ---------- */
-body {
-  background:
-    radial-gradient(60vw 50vh at 8% -10%, rgba(120, 160, 255, 0.20), transparent 70%),
-    radial-gradient(50vw 45vh at 100% 0%, rgba(214, 140, 255, 0.16), transparent 70%),
-    radial-gradient(60vw 50vh at 85% 110%, rgba(255, 170, 140, 0.14), transparent 70%),
-    radial-gradient(50vw 40vh at 0% 100%, rgba(110, 220, 190, 0.12), transparent 70%),
-    #f4f6fa;
-}
-#dots { opacity: 0.38; }
+/* 배경·사이드바는 원래 모습 그대로 둔다 (index.html 의 --bg · 도트 · .sidebar) */
 
 /* ---------- 1단계 표면: 떠 있는 유리 카드 ---------- */
 .panel, .ws-head, .ws-col, .ws-extra, .ak-card, .ak-quick, .ak-item, .kpi, .stat,
@@ -57,10 +48,6 @@ body {
   box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03) !important;
 }
 
-/* 사이드바 */
-.sidebar { border-radius: var(--r-lg) !important; }
-.nav-item { border-radius: var(--r-sm); }
-.nav-item.active { border-radius: var(--r-sm); }
 
 /* ---------- 2단계: 카드 안의 옅은 채움 ---------- */
 .select, .field input, .field select, .field textarea, .search-box, .lib-search, .fb-item textarea, .xt-short input, .sel {
