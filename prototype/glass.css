@@ -182,6 +182,38 @@
   box-shadow: 0 12px 40px rgba(47, 107, 255, 0.16), inset 0 1px 0 #fff, 0 0 0 1.5px var(--blue) !important;
 }
 
+/* ---------- 등장 움직임: 아래에서 위로, 흐림이 걷히며 차례로 ---------- */
+@keyframes riseUp {
+  from { opacity: 0; transform: translateY(28px); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+.reveal { filter: blur(6px); transition: opacity .9s cubic-bezier(.16,1,.3,1), transform .9s cubic-bezier(.16,1,.3,1), filter .9s cubic-bezier(.16,1,.3,1) !important; transition-delay: var(--d, 0ms) !important; }
+.reveal.in { filter: none; }
+#view > * { animation: riseUp .85s cubic-bezier(.16,1,.3,1) both !important; }
+#view > *:nth-child(2) { animation-delay: .08s !important; }
+#view > *:nth-child(3) { animation-delay: .16s !important; }
+#view > *:nth-child(4) { animation-delay: .24s !important; }
+#view > *:nth-child(5) { animation-delay: .32s !important; }
+#view > *:nth-child(n+6) { animation-delay: .4s !important; }
+#view > .chat-view.still { animation: none !important; }
+/* 화면 제목과 설명은 한 번 더 시간차를 둬서 글자부터 떠오르게 */
+#view .page-head h1, #view .ws-head h1, #view .ak-head h1 { animation: riseUp .9s .06s cubic-bezier(.16,1,.3,1) both; }
+#view .page-head h1 ~ p, #view .page-head > div > p, #view .ws-head h1 ~ *, #view .ak-head p { animation: riseUp .9s .16s cubic-bezier(.16,1,.3,1) both; }
+/* 프로젝트 화면의 세 칸 */
+#view .ws-grid > * { animation: riseUp .85s cubic-bezier(.16,1,.3,1) both; }
+#view .ws-grid > *:nth-child(1) { animation-delay: .12s; }
+#view .ws-grid > *:nth-child(2) { animation-delay: .2s; }
+#view .ws-grid > *:nth-child(3) { animation-delay: .28s; }
+@media (prefers-reduced-motion: reduce) {
+  #view > *, #view .page-head h1, #view .ws-head h1, #view .ak-head h1, #view .page-head h1 ~ p, #view .page-head > div > p,
+  #view .ws-head h1 ~ *, #view .ak-head p, #view .ws-grid > * { animation: none !important; }
+  .reveal { filter: none; transition: none !important; }
+}
+@media print {
+  #view > *, #view .page-head h1, #view .ws-head h1, #view .ak-head h1, #view .page-head h1 ~ p, #view .page-head > div > p,
+  #view .ws-head h1 ~ *, #view .ak-head p, #view .ws-grid > * { animation: none !important; }
+}
+
 /* 체크박스·라디오는 채움 칸 규칙에서 뺀다 */
 .field input[type="radio"] { width: auto !important; height: auto !important; padding: 0 !important;
   background: none !important; box-shadow: none !important; accent-color: var(--accent); }

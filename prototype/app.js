@@ -164,6 +164,17 @@
     return page;
   }
 
+  // 홈으로 돌아올 때마다 제목·입력창·카드가 다시 아래에서 위로 떠오르게
+  let revealer = null;
+  function replayReveal() {
+    if (!revealer) return; // 첫 화면은 아래 초기화에서 처리
+    const els = $$("#home .reveal");
+    els.forEach((el) => { el.style.transition = "none"; el.classList.remove("in"); revealer.unobserve(el); });
+    void home.offsetHeight; // 처음 위치로 바로 되돌린 뒤
+    els.forEach((el) => (el.style.transition = ""));
+    requestAnimationFrame(() => els.forEach((el) => revealer.observe(el))); // 다시 재생
+  }
+
   function render() {
     if (!Store.state) return; // 서버 데이터를 받기 전
     closeOverlays();
@@ -175,7 +186,7 @@
     view.onchange = null;
     view.onkeydown = null;
     $(".wrap").classList.toggle("wide", page === "project");
-    if (!page) renderHome(params);
+    if (!page) { renderHome(params); replayReveal(); }
     else if (page === "chat") renderChat(a);
     else if (page === "project") renderProject(a, params);
     else if (page === "notes") renderNotes();
@@ -1193,6 +1204,7 @@
           <button type="submit" class="send" disabled aria-label="보내기"><i data-lucide="arrow-up"></i></button>
         </form>
       </div>`;
+    if (keepScroll) $(".chat-view").classList.add("still"); // 답을 고를 때 다시 그려도 떠오르는 움직임은 처음 한 번만
     icons();
 
     const input = $("#chat-input"), btn = $("#chat-form .send");
@@ -4031,7 +4043,7 @@
   // 홈 요소: 스크롤하면 아래에서 위로 떠오름
   [[".hero h1", ".hero p", ".hero .composer"], [".action"], [".today > .panel"], [".activity"], [".section-head"], ["#cards-recent .card"], [".subject"]]
     .forEach((group) => group.flatMap((s) => $$(s)).forEach((el, i) => { el.classList.add("reveal"); el.style.setProperty("--d", `${i * 70}ms`); }));
-  const revealer = new IntersectionObserver((entries) => {
+  revealer = new IntersectionObserver((entries) => {
     for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); revealer.unobserve(e.target); }
   }, { root: contentEl, threshold: 0.12, rootMargin: "0px 0px -6% 0px" });
   $$(".reveal").forEach((el) => revealer.observe(el));
