@@ -1,0 +1,202 @@
+/* Eureka — Liquid Glass 통일 레이어
+   app.css · index.html 의 개별 스타일 위에 마지막으로 얹어, 화면 전체를 같은 규칙으로 맞춘다.
+   원칙: ① 표면은 두 단계뿐 (떠 있는 유리 카드 / 카드 안의 옅은 채움)  ② 모서리는 세 가지 (12 · 18 · 26) + 캡슐
+         ③ 테두리 대신 빛(위쪽 하이라이트)과 그림자로 구분  ④ 색은 강조 1가지 + 상태색(초록·주황·빨강)만 */
+
+:root {
+  --r-sm: 12px;
+  --r-md: 18px;
+  --r-lg: 26px;
+  --r-pill: 999px;
+
+  --line: rgba(15, 23, 42, 0.06);
+  --fill: rgba(118, 118, 128, 0.08);       /* 카드 안 입력·목록 칸 */
+  --fill-hover: rgba(118, 118, 128, 0.13);
+
+  --lg-bg: rgba(255, 255, 255, 0.66);      /* 유리 카드 */
+  --lg-bg-strong: rgba(255, 255, 255, 0.82); /* 모달·메뉴 */
+  --lg-blur: blur(28px) saturate(180%);
+  --lg-edge: inset 0 1px 0 rgba(255, 255, 255, 0.95), inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+  --lg-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 12px 32px rgba(31, 41, 80, 0.07);
+  --lg-shadow-float: 0 2px 6px rgba(15, 23, 42, 0.06), 0 28px 70px rgba(31, 41, 80, 0.18);
+  --surface: var(--lg-bg);
+}
+
+/* ---------- 배경: 유리 뒤에 은은한 빛, 도트는 조용하게 ---------- */
+body {
+  background:
+    radial-gradient(60vw 50vh at 8% -10%, rgba(120, 160, 255, 0.20), transparent 70%),
+    radial-gradient(50vw 45vh at 100% 0%, rgba(214, 140, 255, 0.16), transparent 70%),
+    radial-gradient(60vw 50vh at 85% 110%, rgba(255, 170, 140, 0.14), transparent 70%),
+    radial-gradient(50vw 40vh at 0% 100%, rgba(110, 220, 190, 0.12), transparent 70%),
+    #f4f6fa;
+}
+#dots { opacity: 0.38; }
+
+/* ---------- 1단계 표면: 떠 있는 유리 카드 ---------- */
+.panel, .ws-head, .ws-col, .ws-extra, .ak-card, .ak-quick, .ak-item, .kpi, .stat,
+.course-item, .book-card, .ai-slot, .xt-bar, .xt-q, .xt-score, .xt-table, .essay-result, .work-review {
+  background: var(--lg-bg) !important;
+  -webkit-backdrop-filter: var(--lg-blur);
+  backdrop-filter: var(--lg-blur);
+  border: 0 !important;
+  box-shadow: var(--lg-edge), var(--lg-shadow) !important;
+}
+.panel, .ws-col, .ws-extra, .ak-quick, .ak-item, .xt-q, .xt-table, .course-item, .book-card, .essay-result, .work-review { border-radius: var(--r-md) !important; }
+.ws-head, .ak-card, .xt-score { border-radius: var(--r-lg) !important; }
+.kpi, .stat, .ai-slot { border-radius: var(--r-md) !important; }
+.xt-bar { border-radius: var(--r-pill) !important; padding: 8px 8px 8px 18px !important; }
+.ws-kpis { background: transparent !important; border-top: 1px solid var(--line) !important; }
+.ws-kpis > * + * { border-left-color: var(--line) !important; }
+
+/* 문제 카드(대화 안)는 유리 위의 유리 — 흐림 없이 밝게 */
+.problem, .note-q, .past-item, .file-list li, .tree details, .onboard-steps li, .ws-group, .erd-ent, .ex-graph, .explain .ex-result, .ask-box, .work-preview {
+  background: rgba(255, 255, 255, 0.78) !important;
+  border: 0 !important;
+  border-radius: var(--r-md) !important;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03) !important;
+}
+
+/* 사이드바 */
+.sidebar { border-radius: var(--r-lg) !important; }
+.nav-item { border-radius: var(--r-sm); }
+.nav-item.active { border-radius: var(--r-sm); }
+
+/* ---------- 2단계: 카드 안의 옅은 채움 ---------- */
+.select, .field input, .field select, .field textarea, .search-box, .lib-search, .fb-item textarea, .xt-short input, .sel {
+  background-color: var(--fill) !important;
+  border: 0 !important;
+  border-radius: var(--r-sm) !important;
+  box-shadow: none;
+}
+.select:hover, .search-box:hover { background-color: var(--fill-hover) !important; }
+.field input:focus, .field select:focus, .field textarea:focus, .xt-short input:focus, .select:focus {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 4px var(--accent-soft) !important;
+  outline: none;
+}
+
+/* 보기 선택 (대화·시험·정답 편집) */
+.choice, .xt-c, .erd-pick label {
+  background: var(--fill) !important;
+  border: 0 !important;
+  border-radius: var(--r-sm) !important;
+  box-shadow: none !important;
+  transition: background .15s, box-shadow .15s, transform .1s;
+}
+.choice:hover, .xt-c:hover, .erd-pick label:hover { background: var(--fill-hover) !important; }
+.choice:active, .xt-c:active { transform: scale(0.995); }
+.xt-c.on, .erd-pick label:has(input:checked), .choice.on, .choice.selected {
+  background: rgba(79, 107, 255, 0.10) !important;
+  box-shadow: inset 0 0 0 1.5px var(--accent) !important;
+}
+
+/* ---------- 버튼: 캡슐 ---------- */
+.btn-primary, .btn-ghost {
+  height: 36px; padding: 0 16px; border-radius: var(--r-pill) !important; font-weight: 600; font-size: 13.5px;
+  transition: transform .12s, background .15s, box-shadow .15s;
+}
+.btn-primary {
+  background: linear-gradient(180deg, #1e293b, #0f172a) !important; color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 4px 14px rgba(15, 23, 42, 0.18);
+}
+.btn-primary:hover { background: linear-gradient(180deg, #273449, #111a2e) !important; }
+.btn-primary.danger { background: linear-gradient(180deg, #f43f5e, #e11d48) !important; box-shadow: inset 0 1px 0 rgba(255,255,255,.25), 0 4px 14px rgba(225,29,72,.25); }
+.btn-ghost {
+  background: rgba(255, 255, 255, 0.6) !important; border: 0 !important;
+  -webkit-backdrop-filter: blur(16px) saturate(170%); backdrop-filter: blur(16px) saturate(170%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 0 0 1px rgba(15, 23, 42, 0.07);
+  color: var(--ink); text-decoration: none;
+}
+.btn-ghost:hover { background: rgba(255, 255, 255, 0.92) !important; }
+.btn-primary:active, .btn-ghost:active { transform: scale(0.97); }
+.btn-primary:disabled, .btn-ghost:disabled { transform: none; }
+.icon-btn { border-radius: var(--r-pill) !important; }
+.icon-btn:hover { background: rgba(118, 118, 128, 0.12); }
+.ws-actions .btn-ghost { background: rgba(255, 255, 255, 0.6) !important; }
+
+/* ---------- 세그먼트 컨트롤 (탭·보기 전환) ---------- */
+.seg {
+  background: rgba(118, 118, 128, 0.12) !important; border-radius: var(--r-pill) !important; padding: 3px !important; gap: 2px;
+}
+.seg button, .seg a { border-radius: var(--r-pill) !important; }
+.seg .on {
+  background: #fff !important; color: var(--ink) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08), 0 3px 10px rgba(15, 23, 42, 0.06) !important;
+}
+
+/* ---------- 칩·배지·상태: 모두 캡슐, 색은 옅게 ---------- */
+.ak-chip, .ak-badge, .ws-chip, .tag, .pill, .chip, .meta-chip, .ws-tag, .ws-st, .st-badge {
+  border-radius: var(--r-pill) !important;
+}
+.xt-omr button { border: 0 !important; border-radius: var(--r-pill) !important; background: rgba(255, 255, 255, 0.7) !important;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06); }
+.xt-omr button.done { background: rgba(79, 107, 255, 0.12) !important; box-shadow: none; }
+.xt-omr button.cur { outline: 0 !important; box-shadow: inset 0 0 0 1.5px var(--accent) !important; }
+.xt-clock { border-radius: var(--r-pill) !important; }
+
+/* ---------- 겹치는 층: 모달 · 메뉴 · 팔레트 · 토스트 ---------- */
+.backdrop { background: rgba(15, 23, 42, 0.16) !important; -webkit-backdrop-filter: blur(10px) saturate(140%) !important; backdrop-filter: blur(10px) saturate(140%) !important; }
+.modal, .palette, .ai-card {
+  background: var(--lg-bg-strong) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(190%) !important; backdrop-filter: blur(40px) saturate(190%) !important;
+  border: 0 !important; border-radius: var(--r-lg) !important;
+  box-shadow: var(--lg-edge), var(--lg-shadow-float) !important;
+}
+.modal { padding: 24px !important; }
+.modal-foot .btn-primary, .modal-foot .btn-ghost { min-width: 72px; justify-content: center; }
+.menu {
+  background: var(--lg-bg-strong) !important;
+  -webkit-backdrop-filter: blur(30px) saturate(190%) !important; backdrop-filter: blur(30px) saturate(190%) !important;
+  border-radius: var(--r-md) !important; padding: 6px !important;
+  box-shadow: var(--lg-edge), 0 18px 48px rgba(31, 41, 80, 0.16) !important;
+}
+.menu button { border-radius: 10px !important; }
+.menu button:hover { background: rgba(118, 118, 128, 0.12) !important; }
+.toast {
+  background: rgba(15, 23, 42, 0.82) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%);
+  border-radius: var(--r-pill) !important; padding: 11px 20px !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 14px 36px rgba(15, 23, 42, 0.25) !important;
+}
+
+/* ---------- 홈 바로가기 ---------- */
+.actions button .ic, .actions .tile-ic, .glass-tile {
+  border-radius: var(--r-md) !important;
+}
+
+/* ---------- 제목·글자: 조금 더 또렷하게 ---------- */
+.page-head h1, .ws-head h1, .ak-head h1 { letter-spacing: -0.03em; }
+.panel h3, .panel h2 { letter-spacing: -0.015em; }
+.mini { color: var(--ink-3); }
+
+/* 시험지(인쇄용)는 종이 그대로 */
+.exam-paper { background: #fff !important; -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* 체크박스·라디오는 채움 칸 규칙에서 뺀다 */
+.field input[type="radio"] { width: auto !important; height: auto !important; padding: 0 !important;
+  background: none !important; box-shadow: none !important; accent-color: var(--accent); }
+.check input, .field .check input {
+  width: 20px !important; height: 20px !important; padding: 0 !important; border-radius: 7px !important;
+  display: grid; place-items: center;
+  background: rgba(255, 255, 255, 0.9) !important; box-shadow: inset 0 0 0 1.5px rgba(15, 23, 42, 0.18) !important;
+}
+.field label.check { display: inline-flex !important; flex-direction: row !important; align-items: center; margin: 0; }
+.check input:checked, .field .check input:checked { background: var(--accent) !important; box-shadow: none !important; }
+@media (max-width: 760px) {
+  .xt-bar { border-radius: var(--r-md) !important; padding: 10px 12px !important; }
+}
+
+/* 움직임 줄이기 · 인쇄 */
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary:active, .btn-ghost:active, .choice:active, .xt-c:active { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .panel, .ws-head, .ws-col, .ws-extra, .ak-card, .ak-quick, .ak-item, .kpi, .stat, .xt-bar, .xt-q, .modal, .menu, .palette {
+    background: #fff !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+  }
+}
+@media print {
+  body { background: #fff !important; }
+  .panel, .ak-card, .ak-quick, .ak-item { background: #fff !important; box-shadow: none !important; border: 1px solid #ddd !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+}

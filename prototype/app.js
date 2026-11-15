@@ -1728,7 +1728,7 @@
       const mats = sheets().filter((x) => problemsOf(x.id).length);
       const total = data.problems.length;
       formModal({
-        title: "시험지 만들기", submit: "시험지 보기",
+        title: "시험 준비하기", submit: "시험 시작",
         body: `
           <div class="field"><label for="ex-scope">범위</label><select id="ex-scope" class="select">
             <option value="all">모든 자료 (${total}문항)</option>
@@ -1899,7 +1899,11 @@
       const b = e.target.closest("[data-ex-mode], [data-per]");
       if (!b) return;
       $$(b.dataset.exMode ? "[data-ex-mode]" : "[data-per]", f).forEach((x) => x.classList.toggle("on", x === b));
-      if (b.dataset.exMode) $$("[data-ex-pane]", f).forEach((x) => (x.hidden = x.dataset.exPane !== b.dataset.exMode));
+      if (b.dataset.exMode) {
+        $$("[data-ex-pane]", f).forEach((x) => (x.hidden = x.dataset.exPane !== b.dataset.exMode));
+        const sub = $("[type=submit]", f);
+        if (sub) sub.textContent = b.dataset.exMode === "take" ? "시험 시작" : "시험지 보기";
+      }
     });
     const t = $("#ex-timer", f), m = $("#ex-min", f);
     if (t) t.onchange = () => (m.disabled = !t.checked);
