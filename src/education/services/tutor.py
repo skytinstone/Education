@@ -109,16 +109,16 @@ def reply(db: Session, user: m.User, text: str, project: m.Project | None) -> tu
                 report = None
             if report and report.accepted:
                 concept = db.get(m.Concept, plan.concept_id)
-                dropped = f" (검증을 통과하지 못한 {len(report.rejected)}문제는 뺐어요)" if report.rejected else ""
-                return (f"'{concept.name}' 문제 {len(report.accepted)}개를 새로 만들고, 다른 AI가 독립적으로 다시 풀어 "
-                        f"정답을 확인했어요{dropped}. 틀린 문제는 오답노트에 자동으로 저장돼요.", report.accepted)
-            note = "새 문제를 만들다 검증을 통과하지 못해서, "
+                dropped = f" 검산에서 떨어진 {len(report.rejected)}문제는 뺐어요." if report.rejected else ""
+                return (f"'{concept.name}' 문제 {len(report.accepted)}개를 만들고 한 번 더 풀어 검산했어요.{dropped} "
+                        "틀린 문제는 오답노트에 저절로 담겨요.", report.accepted)
+            note = "새로 만든 문제가 검산을 통과하지 못해서, "
         else:
-            note = "어떤 개념의 문제인지 찾지 못해서, "
+            note = "어떤 개념인지 알아듣지 못해서, "
 
     ids = _from_bank(db, user, text, domain, scope)
     if not ids:
         where = f"'{db.get(m.Concept, scope[0]).name}' " if scope and len(scope) == 1 else "이 범위의 "
         return f"문제 은행에 아직 {where}문제가 없어요. 잠시 후 다시 요청하거나 개념을 구체적으로 말해 주세요 (예: 치환적분 3문제).", []
-    prefix = note or "AI 연결 전이라 "
-    return f"{prefix}문제 은행의 검증된 문제 {len(ids)}개를 보여드려요. 틀린 문제는 오답노트에 자동으로 저장돼요.", ids
+    prefix = note or "지금은 "
+    return f"{prefix}검증된 문제 은행에서 {len(ids)}개를 골라 드려요. 틀린 문제는 오답노트에 저절로 담겨요.", ids

@@ -3,7 +3,9 @@ from collections import Counter
 from typing import Annotated, Literal
 from uuid import UUID
 
+from pydantic import BaseModel, Field
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Response, UploadFile, status
+from fastapi.responses import FileResponse
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
@@ -144,7 +146,9 @@ def project_workspace(project_id: UUID, user: CurrentUser, db: DB) -> dict:
     out = []
     for p in problems:
         row, meta = rows.get(p.id), p.generation_meta or {}
-        if row and row.sheet_answer:
+        if row and row.manual_answer:
+            source = "manual"
+        elif row and row.sheet_answer:
             source = "file" if row.sheet_material_id else "printed"
         elif row and row.ai_answer:
             source = "ai"
@@ -156,6 +160,7 @@ def project_workspace(project_id: UUID, user: CurrentUser, db: DB) -> dict:
             "needs_figure": bool(meta.get("needs_figure")),
             "answer": p.answer or (row.ai_answer if row else "") or "", "answer_source": source,
             "answer_status": (row.status if row else None) or ("sheet" if p.answer else None),
+            "manual": bool(row and row.manual_answer is not None), "page": meta.get("page"), "domain": p.domain,
             "has_solution": bool(row and (row.ai_solution or row.sheet_explanation)),
         })
     out.sort(key=lambda x: (x["material_id"], x["number"] if x["number"] is not None else 10_000))
@@ -195,6 +200,52 @@ def delete_material(material_id: UUID, user: CurrentUser, db: DB) -> Response:
     _remove_material(db, owned(db, m.Material, material_id, user))
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------- 매핑 편집 (ERD) · 원본 파일 ----------
+class ProblemEdit(BaseModel):
+    """manual_answer: 직접 고친 정답 (빈 문자열이면 정답 없음으로 고정, null 이면 직접 고친 것 취소). number: 문항 번호."""
+    manual_answer: str | None = Field(default=None, max_length=200)
+    reset_manual: bool = False
+    number: int | None = Field(default=None, ge=0, le=9999)
+
+
+@material_router.patch("/{material_id}/problems/{problem_id}")
+def edit_problem(material_id: UUID, problem_id: str, body: ProblemEdit, user: CurrentUser, db: DB) -> dict:
+    """매핑 화면에서 문항의 정답이나 번호를 고친다. 번호를 고치면 연결된 정답 파일과 다시 맞춘다."""
+    material = owned(db, m.Material, material_id, user)
+    p = db.get(m.Problem, problem_id)
+    if p is None or p.material_id != material.id or p.owner_user_id != user.id:
+        raise HTTPException(404, "문항을 찾을 수 없어요")
+    row = answer_key.row_of(db, p)
+    if body.reset_manual:
+        row.manual_answer = None
+    elif body.manual_answer is not None:
+        value = answer_key.normalize(p, body.manual_answer) if body.manual_answer.strip() else ""
+        if body.manual_answer.strip() and not value:
+            raise HTTPException(422, f"보기 번호(1~{len(p.choices)})로 적어 주세요" if p.choices else "정답을 적어 주세요")
+        row.manual_answer = value or None
+    remapped = None
+    if body.number is not None and body.number != answer_key.number_of(p):
+        meta = dict(p.generation_meta or {})
+        meta["number"] = body.number
+        p.generation_meta = meta
+        row.number = body.number
+        db.flush()
+        remapped = answer_key.remap(db, material)
+    answer_key.refresh(p, row)
+    db.commit()
+    return {"answer": p.answer, "status": row.status, "number": answer_key.number_of(p), "remapped": remapped}
+
+
+@material_router.get("/{material_id}/file")
+def material_file(material_id: UUID, user: CurrentUser, db: DB) -> FileResponse:
+    """올린 원본 파일 (올린 사람만) — 그림 문항을 원본에서 볼 때."""
+    material = owned(db, m.Material, material_id, user)
+    path = materials.UPLOAD_DIR / material.storage_path
+    if not path.exists():
+        raise HTTPException(404, "원본 파일이 없어요")
+    return FileResponse(path, media_type=material.content_type, headers={"Cache-Control": "private, max-age=600"})
 
 
 # ---------- 정답지 ----------

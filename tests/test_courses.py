@@ -76,7 +76,7 @@ def test_custom_course_generation_uses_course_context(client, auth, monkeypatch)
     llm = FakeLLM([problem, Verdict(answer="1", work="", well_posed=True, issues=[])])
     monkeypatch.setattr(tutor, "get_llm", lambda: llm)
     ai = client.post("/api/sessions", json={"text": "부분적분 1문제", "project_id": pid}, headers=auth).json()["messages"][1]
-    assert "새로 만들고" in ai["text"] and ai["problems"][0]["concept_ids"][0].startswith(f"{cid}.u1.")
+    assert "만들고 한 번 더 풀어 검산했어요" in ai["text"] and ai["problems"][0]["concept_ids"][0].startswith(f"{cid}.u1.")
     gen_instructions, gen_prompt = llm.prompts[0][1], llm.prompts[0][2]
     assert "코스: 편입 수학 (미적분학)" in gen_prompt and "Stewart Calculus 9/E" in gen_prompt and "언어 영어" in gen_prompt
     assert "고등학교 2015" not in gen_instructions

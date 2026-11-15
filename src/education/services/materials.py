@@ -41,6 +41,7 @@ class ExtractedProblem(BaseModel):
     concept_id: str = Field(description="주어진 개념 목록 중 가장 알맞은 id, 없으면 빈 문자열")
     difficulty: int = Field(description="난이도 1(기본)~5(최고난도) 추정 — 수능이면 2점=1, 4점 킬러=5")
     needs_figure: bool = Field(description="그림·그래프·표가 있어야 풀 수 있으면 true")
+    page: int | None = Field(default=None, description="이 문항이 있는 쪽 번호 (PDF 는 1부터, 사진 한 장이면 1)")
 
 
 class Extraction(BaseModel):
@@ -136,7 +137,7 @@ def _to_problem(db: Session, ex: ExtractedProblem, material: m.Material, project
         source=ProblemSource.TEXTBOOK if material.kind == "textbook" else ProblemSource.PAST_EXAM,
         verification=VerificationStatus.VERIFIED if servable else VerificationStatus.PENDING,
         owner_user_id=material.user_id, material_id=material.id,
-        generation_meta={"number": ex.number, "needs_figure": ex.needs_figure, "has_answer": bool(answer)},
+        generation_meta={"number": ex.number, "needs_figure": ex.needs_figure, "has_answer": bool(answer), "page": ex.page},
     )
     db.add(p)
     db.flush()

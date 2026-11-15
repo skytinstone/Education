@@ -120,7 +120,8 @@ def test_answer_file_maps_one_to_one_by_number(client, auth, monkeypatch, backgr
     assert r.status_code == 201, r.text
     sheet = client.get(f"/api/projects/{pid}/materials", headers=auth).json()[-1]
     assert sheet["kind"] == "answer_sheet" and sheet["answer_for_id"] == mid and sheet["status"] == "ready"
-    assert sheet["answer_map"] == {"matched": 2, "total": 4, "missing": [2, 4], "extra": [7]}
+    mp = sheet["answer_map"]
+    assert (mp["matched"], mp["total"], mp["missing"], mp["extra"]) == (2, 4, [2, 4], [7]) and len(mp["entries"]) == 3
 
     rows = {r.number: r for r in db.scalars(select(m.ProblemAnswer).where(m.ProblemAnswer.material_id == mid))}
     assert len(rows) == 4                                   # 문항 하나에 정답 행 하나
@@ -214,3 +215,37 @@ def test_ask_about_selected_part_uses_problem_context(client, auth, new_user, mo
     assert client.post(f"/api/materials/{mid}/ask", headers=auth, json={**body, "problem_id": "nope"}).status_code == 404
     other = new_user()
     assert client.post(f"/api/materials/{mid}/ask", headers=other, json=body).status_code == 404
+
+
+# ---------- 매핑 편집 (ERD) ----------
+def test_edit_answer_manually_and_reset(client, auth, monkeypatch, background_db, db):
+    pid, mid = setup_material(client, auth, monkeypatch)
+    rows = {x["number"]: x for x in client.get(f"/api/projects/{pid}/workspace", headers=auth).json()["problems"]}
+    p4 = rows[4]["id"]
+    url = f"/api/materials/{mid}/problems/{p4}"
+    r = client.patch(url, json={"manual_answer": "⑤"}, headers=auth).json()
+    assert (r["answer"], r["status"]) == ("5", "manual")
+    w = {x["number"]: x for x in client.get(f"/api/projects/{pid}/workspace", headers=auth).json()["problems"]}
+    assert (w[4]["answer"], w[4]["answer_source"], w[4]["manual"]) == ("5", "manual", True)
+    assert db.get(m.Problem, p4).verification == VerificationStatus.VERIFIED       # 직접 고친 정답으로 연습 가능
+    assert client.patch(url, json={"manual_answer": "9"}, headers=auth).status_code == 422  # 보기 밖 번호
+    r = client.patch(url, json={"reset_manual": True}, headers=auth).json()
+    assert r["answer"] == "" and r["status"] != "manual"                              # 원래대로
+    r = client.patch(f"/api/materials/{mid}/problems/{rows[1]['id']}", json={"manual_answer": ""}, headers=auth).json()
+    assert r["answer"] == "3"                                                          # 빈 값 = 직접 고친 것 없음 → 인쇄된 정답
+
+
+def test_fixing_a_number_remaps_the_answer_file(client, auth, monkeypatch, background_db, db):
+    pid, mid = setup_material(client, auth, monkeypatch)
+    upload_answers(client, auth, pid, mid, [AnswerEntry(number=5, answer="②", explanation=None)], monkeypatch)
+    rows = {x["number"]: x for x in client.get(f"/api/projects/{pid}/workspace", headers=auth).json()["problems"]}
+    assert rows[4]["answer"] == ""                       # 정답 파일의 5번은 짝이 없다
+    r = client.patch(f"/api/materials/{mid}/problems/{rows[4]['id']}", json={"number": 5}, headers=auth).json()
+    assert r["number"] == 5 and r["remapped"]["matched"] == 1 and r["answer"] == "2"   # 번호를 고치니 다시 맞춰짐
+
+
+def test_original_file_is_owner_only(client, auth, new_user, monkeypatch, background_db):
+    _, mid = setup_material(client, auth, monkeypatch)
+    r = client.get(f"/api/materials/{mid}/file", headers=auth)
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+    assert client.get(f"/api/materials/{mid}/file", headers=new_user()).status_code == 404

@@ -239,12 +239,14 @@ class ProblemAnswer(Base):
     ai_answer: Mapped[str | None] = mapped_column(String(200))
     ai_solution: Mapped[str | None] = mapped_column(Text)
     check_answer: Mapped[str | None] = mapped_column(String(200))
-    # sheet(정답만) · confirmed · conflict · verified · uncertain · failed
+    # 사용자가 매핑 화면에서 직접 고친 정답 — 다른 모든 출처보다 우선 (비우면 원래 계산으로 돌아감)
+    manual_answer: Mapped[str | None] = mapped_column(String(200))
+    # manual(직접 입력) · sheet(정답만) · confirmed · conflict · verified · uncertain · failed
     status: Mapped[str | None] = mapped_column(String(12))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (CheckConstraint(
-        "status IN ('sheet', 'confirmed', 'conflict', 'verified', 'uncertain', 'failed')", name="problem_answer_status"),)
+        "status IN ('manual', 'sheet', 'confirmed', 'conflict', 'verified', 'uncertain', 'failed')", name="problem_answer_status"),)
 
 
 class ProblemConcept(Base):

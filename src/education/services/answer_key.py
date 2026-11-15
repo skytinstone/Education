@@ -111,6 +111,12 @@ def same(p: m.Problem, a: str | None, b: str | None) -> bool:
 def refresh(p: m.Problem, row: m.ProblemAnswer) -> None:
     """정답 행에서 상태와 문항의 정답·공개 여부를 다시 계산한다."""
     figure = bool((p.generation_meta or {}).get("needs_figure"))
+    if row.manual_answer:
+        row.status, p.answer = "manual", row.manual_answer
+        if row.ai_solution:
+            p.solution = row.ai_solution
+        p.verification = VerificationStatus.PENDING if figure else VerificationStatus.VERIFIED
+        return
     if row.status == "failed" and not row.ai_answer and not row.sheet_answer:
         p.answer, p.verification = "", VerificationStatus.PENDING
         return
@@ -123,7 +129,7 @@ def refresh(p: m.Problem, row: m.ProblemAnswer) -> None:
         p.answer = row.ai_answer if row.status == "verified" else ""
         ok = row.status == "verified"
     else:
-        row.status, p.answer, ok = None, "", False
+        row.status, p.answer, ok = (None if row.status in (None, "manual") else row.status), "", False
     if row.ai_solution:
         p.solution = row.ai_solution
     # 확실한 정답이 있고 그림 없이 풀 수 있는 문항만 학생 연습에 낸다
@@ -267,7 +273,21 @@ def map_answer_sheet(db: Session, sheet: m.Material, target: m.Material, entries
         row.sheet_explanation = (explanation or "").strip()[:4000] or None
         refresh(p, row)
     missing = sorted(k for k in by_number if k not in seen)
-    return {"matched": len(seen), "total": len(problems), "missing": missing[:200], "extra": sorted(set(extra))[:200]}
+    return {"matched": len(seen), "total": len(problems), "missing": missing[:200], "extra": sorted(set(extra))[:200],
+            "entries": [[n, a, (e or "")[:2000]] for n, a, e in entries][:500]}
+
+
+def remap(db: Session, target: m.Material) -> dict | None:
+    """문항 번호를 고친 뒤 연결된 정답 파일을 다시 맞춘다 (정답 파일에서 읽어 둔 항목으로, AI 를 다시 부르지 않음)."""
+    sheet = db.scalar(select(m.Material).where(m.Material.answer_for_id == target.id))
+    entries = (sheet.answer_map or {}).get("entries") if sheet else None
+    if not sheet or entries is None:
+        return None
+    unmap_answer_sheet(db, sheet)
+    db.flush()
+    summary = map_answer_sheet(db, sheet, target, [tuple(e) for e in entries])
+    sheet.answer_map, sheet.problem_count = summary, summary["matched"]
+    return summary
 
 
 def unmap_answer_sheet(db: Session, sheet: m.Material) -> None:
@@ -282,7 +302,7 @@ def unmap_answer_sheet(db: Session, sheet: m.Material) -> None:
 # ---------- 화면 ----------
 def view(db: Session, material: m.Material) -> dict:
     """정답지 화면에 보낼 내용."""
-    items, counts = [], {"sheet": 0, "confirmed": 0, "verified": 0, "conflict": 0, "uncertain": 0, "failed": 0, "none": 0}
+    items, counts = [], {"manual": 0, "sheet": 0, "confirmed": 0, "verified": 0, "conflict": 0, "uncertain": 0, "failed": 0, "none": 0}
     for p in problems_of(db, material):
         row = db.get(m.ProblemAnswer, p.id)
         st = (row.status if row else None) or "none"
@@ -293,7 +313,8 @@ def view(db: Session, material: m.Material) -> dict:
             "sheet_answer": row.sheet_answer if row else "", "sheet_explanation": row.sheet_explanation if row else None,
             "from_answer_file": bool(row and row.sheet_material_id),
             "ai_answer": row.ai_answer if row else None, "status": st,
-            "needs_figure": bool((p.generation_meta or {}).get("needs_figure")),
+            "needs_figure": bool((p.generation_meta or {}).get("needs_figure")), "page": (p.generation_meta or {}).get("page"),
+            "manual": bool(row and row.manual_answer),
             "solution": row.ai_solution if row else None, "concept_ids": p.concept_ids,
         })
     sheet = db.scalar(select(m.Material).where(m.Material.answer_for_id == material.id))

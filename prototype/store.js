@@ -545,6 +545,18 @@ const Store = (() => {
     // ---------- 기출 업로드 · 기출 기반 생성 (서버 모드 전용) ----------
     listMaterials: (projectId) => api(`/projects/${projectId}/materials`),
     workspace: (projectId) => api(`/projects/${projectId}/workspace`),
+    // 정답 연결 편집 — { manual_answer } · { reset_manual: true } · { number }
+    editProblem: (materialId, problemId, body) => api(`/materials/${materialId}/problems/${encodeURIComponent(problemId)}`, { method: "PATCH", body }),
+    // 올린 원본 파일 (그림 문항 원본 보기)
+    async materialBlob(materialId) {
+      const res = await fetch(`/api/materials/${materialId}/file`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+      if (!res.ok) throw new Error("원본 파일을 열지 못했어요");
+      return res.blob();
+    },
+    // 다른 화면(작업 공간·시험)에서 받은 문항을 채점할 수 있게 문제 목록에 넣는다
+    ensureProblems(list) {
+      list.forEach((p) => { if (!bank[p.id]) mergeProblem({ ...p, answer: null, solution: null }); });
+    },
     pastProblems: (projectId) => api(`/projects/${projectId}/past-problems`),
     // kind: past_exam(기출·시험지) | textbook(교재 페이지)
     uploadMaterial(projectId, file, rightsConfirmed, kind = "past_exam", answerFor = null) {

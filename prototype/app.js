@@ -177,12 +177,12 @@
     $(".wrap").classList.toggle("wide", page === "project");
     if (!page) renderHome(params);
     else if (page === "chat") renderChat(a);
-    else if (page === "project") renderProject(a);
+    else if (page === "project") renderProject(a, params);
     else if (page === "notes") renderNotes();
     else if (page === "library") renderLibrary(a ?? "concepts", b);
     else if (page === "settings") renderSettings(params);
     else if (page === "answer-key") renderAnswerKey(a);
-    else if (page === "exam") renderExam(a, params);
+    else if (page === "exam") renderExamPaper(a, params);
     else if (page === "admin") { location.href = "/admin"; return; }
     else return go("/");
     renderSidebar();
@@ -256,7 +256,9 @@
     const av = $("#profile-avatar");
     av.innerHTML = avatarInner(st.user);
     av.classList.toggle("has-image", st.user.avatarType !== "initial" && !!st.user.avatarType);
-    $("#profile-sub").textContent = `오늘 ${Store.todayCount()} / ${st.user.dailyGoal}문제 · ${Store.streak()}일 연속`;
+    const todayN = Store.todayCount(), streak = Store.streak();
+    $("#profile-sub").textContent = !todayN && !streak ? "오늘 첫 문제를 풀어 보세요"
+      : `오늘 ${todayN} / ${st.user.dailyGoal}문제${streak ? ` · ${streak}일 연속` : ""}`;
     icons();
   }
 
@@ -382,6 +384,7 @@
     el.hidden = false;
     el.innerHTML = `
       <div class="onboard-head"><div><h2>Eureka에 오신 걸 환영해요</h2><p>세 단계면 준비가 끝나요</p></div>
+        <div class="ob-goal"><span>하루 목표</span><div class="seg small">${[5, 10, 20, 30].map((g) => `<button data-goal="${g}" class="${st.user.dailyGoal === g ? "on" : ""}">${g}문제</button>`).join("")}</div></div>
         <button class="icon-btn" data-onboard-close aria-label="안내 닫기" title="다음에 볼게요"><i data-lucide="x"></i></button></div>
       <ol class="onboard-steps">${steps.map((s, i) => `
         <li class="${s.done ? "done" : ""}">
@@ -394,6 +397,12 @@
         try { localStorage.setItem(ONBOARD_KEY, "1"); } catch { /* 저장소 없음 */ }
         el.hidden = true;
         return;
+      }
+      const goalBtn = e.target.closest("[data-goal]");
+      if (goalBtn) {
+        Promise.resolve(Store.updateUser({ dailyGoal: Number(goalBtn.dataset.goal) })).catch((err) => toast(err.message));
+        toast(`하루 목표를 ${goalBtn.dataset.goal}문제로 정했어요`);
+        return renderHome(new URLSearchParams());
       }
       const act = e.target.closest("[data-onboard]")?.dataset.onboard;
       if (act === "wizard") projectWizard();
@@ -509,6 +518,9 @@
   }).observe($("#heat-scroll"));
 
   function renderActivity() {
+    const sec = $(".activity");
+    sec.hidden = !Store.state.attempts.length; // 아직 기록이 없으면 빈 칸만 보이므로 숨긴다
+    if (sec.hidden) return;
     const WEEKS = (shownWeeks = heatWeeks());
     const goal = Math.max(1, Store.state.user.dailyGoal || 20);
     const byDay = new Map();
@@ -623,6 +635,13 @@
     if (!tile) return;
     const label = tile.textContent.trim();
     if (TILE_ROUTES[label]) return go(TILE_ROUTES[label]);
+    if (label === "시험지 만들기") {
+      const ps = Store.state.projects;
+      if (!ps.length) { toast("먼저 준비하는 시험(프로젝트)을 만들어 주세요"); return projectWizard(); }
+      if (ps.length === 1) return go(`/project/${ps[0].id}?exam=1`);
+      return openMenu(tile, [{ label: "어느 시험으로 만들까요?", header: true },
+        ...ps.map((p) => ({ icon: "folder", label: p.name, run: () => go(`/project/${p.id}?exam=1`) }))]);
+    }
     if (!tile.dataset.prompt) return openPalette();
     prompt.value = tile.dataset.prompt;
     send.disabled = false;
@@ -1165,7 +1184,7 @@
         </div>
         <div class="thread">
           ${msgs}
-          ${Store.isPending(id) ? `<div class="msg ai"><span class="ai-avatar"></span><div class="ai-body"><div class="typing"><i></i><i></i><i></i></div>${Store.mode === "api" ? '<p class="mini">답을 준비하고 검산하고 있어요. 문제를 새로 만들면 1분 정도 걸릴 수 있어요</p>' : ""}</div></div>` : ""}
+          ${Store.isPending(id) ? `<div class="msg ai"><span class="ai-avatar"></span><div class="ai-body"><div class="typing"><i></i><i></i><i></i></div></div></div>` : ""}
         </div>
         <form class="composer glass chat-composer" id="chat-form">
           <input id="chat-input" placeholder="이어서 물어보세요" autocomplete="off" />
@@ -1343,9 +1362,9 @@
 
   // ================= 프로젝트: 작업 공간 (올린 문제 · 문제와 정답 · 분석 리포트) =================
   const MATERIAL_STATUS = { uploaded: ["분석 대기", "clock"], extracting: ["AI가 읽는 중", "loader"], ready: ["완료", "circle-check"], failed: ["실패", "circle-alert"] };
-  const SRC_LABEL = { printed: "시험지", file: "정답 파일", ai: "AI 풀이" };
+  const SRC_LABEL = { printed: "시험지", file: "정답 파일", ai: "AI 풀이", manual: "직접 입력" };
   const ANS_STATUS = {
-    sheet: ["정답표", "ok"], confirmed: ["정답 확인", "ok"], verified: ["검산 완료", "ok"],
+    manual: ["직접 입력", "ok"], sheet: ["정답표", "ok"], confirmed: ["정답 확인", "ok"], verified: ["검산 완료", "ok"],
     conflict: ["정답표와 다름", "warn"], uncertain: ["확인 필요", "warn"], failed: ["풀이 실패", "bad"],
   };
   const QTYPE_NAME = { multiple_choice: "객관식", short_answer: "단답형", text: "주관식", numeric: "수치형", essay: "서술형" };
@@ -1354,7 +1373,7 @@
   const ansLabel = (q, a = q.answer) => (!a ? "–" : q.choices ? (CIRC[Number(a) - 1] ?? a) : texAns(a));
   const hasAnswer = (q) => !!q.answer && !["uncertain", "failed"].includes(q.answer_status);
 
-  function renderProject(id) {
+  function renderProject(id, params) {
     const p = Store.project(id);
     if (!p) { toast("프로젝트를 찾을 수 없어요"); return go("/"); }
     const d = projectDomain(p);
@@ -1389,11 +1408,13 @@
           </div>
         </div>
         <div class="ws-kpis">
-          <div><span>시험까지</span><b class="${n != null && n >= 0 && n <= 14 ? "warn" : ""}">${n == null ? "–" : ddayLabel(n)}</b><small>${p.examDate ? p.examDate : "시험일 미정"}</small></div>
-          <div><span>푼 문제</span><b>${tries}</b><small>맞힌 문제 ${right}</small></div>
-          <div><span>정답률</span><b>${pct(acc)}</b><small>이 프로젝트 기준</small></div>
+          ${n == null ? '<button class="ws-kpi-btn" data-proj-edit><span>시험까지</span><b class="soft">시험일 정하기</b><small>D-day를 챙겨 드려요 →</small></button>'
+            : `<div><span>시험까지</span><b class="${n >= 0 && n <= 14 ? "warn" : ""}">${ddayLabel(n)}</b><small>${p.examDate}</small></div>`}
+          ${tries ? `<div><span>푼 문제</span><b>${tries}</b><small>맞힌 문제 ${right}</small></div>
+          <div><span>정답률</span><b>${pct(acc)}</b><small>이 프로젝트 기준</small></div>`
+            : `<a href="#/?project=${id}" class="ws-kpi-wide"><span>학습 기록</span><b class="soft">첫 문제 풀기</b><small>풀면 정답률과 약점을 계산해 드려요 →</small></a>`}
           <a href="#/notes?project=${id}"><span>남은 오답</span><b class="${open ? "warn" : ""}">${open}</b><small>오답노트 열기 →</small></a>
-          <div id="ws-kpi-files"><span>올린 문항</span><b>${api ? "…" : "–"}</b><small>정답 확보 –</small></div>
+          <div id="ws-kpi-files"><span>올린 문항</span><b>${api ? "…" : "–"}</b><small>정답 있음 –</small></div>
         </div>
       </section>
 
@@ -1419,34 +1440,43 @@
         </aside>
       </div>` : '<div class="ai-slot" style="margin-top:16px"><i data-lucide="info"></i><div>기출 업로드와 분석 리포트는 로그인해서 서버 화면으로 열었을 때 쓸 수 있어요.</div></div>'}
 
-      <div class="ws-bottom">
-        <section class="panel">
-          <h3><i data-lucide="target"></i>약점 TOP 3</h3>
+      <section class="panel ws-extra" id="ws-more">
+        <div class="seg small ws-tabs">
+          <button data-ws-tab="weak" class="on"><i data-lucide="target"></i>약점 TOP 3</button>
+          <button data-ws-tab="units"><i data-lucide="list-tree"></i>학습 범위</button>
+          <button data-ws-tab="chats"><i data-lucide="messages-square"></i>대화 ${sessions.length}</button>
+        </div>
+        <div data-ws-pane="weak">
           ${weak.length ? `<ul class="weak-list">${weak.map((w) => `
             <li style="--c:${COLOR[d]}">
               <div class="row"><a href="#/library/concept/${w.conceptId}" style="color:inherit;text-decoration:none">${esc(concept(w.conceptId)?.name ?? "")}</a><span>${pct(w.accuracy)} · ${w.attempts}문제</span></div>
               <div class="bar"><i style="width:${w.accuracy * 100}%"></i></div>
             </li>`).join("")}</ul>` : '<p class="mini">문제를 풀면 약점이 여기에 나타나요</p>'}
-        </section>
-        <section class="panel">
-          <h3><i data-lucide="list-tree"></i>학습 범위</h3>
+        </div>
+        <div data-ws-pane="units" hidden>
           <div class="unit-list">${units.map((u) => `<span class="pill" style="--c:${COLOR[d]}">${esc(concept(u)?.name ?? "")}</span>`).join("")}</div>
-        </section>
-        <section class="panel">
-          <h3><i data-lucide="messages-square"></i>대화 ${sessions.length}개</h3>
-          ${sessions.length ? `<div class="list">${sessions.slice(0, 6).map((s) => `
+        </div>
+        <div data-ws-pane="chats" hidden>
+          ${sessions.length ? `<div class="list">${sessions.slice(0, 8).map((s) => `
             <a href="#/chat/${s.id}"><i data-lucide="message-circle"></i>${esc(s.title)}<span>${relTime(s.updatedAt)}</span></a>`).join("")}</div>`
             : '<p class="mini">아직 대화가 없어요. "이 프로젝트에서 새 학습"으로 시작해 보세요</p>'}
-        </section>
-      </div>`;
+        </div>
+      </section>`;
     $("#project-more").addEventListener("click", (e) => projectMenu(e.currentTarget, id));
-    if (api) bindWorkspace(id);
+    $("#ws-more").addEventListener("click", (e) => {
+      const t = e.target.closest("[data-ws-tab]");
+      if (!t) return;
+      $$("#ws-more [data-ws-tab]").forEach((b) => b.classList.toggle("on", b === t));
+      $$("#ws-more [data-ws-pane]").forEach((pane) => (pane.hidden = pane.dataset.wsPane !== t.dataset.wsTab));
+    });
+    $$("[data-proj-edit]").forEach((b) => b.addEventListener("click", () => projectModal(p)));
+    if (api) bindWorkspace(id, params?.get("exam") === "1");
   }
 
-  function bindWorkspace(id) {
+  function bindWorkspace(id, openExam = false) {
     const here = () => navKey() === `project:${id}`;
     const st = wsState[id];
-    let data = null, timer = null;
+    let data = null, timer = null, openExamOnLoad = false;
 
     async function load() {
       if (!here()) return;
@@ -1454,6 +1484,10 @@
       if (!here()) return;
       if (st.sel !== "all" && !data.materials.some((x) => x.id === st.sel)) st.sel = "all";
       draw();
+      if (openExamOnLoad) {
+        openExamOnLoad = false;
+        if (data.problems.length) examOptions(); else toast("시험지를 만들려면 먼저 기출을 올려 주세요");
+      }
       clearTimeout(timer);
       if (data.materials.some((x) => x.status === "uploaded" || x.status === "extracting" || x.answer_key_status === "running")) timer = setTimeout(load, 4000);
     }
@@ -1465,7 +1499,7 @@
 
     function drawKpi() {
       const total = data.problems.length, ok = data.problems.filter(hasAnswer).length;
-      $("#ws-kpi-files").innerHTML = `<span>올린 문항</span><b>${total}</b><small>정답 확보 ${total ? `${Math.round((ok / total) * 100)}%` : "–"} (${ok}/${total})</small>`;
+      $("#ws-kpi-files").innerHTML = `<span>올린 문항</span><b>${total}</b><small>정답 있음 ${total ? `${Math.round((ok / total) * 100)}%` : "–"} (${ok}/${total})</small>`;
     }
 
     function drawFiles() {
@@ -1507,9 +1541,9 @@
           : `<button class="btn-ghost" data-ak-make="${mat.id}"><i data-lucide="file-pen-line"></i>정답지 만들기</button>`) : "";
       $("#ws-sheet").innerHTML = `
         <div class="ws-col-head">
-          <div><h3><i data-lucide="table-2"></i>${mat ? esc(mat.filename) : "모든 문제"}</h3><small>${qs.length}문항 · 정답 확보 ${ok}/${qs.length}</small></div>
+          <div><h3><i data-lucide="table-2"></i>${mat ? esc(mat.filename) : "모든 문제"}</h3><small>${qs.length}문항 · 정답 있음 ${ok}/${qs.length}</small></div>
           <div class="ws-sheet-actions">
-            <div class="seg small"><button data-ws-view="list" class="${st.view === "list" ? "on" : ""}"><i data-lucide="rows-3"></i>문제·정답</button><button data-ws-view="erd" class="${st.view === "erd" ? "on" : ""}"><i data-lucide="network"></i>매핑 ERD</button></div>
+            <div class="seg small"><button data-ws-view="list" class="${st.view === "list" ? "on" : ""}"><i data-lucide="rows-3"></i>문제·정답</button><button data-ws-view="erd" class="${st.view === "erd" ? "on" : ""}"><i data-lucide="network"></i>정답 연결 보기</button></div>
             ${keyBtn}
           </div>
         </div>
@@ -1549,19 +1583,20 @@
       const rows = qs.slice(0, ERD_MAX);
       const mp = af?.answer_map;
       return `
-        ${auto ? `<p class="mini erd-note">자료를 고르지 않아 <b>${esc(mat.filename)}</b>의 매핑을 보여 드려요. 왼쪽에서 다른 자료를 고를 수 있어요</p>` : ""}
+        ${auto ? `<p class="mini erd-note">자료를 고르지 않아 <b>${esc(mat.filename)}</b>의 연결을 보여 드려요. 왼쪽에서 다른 자료를 고를 수 있어요</p>` : ""}
+        <p class="erd-tip"><i data-lucide="pencil"></i>번호나 정답을 누르면 고칠 수 있어요. 번호를 고치면 정답 파일과 다시 맞춰요</p>
         <div class="erd" id="erd">
           <svg class="erd-lines" id="erd-lines" aria-hidden="true"></svg>
           <div class="erd-ent">
             <div class="erd-h"><i data-lucide="table"></i>problems<small>문제지 · ${qs.length} rows</small></div>
             <div class="erd-c"><span><em>PK</em> id</span><span>number</span></div>
-            ${rows.map((q, i) => `<div class="erd-r" data-pr="${q.id}"><code>${esc(q.id.slice(0, 10))}</code><span>#${q.number ?? i + 1}</span></div>`).join("")}
+            ${rows.map((q, i) => `<div class="erd-r" data-pr="${q.id}"><code>${esc(q.id.slice(0, 10))}</code><button class="erd-edit" data-erd-num="${q.id}" title="번호 고치기">#${q.number ?? i + 1}<i data-lucide="pencil"></i></button></div>`).join("")}
           </div>
           <div class="erd-ent">
             <div class="erd-h"><i data-lucide="table"></i>problem_answers<small>1 : 1</small></div>
             <div class="erd-c"><span><em>FK</em> problem_id</span><span>answer</span><span>source</span></div>
             ${rows.map((q, i) => `<div class="erd-r ${hasAnswer(q) ? "" : q.answer ? "warn" : "missing"}" data-ar="${q.id}" data-src="${q.answer_source ?? ""}">
-              <code>→ #${q.number ?? i + 1}</code><b data-math>${esc(ansLabel(q))}</b><span class="src">${q.answer_source ? `<i class="sd sd-${q.answer_source}"></i>${q.answer_source}` : "NULL"}</span></div>`).join("")}
+              <code>→ #${q.number ?? i + 1}</code><button class="erd-edit" data-erd-ans="${q.id}" title="정답 고치기"><b data-math>${esc(ansLabel(q))}</b><i data-lucide="pencil"></i></button><span class="src">${q.answer_source ? `<i class="sd sd-${q.answer_source}"></i>${SRC_LABEL[q.answer_source]}` : "없음"}</span></div>`).join("")}
           </div>
           <div class="erd-ent erd-sheet">
             <div class="erd-h"><i data-lucide="table"></i>materials<small>answer_sheet · N : 1</small></div>
@@ -1577,8 +1612,8 @@
           </div>
         </div>
         <div class="erd-legend">
-          <span><i class="ln ok"></i>정답 연결 (1:1)</span><span><i class="ln warn"></i>확인 필요</span><span><i class="ln miss"></i>정답 없음 (NULL)</span>
-          <span><i class="sd sd-printed"></i>printed 시험지</span><span><i class="sd sd-file"></i>file 정답 파일</span><span><i class="sd sd-ai"></i>ai 풀이</span>
+          <span><i class="ln ok"></i>연결됨 (문항 1개에 정답 1개)</span><span><i class="ln warn"></i>확인 필요</span><span><i class="ln miss"></i>정답 없음</span>
+          <span><i class="sd sd-printed"></i>시험지</span><span><i class="sd sd-file"></i>정답 파일</span><span><i class="sd sd-ai"></i>AI 풀이</span><span><i class="sd sd-manual"></i>직접 입력</span>
           ${qs.length > ERD_MAX ? `<span class="mini">처음 ${ERD_MAX}개 행만 표시</span>` : ""}
         </div>`;
     }
@@ -1610,7 +1645,7 @@
       const host = $("#ws-report");
       if (!total) {
         host.innerHTML = `<div class="ws-col-head"><h3><i data-lucide="chart-pie"></i>분석 리포트</h3></div>
-          <div class="ws-empty small"><i data-lucide="chart-no-axes-column"></i><b>아직 분석할 문제가 없어요</b><span>기출을 올리면 출제 유형·난이도·정답 확보율을 정리해 드려요</span></div>
+          <div class="ws-empty small"><i data-lucide="chart-no-axes-column"></i><b>아직 분석할 문제가 없어요</b><span>기출을 올리면 출제 유형·난이도·정답 비율을 정리해 드려요</span></div>
           <button class="btn-primary ws-exam" disabled><i data-lucide="file-text"></i>시험 준비하기</button>`;
         return;
       }
@@ -1630,7 +1665,7 @@
         <ul class="ws-insights">
           <li><i data-lucide="target"></i><span>가장 많이 나온 유형은 <b>${esc(topC[0][0])}</b> (${topC[0][1]}문항, ${pctOf(topC[0][1])})</span></li>
           <li><i data-lucide="gauge"></i><span>평균 난이도 <b>${avg.toFixed(1)}</b> · ${avg >= 3.5 ? "어려운 문항 비중이 높아요" : avg >= 2.5 ? "중간 난도 중심이에요" : "기본 문항 위주예요"}</span></li>
-          <li><i data-lucide="${noneN || warnN ? "circle-alert" : "badge-check"}"></i><span>정답 확보 <b>${okN}/${total}</b>${noneN + warnN ? ` · ${noneN + warnN}문항은 정답 파일 연결이나 정답지로 채워 주세요` : " · 모든 문항의 정답이 있어요"}</span></li>
+          <li><i data-lucide="${noneN || warnN ? "circle-alert" : "badge-check"}"></i><span>정답 있음 <b>${okN}/${total}</b>${noneN + warnN ? ` · ${noneN + warnN}문항은 정답 파일 연결이나 정답지로 채워 주세요` : " · 모든 문항의 정답이 있어요"}</span></li>
           ${fig ? `<li><i data-lucide="image"></i><span>그림이 필요한 문항 <b>${fig}개</b> — 시험지에서는 원본을 함께 보세요</span></li>` : ""}
         </ul>
         <h4 class="ws-h4">출제 유형</h4>
@@ -1641,12 +1676,52 @@
         <div class="ws-diff">${byDiff.map((k, i) => `<div title="${DIFF_NAME[i]} ${k}문항"><span class="col"><i style="height:${(k / maxD) * 100}%"></i></span><b>${k}</b><small>${DIFF_NAME[i]}</small></div>`).join("")}</div>
         <h4 class="ws-h4">문항 형식</h4>
         <div class="ws-types">${byType.map(([name, k]) => `<span>${esc(name)} <b>${k}</b></span>`).join("")}</div>
-        <h4 class="ws-h4">정답 확보</h4>
+        <h4 class="ws-h4">정답 현황</h4>
         <div class="ws-stack" role="img" aria-label="정답 확인 ${okN}, 확인 필요 ${warnN}, 정답 없음 ${noneN}">
           <i class="ok" style="flex:${okN}"></i><i class="warn" style="flex:${warnN}"></i><i class="none" style="flex:${noneN}"></i></div>
         <div class="ws-stack-legend"><span><i class="ok"></i>확인 ${okN}</span><span><i class="warn"></i>확인 필요 ${warnN}</span><span><i class="none"></i>정답 없음 ${noneN}</span></div>
         <button class="btn-primary ws-exam" data-exam><i data-lucide="file-text"></i>시험 준비하기</button>
-        <p class="mini ws-exam-note">올린 문제로 실제 시험지 형태를 만들어 인쇄하거나 PDF로 저장해요</p>`;
+        <p class="mini ws-exam-note">올린 문제로 화면에서 바로 시험을 보거나(타이머), 시험지로 인쇄해요</p>`;
+    }
+
+    // 정답 연결 편집: 정답 직접 고치기 · 번호 고치기
+    function editAnswer(pid) {
+      const q = data.problems.find((x) => x.id === pid);
+      const save = async (body, msg) => {
+        try { await Store.editProblem(q.material_id, pid, body); toast(msg); } catch (err) { toast(err.message); }
+        load();
+      };
+      formModal({
+        title: `${q.number ?? ""}번 정답 고치기`, submit: "저장",
+        body: `<p class="modal-text clamp3" data-math>${esc(q.stem)}</p>
+          ${q.choices ? `<div class="erd-pick">${q.choices.map((c, k) => `<label><input type="radio" name="erd-ans" value="${k + 1}" ${q.answer === String(k + 1) ? "checked" : ""} /><span>${CIRC[k]}</span><span data-math>${esc(c)}</span></label>`).join("")}</div>`
+            : `<div class="field"><label for="erd-ans-text">정답</label><input id="erd-ans-text" value="${esc(q.answer)}" maxlength="200" /></div>`}
+          <p class="mini">지금 정답의 출처: ${q.answer_source ? SRC_LABEL[q.answer_source] : "없음"}. 직접 고친 정답은 시험지·정답 파일·AI 풀이보다 우선해요.</p>
+          ${q.manual ? '<button type="button" class="btn-ghost" data-erd-reset><i data-lucide="undo-2"></i>직접 고친 것 취소하고 원래대로</button>' : ""}`,
+        onSubmit: (f) => {
+          const v = q.choices ? $("input[name=erd-ans]:checked", f)?.value : $("#erd-ans-text", f).value.trim();
+          if (!v) { toast(q.choices ? "보기를 골라 주세요" : "정답을 적어 주세요"); return false; }
+          save({ manual_answer: v }, `${q.number ?? ""}번 정답을 고쳤어요`);
+        },
+      });
+      $("[data-erd-reset]")?.addEventListener("click", () => { closeOverlays(); save({ reset_manual: true }, "원래 정답으로 되돌렸어요"); });
+      icons();
+    }
+    function editNumber(pid) {
+      const q = data.problems.find((x) => x.id === pid);
+      formModal({
+        title: "문항 번호 고치기", submit: "저장",
+        body: `<p class="modal-text clamp3" data-math>${esc(q.stem)}</p>
+          <div class="field"><label for="erd-num">번호</label><input id="erd-num" type="number" min="0" max="9999" value="${q.number ?? ""}" /></div>
+          <p class="mini">AI가 번호를 잘못 읽었을 때 고쳐 주세요. 정답 파일이 연결돼 있으면 새 번호로 다시 맞춰요.</p>`,
+        onSubmit: (f) => {
+          const n = Number($("#erd-num", f).value);
+          if (!Number.isInteger(n) || n < 0) { toast("번호를 숫자로 적어 주세요"); return false; }
+          Store.editProblem(q.material_id, pid, { number: n })
+            .then((r) => toast(r.remapped ? `번호를 고치고 정답 파일과 다시 맞췄어요 (${r.remapped.matched}/${r.remapped.total})` : "번호를 고쳤어요"))
+            .catch((err) => toast(err.message)).finally(load);
+        },
+      });
     }
 
     function examOptions() {
@@ -1661,10 +1736,17 @@
           <div class="field"><label for="ex-n">문항 수</label><select id="ex-n" class="select">
             ${[["all", "전체"], ["10", "10문항"], ["20", "20문항"], ["30", "30문항"]].map(([v, t]) => `<option value="${v}">${t}</option>`).join("")}</select></div>
           <label class="check"><input type="checkbox" id="ex-shuffle" /> 문항 순서 섞기</label>
-          <label class="check"><input type="checkbox" id="ex-key" checked /> 마지막 장에 정답표 넣기</label>`,
+          <div class="field"><label>어떻게 볼까요?</label><div class="seg ex-mode">
+            <button type="button" data-ex-mode="take" class="on"><i data-lucide="timer"></i>화면에서 시험 보기</button>
+            <button type="button" data-ex-mode="print"><i data-lucide="printer"></i>인쇄용 시험지</button></div></div>
+          <div data-ex-pane="take">${takeFields()}</div>
+          <div data-ex-pane="print" hidden><label class="check"><input type="checkbox" id="ex-key" checked /> 마지막 장에 정답표 넣기</label></div>`,
+        onMount: (f) => bindModeSeg(f),
         onSubmit: (f) => {
-          const q = new URLSearchParams({ m: $("#ex-scope", f).value, n: $("#ex-n", f).value, key: $("#ex-key", f).checked ? "1" : "0" });
+          const take = $("[data-ex-mode].on", f).dataset.exMode === "take";
+          const q = new URLSearchParams({ m: $("#ex-scope", f).value, n: $("#ex-n", f).value });
           if ($("#ex-shuffle", f).checked) q.set("seed", String(Math.floor(Math.random() * 1e9)));
+          if (take) readTake(f, q); else q.set("key", $("#ex-key", f).checked ? "1" : "0");
           go(`/exam/${id}?${q}`);
         },
       });
@@ -1697,6 +1779,8 @@
       if ((x = el("[data-ws-view]"))) { st.view = x.dataset.wsView; drawSheet(); icons(); if (st.view === "erd") requestAnimationFrame(drawErdLines); return; }
       if ((x = el("[data-ws-row]"))) { const k = x.dataset.wsRow; st.open.has(k) ? st.open.delete(k) : st.open.add(k); drawSheet(); icons(); return; }
       if ((x = el("[data-attach-answer]"))) return uploadAnswerFile(id, x.dataset.attachAnswer, load);
+      if ((x = el("[data-erd-ans]"))) return editAnswer(x.dataset.erdAns);
+      if ((x = el("[data-erd-num]"))) return editNumber(x.dataset.erdNum);
       if ((x = el("[data-ak-make]"))) { x.disabled = true; return makeAnswerKey(x.dataset.akMake).catch((err) => { toast(err.message); load(); }); }
       if (el("[data-exam]")) return examOptions();
       if ((x = el("[data-level]"))) { $$("#gen-level [data-level]").forEach((b) => b.classList.toggle("on", b === x)); return; }
@@ -1719,6 +1803,7 @@
       const t = e.target.closest("[data-ws-sel], [data-ws-row]");
       if (t && !e.target.closest("button")) { e.preventDefault(); t.click(); }
     };
+    if (openExam) { history.replaceState(null, "", `#/project/${id}`); openExamOnLoad = true; }
     const ro = new ResizeObserver(() => { if (st.view === "erd" && here()) drawErdLines(); });
     ro.observe($("#ws-sheet"));
     load();
@@ -1726,7 +1811,7 @@
 
   // ================= 시험지 (올린 문제로 실제 시험지 형태) =================
   const seeded = (seed) => () => { seed |= 0; seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  async function renderExam(projectId, params) {
+  async function renderExamPaper(projectId, params) {
     const p = Store.project(projectId);
     if (!p) { toast("프로젝트를 찾을 수 없어요"); return go("/"); }
     view.innerHTML = '<p class="mini">시험지를 준비하는 중…</p>';
@@ -1734,7 +1819,8 @@
     try { w = await Store.workspace(projectId); } catch (e) { view.innerHTML = `<p class="mini">${esc(e.message)}</p>`; return; }
     if (route().parts[0] !== "exam") return;
     const scope = params.get("m") ?? "all";
-    let list = w.problems.filter((q) => scope === "all" || q.material_id === scope);
+    const only = params.get("ids") ? new Set(params.get("ids").split(",")) : null;
+    let list = w.problems.filter((q) => (scope === "all" || q.material_id === scope) && (!only || only.has(q.id)));
     if (params.get("seed")) {
       const rnd = seeded(Number(params.get("seed")));
       list = list.map((q) => [rnd(), q]).sort((a, b) => a[0] - b[0]).map(([, q]) => q);
@@ -1748,6 +1834,7 @@
     const subject = concept(p.subjectId)?.name ?? "";
     const year = new Date().getFullYear() + 1;
     const scopeName = scope === "all" ? "" : w.materials.find((x) => x.id === scope)?.filename ?? "";
+    if (params.get("take") === "1") return renderExamTake({ p, list, params, pts, subject, scopeName });
 
     view.innerHTML = `
       <div class="exam-toolbar print-hide">
@@ -1755,6 +1842,7 @@
         <span class="mini">${list.length}문항 · ${totalPts}점${scopeName ? ` · ${esc(scopeName)}` : ""}</span>
         <div class="page-actions">
           <button class="btn-ghost" data-exam-shuffle><i data-lucide="shuffle"></i>다시 섞기</button>
+          ${list.length ? '<button class="btn-ghost" data-exam-take><i data-lucide="timer"></i>화면에서 시험 보기</button>' : ""}
           <button class="btn-primary" data-exam-print><i data-lucide="printer"></i>인쇄 · PDF 저장</button>
         </div>
       </div>
@@ -1774,7 +1862,7 @@
               <div class="exam-qh"><b>${i + 1}.</b><span data-math>${esc(q.stem)}</span><em class="exam-pts">[${pts(q)}점]</em></div>
               ${q.choices ? `<ol class="exam-choices ${q.choices.every((c) => c.length <= 8) ? "inline" : ""}">${q.choices.map((c, k) => `<li><span class="c">${CIRC[k]}</span><span data-math>${esc(c)}</span></li>`).join("")}</ol>`
                 : '<div class="exam-blank">답 : <span></span></div>'}
-              ${q.needs_figure ? '<p class="exam-note">※ 그림이 필요한 문항이에요. 원본 시험지를 함께 보세요.</p>' : ""}
+              ${q.needs_figure ? `<p class="exam-note">※ 그림이 필요한 문항이에요. 원본 시험지를 함께 보세요. <button class="link-btn print-hide" data-orig="${q.material_id}" data-page="${q.page ?? ""}">원본 보기${q.page ? ` (${q.page}쪽)` : ""}</button></p>` : ""}
             </section>`).join("")}
         </div>
         <footer class="exam-foot">— 끝 —</footer>
@@ -1788,11 +1876,255 @@
     icons();
     view.onclick = (e) => {
       if (e.target.closest("[data-exam-print]")) return window.print();
+      const o = e.target.closest("[data-orig]");
+      if (o) return openOriginal(o.dataset.orig, o.dataset.page);
+      if (e.target.closest("[data-exam-take]")) return takeOptions(projectId, params);
       if (e.target.closest("[data-exam-shuffle]")) {
         const q = new URLSearchParams(params);
         q.set("seed", String(Math.floor(Math.random() * 1e9)));
         location.hash = `#/exam/${projectId}?${q}`;
       }
+    };
+  }
+
+  // ================= 화면에서 시험 보기 =================
+  // 한 문제씩 / 4문제씩, 타이머(선택) — 제출하면 바로 채점하고 틀린 문항은 오답노트에 담긴다
+  const takeFields = (n = 0) => `
+    <div class="field"><label>한 화면에</label><div class="seg ex-per">
+      <button type="button" data-per="1" class="on">한 문제씩</button><button type="button" data-per="4">4문제씩</button></div></div>
+    <div class="field ex-timer"><label class="check"><input type="checkbox" id="ex-timer" checked /> 타이머 켜기</label>
+      <select id="ex-min" class="select">${[10, 20, 30, 40, 50, 60, 80, 100].map((m) => `<option value="${m}" ${m === Math.min(100, Math.max(10, Math.round(n * 3 / 10) * 10 || 30)) ? "selected" : ""}>${m}분</option>`).join("")}</select></div>`;
+  function bindModeSeg(f) {
+    f.addEventListener("click", (e) => {
+      const b = e.target.closest("[data-ex-mode], [data-per]");
+      if (!b) return;
+      $$(b.dataset.exMode ? "[data-ex-mode]" : "[data-per]", f).forEach((x) => x.classList.toggle("on", x === b));
+      if (b.dataset.exMode) $$("[data-ex-pane]", f).forEach((x) => (x.hidden = x.dataset.exPane !== b.dataset.exMode));
+    });
+    const t = $("#ex-timer", f), m = $("#ex-min", f);
+    if (t) t.onchange = () => (m.disabled = !t.checked);
+  }
+  function readTake(f, q) {
+    q.set("take", "1");
+    q.set("per", $("[data-per].on", f).dataset.per);
+    q.set("t", $("#ex-timer", f).checked ? $("#ex-min", f).value : "0");
+  }
+  function takeOptions(projectId, base, title = "화면에서 시험 보기") {
+    const n = base.get("ids") ? base.get("ids").split(",").length : 0;
+    formModal({
+      title, submit: "시작",
+      body: takeFields(n) + '<p class="mini">답을 고르면 저절로 저장돼요. 제출하면 바로 채점하고, 틀린 문항은 오답노트에 담아요.</p>',
+      onMount: (f) => bindModeSeg(f),
+      onSubmit: (f) => {
+        const q = new URLSearchParams(base);
+        ["key", "take", "per", "t"].forEach((k) => q.delete(k));
+        readTake(f, q);
+        go(`/exam/${projectId}?${q}`);
+      },
+    });
+  }
+  // 정답지에서 '틀린 문항': 이 자료 문항 중 마지막으로 푼 것이 틀린 것
+  function akWrong(key) {
+    const ids = new Set(key.items.map((i) => i.id)), last = {};
+    Store.state.attempts.forEach((a) => { if (ids.has(a.problemId)) last[a.problemId] = a.correct; });
+    return Object.keys(last).filter((k) => last[k] === false);
+  }
+  async function openOriginal(materialId, page) {
+    const win = window.open("", "_blank"); // 팝업 차단을 피하려고 먼저 연다
+    try {
+      const blob = await Store.materialBlob(materialId);
+      const url = URL.createObjectURL(blob);
+      if (blob.type.startsWith("image/")) {
+        win?.close();
+        openSheet({ title: "원본 보기", wide: true, body: `<img class="orig-img" src="${url}" alt="올린 원본" />`, onSubmit: () => {} });
+      } else if (win) win.location.href = url + (page ? `#page=${page}` : "");
+      else location.href = url;
+    } catch (err) { win?.close(); toast(err.message); }
+  }
+
+  let takeTimer = null;
+  function renderExamTake({ p, list, params, pts, subject, scopeName }) {
+    clearInterval(takeTimer);
+    if (!list.length) { view.innerHTML = '<div class="empty"><i data-lucide="file-x"></i><b>시험 볼 문항이 없어요</b></div>'; icons(); return; }
+    const per = params.get("per") === "4" ? 4 : 1;
+    const limit = Number(params.get("t") || 0) * 60_000;
+    const KEY = `eureka.take.${p.id}.${list.map((q) => q.id).join(",").slice(0, 400)}`;
+    const here = location.hash;
+    let s = null;
+    try { s = JSON.parse(sessionStorage.getItem(KEY)); } catch { /* 저장소 없음 */ }
+    if (!s || s.done) s = { answers: {}, page: 0, startedAt: Date.now(), done: false };
+    const save = () => { try { sessionStorage.setItem(KEY, JSON.stringify(s)); } catch { /* 무시 */ } };
+    const pages = Math.ceil(list.length / per);
+    const answered = () => list.filter((q) => (s.answers[q.id] ?? "") !== "").length;
+    const left = () => Math.max(0, s.startedAt + limit - Date.now());
+    const clock = (ms) => { const t = Math.ceil(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+    const totalPts = list.reduce((a, q) => a + pts(q), 0);
+
+    const qHTML = (q, i) => {
+      const my = s.answers[q.id] ?? "";
+      return `
+      <section class="xt-q" data-q="${q.id}">
+        <div class="xt-qh"><b>${i + 1}</b><span class="xt-pts">${pts(q)}점</span>
+          ${q.needs_figure ? `<button class="xt-orig" data-orig="${q.material_id}" data-page="${q.page ?? ""}"><i data-lucide="file-image"></i>원본 보기${q.page ? ` (${q.page}쪽)` : ""}</button>` : ""}</div>
+        <p class="xt-stem" data-math>${esc(q.stem)}</p>
+        ${q.needs_figure ? '<p class="exam-note">※ 그림이 필요한 문항이에요. 원본을 함께 보세요.</p>' : ""}
+        ${q.choices ? `<div class="xt-choices">${q.choices.map((c, k) => `
+          <button type="button" class="xt-c ${my === String(k + 1) ? "on" : ""}" data-pick="${k + 1}" aria-pressed="${my === String(k + 1)}"><span class="c">${CIRC[k]}</span><span data-math>${esc(c)}</span></button>`).join("")}</div>`
+          : `<label class="xt-short"><span>답</span><input data-short value="${esc(my)}" maxlength="200" placeholder="답을 적어 주세요" autocomplete="off" /></label>`}
+      </section>`;
+    };
+
+    function draw() {
+      const from = s.page * per, shown = list.slice(from, from + per);
+      view.innerHTML = `
+        <div class="xt">
+          <div class="xt-bar">
+            <a class="ak-back" href="#/project/${p.id}" data-xt-leave><i data-lucide="x"></i>나가기</a>
+            <div class="xt-title"><b>${esc(subject || p.name)}</b><span>${list.length}문항 · ${totalPts}점${scopeName ? ` · ${esc(scopeName)}` : ""}</span></div>
+            <div class="xt-prog"><span>답한 문항 <b id="xt-done">${answered()}</b>/${list.length}</span><i><em style="width:${(answered() / list.length) * 100}%"></em></i></div>
+            ${limit ? `<div class="xt-clock" id="xt-clock"><i data-lucide="timer"></i><b>${clock(left())}</b></div>` : `<div class="xt-clock off" id="xt-clock"><i data-lucide="clock"></i><b>${clock(Date.now() - s.startedAt)}</b></div>`}
+            <button class="btn-primary" data-xt-submit><i data-lucide="send"></i>제출</button>
+          </div>
+          <div class="xt-omr" aria-label="문항 바로 가기">${list.map((q, i) => `<button class="${(s.answers[q.id] ?? "") !== "" ? "done" : ""} ${i >= from && i < from + per ? "cur" : ""}" data-jump="${i}">${i + 1}</button>`).join("")}</div>
+          <div class="xt-body ${per === 4 ? "four" : "one"}">${shown.map((q, k) => qHTML(q, from + k)).join("")}</div>
+          <div class="xt-nav">
+            <button class="btn-ghost" data-xt-prev ${s.page === 0 ? "disabled" : ""}><i data-lucide="chevron-left"></i>이전</button>
+            <span class="mini">${s.page + 1} / ${pages}</span>
+            ${s.page < pages - 1 ? '<button class="btn-ghost" data-xt-next>다음<i data-lucide="chevron-right"></i></button>'
+              : '<button class="btn-primary" data-xt-submit><i data-lucide="send"></i>제출하기</button>'}
+          </div>
+        </div>`;
+      icons();
+    }
+    const refreshProgress = () => {
+      $("#xt-done").textContent = answered();
+      $(".xt-prog em").style.width = `${(answered() / list.length) * 100}%`;
+      list.forEach((q, i) => $(`.xt-omr [data-jump="${i}"]`)?.classList.toggle("done", (s.answers[q.id] ?? "") !== ""));
+    };
+    const goPage = (n) => { s.page = Math.max(0, Math.min(pages - 1, n)); save(); draw(); view.scrollIntoView?.({ block: "start" }); };
+
+    async function submit(auto = false) {
+      if (s.done) return;
+      clearInterval(takeTimer);
+      s.done = true;
+      save();
+      const usedMs = Date.now() - s.startedAt;
+      view.innerHTML = '<div class="xt-grading"><i data-lucide="loader" class="spin"></i><b>채점하는 중…</b></div>';
+      icons();
+      Store.ensureProblems(list.map((q) => ({ ...q })));
+      const rows = [];
+      for (const q of list) {
+        const my = (s.answers[q.id] ?? "").trim();
+        if (!my) { rows.push({ q, my, correct: false, skipped: true, answer: q.answer }); continue; }
+        try {
+          const r = await Store.answer({ problemId: q.id, answer: my, projectId: p.id });
+          rows.push({ q, my, correct: r.correct, answer: Store.problem?.(q.id)?.answer ?? q.answer });
+        } catch (err) {
+          rows.push({ q, my, correct: null, answer: q.answer, why: err.message });
+        }
+      }
+      try { sessionStorage.removeItem(KEY); } catch { /* 무시 */ }
+      if (location.hash !== here) return;
+      showResult(rows, usedMs, auto);
+    }
+
+    function showResult(rows, usedMs, auto) {
+      const graded = rows.filter((r) => r.correct !== null);
+      const right = rows.filter((r) => r.correct);
+      const score = right.reduce((a, r) => a + pts(r.q), 0);
+      const wrongIds = rows.filter((r) => r.correct === false).map((r) => r.q.id);
+      const label = (q, a) => (a ? (q.choices ? CIRC[Number(a) - 1] ?? a : a) : "–");
+      view.innerHTML = `
+        <div class="xt-result">
+          <div class="xt-score panel">
+            ${auto ? '<p class="mini"><i data-lucide="alarm-clock"></i> 시간이 다 돼서 저절로 제출했어요</p>' : ""}
+            <span>${esc(subject || p.name)} · ${list.length}문항</span>
+            <b>${score}<small> / ${totalPts}점</small></b>
+            <div class="xt-stats"><div><span>맞힌 문항</span><b>${right.length}/${list.length}</b></div>
+              <div><span>걸린 시간</span><b>${clock(usedMs)}</b></div>
+              <div><span>안 푼 문항</span><b>${rows.filter((r) => r.skipped).length}</b></div></div>
+            ${graded.length < rows.length - rows.filter((r) => r.skipped).length ? `<p class="mini">정답이 아직 없는 ${rows.length - graded.length - rows.filter((r) => r.skipped).length}문항은 채점하지 못했어요</p>` : ""}
+            <div class="page-actions">
+              ${wrongIds.length ? '<button class="btn-primary" data-xt-retry><i data-lucide="rotate-ccw"></i>틀린 문항만 다시 풀기</button>' : ""}
+              ${wrongIds.length ? '<a class="btn-ghost" href="#/notes"><i data-lucide="circle-x"></i>오답노트 보기</a>' : ""}
+              <button class="btn-ghost" data-xt-again><i data-lucide="refresh-cw"></i>처음부터 다시</button>
+              <a class="btn-ghost" href="#/project/${p.id}"><i data-lucide="folder"></i>프로젝트로</a>
+            </div>
+          </div>
+          <div class="panel xt-table"><h3><i data-lucide="list-checks"></i>문항별 결과</h3>
+            ${rows.map((r, i) => `<div class="xt-row ${r.correct ? "ok" : r.correct === false ? "bad" : ""}">
+              <b>${i + 1}</b><span class="xt-st"><i data-lucide="${r.correct ? "circle-check" : r.correct === false ? "circle-x" : "circle-help"}"></i>${r.correct ? "맞음" : r.skipped ? "안 풂" : r.correct === false ? "틀림" : "채점 못 함"}</span>
+              <span class="xt-stem1" data-math>${esc(r.q.stem.slice(0, 80))}</span>
+              <span class="xt-ans">내 답 <b data-math>${esc(label(r.q, r.my))}</b></span>
+              <span class="xt-ans">정답 <b data-math>${esc(label(r.q, r.answer))}</b></span></div>`).join("")}
+          </div>
+        </div>`;
+      icons();
+      view.onclick = (e) => {
+        if (e.target.closest("[data-xt-retry]")) {
+          const q = new URLSearchParams(params);
+          q.set("ids", wrongIds.join(","));
+          q.delete("seed");
+          return go(`/exam/${p.id}?${q}`);
+        }
+        if (e.target.closest("[data-xt-again]")) return renderExamTake({ p, list, params, pts, subject, scopeName });
+      };
+    }
+
+    draw();
+    takeTimer = setInterval(() => {
+      if (location.hash !== here || s.done) return clearInterval(takeTimer);
+      const c = $("#xt-clock b");
+      if (!c) return;
+      if (limit) {
+        const ms = left();
+        c.textContent = clock(ms);
+        $("#xt-clock").classList.toggle("warn", ms <= 5 * 60_000);
+        if (ms <= 0) submit(true);
+      } else c.textContent = clock(Date.now() - s.startedAt);
+    }, 1000);
+    if (limit && left() <= 0) return submit(true);
+
+    view.onclick = (e) => {
+      let x;
+      if ((x = e.target.closest("[data-orig]"))) return openOriginal(x.dataset.orig, x.dataset.page);
+      if ((x = e.target.closest("[data-pick]"))) {
+        const id = x.closest("[data-q]").dataset.q;
+        s.answers[id] = s.answers[id] === x.dataset.pick ? "" : x.dataset.pick; // 다시 누르면 지움
+        save();
+        $$(`[data-q="${CSS.escape(id)}"] [data-pick]`).forEach((b) => { const on = b.dataset.pick === s.answers[id]; b.classList.toggle("on", on); b.setAttribute("aria-pressed", on); });
+        refreshProgress();
+        if (per === 1 && s.answers[id] && s.page < pages - 1) setTimeout(() => goPage(s.page + 1), 260);
+        return;
+      }
+      if ((x = e.target.closest("[data-jump]"))) return goPage(Math.floor(Number(x.dataset.jump) / per));
+      if (e.target.closest("[data-xt-prev]")) return goPage(s.page - 1);
+      if (e.target.closest("[data-xt-next]")) return goPage(s.page + 1);
+      if (e.target.closest("[data-xt-leave]")) {
+        e.preventDefault();
+        return confirmModal({ title: "시험을 그만둘까요?", text: "고른 답은 이 창을 닫기 전까지 남아 있어서, 다시 들어오면 이어서 풀 수 있어요.", action: "나가기",
+          run: () => { clearInterval(takeTimer); go(`/project/${p.id}`); } });
+      }
+      if (e.target.closest("[data-xt-submit]")) {
+        const miss = list.length - answered();
+        if (!miss) return submit();
+        return confirmModal({ title: "제출할까요?", text: `아직 답하지 않은 문항이 ${miss}개 있어요. 안 푼 문항은 틀린 것으로 계산해요.`, action: "제출",
+          run: () => submit() });
+      }
+    };
+    view.oninput = (e) => {
+      const inp = e.target.closest("[data-short]");
+      if (!inp || location.hash !== here) return;
+      s.answers[inp.closest("[data-q]").dataset.q] = inp.value;
+      save();
+      refreshProgress();
+    };
+    view.onkeydown = (e) => {
+      if (location.hash !== here || s.done) return;
+      if (e.target.closest("input")) { if (e.key === "Enter" && s.page < pages - 1) goPage(s.page + 1); return; }
+      if (e.key === "ArrowRight") goPage(s.page + 1);
+      else if (e.key === "ArrowLeft") goPage(s.page - 1);
+      else if (per === 1 && /^[1-5]$/.test(e.key)) $(`.xt-q [data-pick="${e.key}"]`)?.click();
     };
   }
 
@@ -1911,6 +2243,7 @@
   // ================= 정답지 =================
   const CIRC = "①②③④⑤⑥⑦⑧⑨";
   const AK_STATUS = {
+    manual: ["직접 입력", "user-check", "ok", "정답 연결 화면에서 직접 고친 정답이에요"],
     sheet: ["정답표", "file-check", "ok", ""],
     confirmed: ["정답 확인", "badge-check", "ok", "시험지 정답과 AI 풀이가 같아요"],
     verified: ["검산 완료", "badge-check", "ok", "두 번 풀어 같은 답이 나왔어요"],
@@ -1943,13 +2276,15 @@
           ${key.answer_file ? `<p class="ak-file"><i data-lucide="link-2"></i>정답 파일 <b>${esc(key.answer_file.filename)}</b>${key.answer_file.map ? ` · ${key.answer_file.map.matched}/${key.answer_file.map.total}문항 1:1 연결` : ""}</p>` : ""}
         </div>
         <div class="page-actions ak-actions">
-          ${has && !running ? `<button class="btn-ghost" data-ak-rebuild><i data-lucide="refresh-cw"></i>다시 만들기</button>
+          ${has && !running ? `<button class="btn-ghost" data-ak-take><i data-lucide="timer"></i>이 문제지로 시험 보기</button>
+            ${akWrong(key).length ? `<button class="btn-ghost" data-ak-retry><i data-lucide="rotate-ccw"></i>틀린 문항만 다시 풀기 (${akWrong(key).length})</button>` : ""}
+            <button class="btn-ghost" data-ak-rebuild><i data-lucide="refresh-cw"></i>다시 만들기</button>
             <button class="btn-primary" data-ak-print><i data-lucide="printer"></i>인쇄 · PDF 저장</button>` : ""}
         </div>
       </div>
       ${has ? `
         <div class="ak-summary">
-          <span class="ak-chip ok"><i data-lucide="badge-check"></i>정답 확인 ${(c.confirmed ?? 0) + (c.verified ?? 0) + (c.sheet ?? 0)}</span>
+          <span class="ak-chip ok"><i data-lucide="badge-check"></i>정답 확인 ${(c.confirmed ?? 0) + (c.verified ?? 0) + (c.sheet ?? 0) + (c.manual ?? 0)}</span>
           ${need ? `<span class="ak-chip warn"><i data-lucide="triangle-alert"></i>확인 필요 ${need}</span>` : '<span class="ak-chip">모든 문항이 확인됐어요</span>'}
           <span class="mini">정답표가 있던 문항은 AI 풀이와 맞춰 봤고, 없던 문항은 두 번 풀어 비교했어요</span>
         </div>
@@ -1973,7 +2308,8 @@
             <div class="ak-item-head"><b>${it.number ?? n + 1}번</b>
               <span class="ak-badge ${tone}"><i data-lucide="${icon}"></i>${label}</span>
               ${it.from_answer_file ? '<span class="ak-badge"><i data-lucide="link-2"></i>정답 파일</span>' : ""}
-              ${it.needs_figure ? '<span class="ak-badge"><i data-lucide="image"></i>그림 문항</span>' : ""}
+              ${it.needs_figure ? `<span class="ak-badge"><i data-lucide="image"></i>그림 문항</span><button type="button" class="ak-ask" data-orig="${mat.id}" data-page="${it.page ?? ""}"><i data-lucide="file-image"></i>원본 보기${it.page ? ` (${it.page}쪽)` : ""}</button>` : ""}
+              ${it.manual ? '<span class="ak-badge"><i data-lucide="user-check"></i>직접 입력</span>' : ""}
               <button type="button" class="ak-ask" data-ak-ask="${esc(it.id)}" data-number="${it.number ?? n + 1}" title="이 문항에 대해 AI 에게 묻기 (해설을 드래그해도 돼요)"><i data-lucide="message-square-quote"></i>질문하기</button></div>
             <p class="stem" data-math>${esc(it.stem)}</p>
             ${it.choices ? `<ol class="ak-choices">${it.choices.map((ch, k) => `<li class="${String(k + 1) === it.answer ? "on" : ""}"><span>${CIRC[k]}</span><span data-math>${esc(ch)}</span></li>`).join("")}</ol>` : ""}
@@ -1990,6 +2326,10 @@
       const jump = e.target.closest("[data-ak-jump]");
       if (jump) { e.preventDefault(); $(`#ak-${CSS.escape(jump.dataset.akJump)}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
       if (e.target.closest("[data-ak-print]")) return window.print();
+      const o = e.target.closest("[data-orig]");
+      if (o) return openOriginal(o.dataset.orig, o.dataset.page);
+      if (e.target.closest("[data-ak-take]")) return takeOptions(mat.project_id, new URLSearchParams({ m: mat.id }));
+      if (e.target.closest("[data-ak-retry]")) return takeOptions(mat.project_id, new URLSearchParams({ m: mat.id, ids: akWrong(key).join(",") }), "틀린 문항 다시 풀기");
       const askBtn = e.target.closest("[data-ak-ask]");
       if (askBtn) return openAsk({ problemId: askBtn.dataset.akAsk, number: askBtn.dataset.number });
       if (e.target.closest("[data-ak-start], [data-ak-rebuild]")) {
@@ -2186,7 +2526,7 @@
           <h1><i data-lucide="circle-x"></i>오답노트</h1>
           <p>${proj ? `${esc(proj.name)}의 오답 · <a href="#/notes" style="color:inherit">전체 보기</a>` : "틀린 문제를 다시 풀어 맞히면 극복으로 표시돼요"}</p>
         </div>
-        <div class="page-actions print-hide"><button class="btn-ghost" data-print-notes title="지금 보이는 오답을 인쇄하거나 PDF로 저장"><i data-lucide="printer"></i>인쇄 · PDF</button></div>
+        <div class="page-actions print-hide"><button class="btn-ghost" data-print-notes title="지금 보이는 오답을 인쇄하거나 PDF로 저장"><i data-lucide="printer"></i>인쇄 · PDF 저장</button></div>
       </div>
       <div class="note-stats" id="note-stats"></div>
       <div class="toolbar glass-bar">
@@ -2407,7 +2747,7 @@
     renderNote(id);
   }
 
-  // ---------- 내 맞춤 개념 정리 (검증 에이전트를 통과한 것만) ----------
+  // ---------- 내 맞춤 개념 정리 (한 번 더 검토를 통과한 것만) ----------
   const noteCache = {}; // conceptId → note | null
   const noteBusy = new Set(); // 만드는 중인 개념
   async function renderNote(id) {
@@ -2426,7 +2766,7 @@
     draw(noteCache[id] ? noteHTML(noteCache[id]) : `
       <div class="ai-slot"><i data-lucide="sparkles"></i><div style="flex:1"><b style="color:var(--ink)">내 맞춤 개념 정리 · 암기 카드</b><br />
         내 풀이·오답 기록에 맞춰 핵심 정리, 꼭 외울 공식, 자주 틀리는 점, 예제를 만들고 암기 카드도 덱에 넣어 드려요.
-        검증 에이전트가 내용을 확인한 뒤 보여줘요 (1~2분).
+        한 번 더 검토한 뒤 보여 드려요 (1~2분).
         <div style="margin-top:10px"><button class="btn-primary" data-make-note><i data-lucide="wand-sparkles"></i>만들기</button></div></div></div>`);
     slot.onclick = async (e) => {
       if (!e.target.closest("[data-make-note]") || noteBusy.has(id)) return;
@@ -2435,7 +2775,7 @@
       try {
         const r = await withAIProgress({
           title: "내 맞춤 개념 정리를 만드는 중",
-          steps: ["내 풀이·오답 살펴보기", "핵심 정리 쓰기", "검증 에이전트 확인", "암기 카드 넣기"], expectMs: 70000,
+          steps: ["내 풀이·오답 살펴보기", "핵심 정리 쓰기", "한 번 더 검토하기", "암기 카드 넣기"], expectMs: 70000,
           run: () => Store.createNote(id),
         });
         noteCache[id] = r.note;
@@ -2445,7 +2785,7 @@
       if (location.hash === `#/library/concept/${id}`) renderConcept(id);
     };
   }
-  const NOTE_BUSY = `<div class="ai-slot"><i data-lucide="loader-circle" class="spin"></i><div><b style="color:var(--ink)">AI가 정리하고, 검증 에이전트가 확인하는 중이에요</b><br />1~2분 걸려요. 다른 화면에 다녀와도 계속 만들어요.</div></div>`;
+  const NOTE_BUSY = `<div class="ai-slot"><i data-lucide="loader-circle" class="spin"></i><div><b style="color:var(--ink)">AI가 정리하고 한 번 더 검토하는 중이에요</b><br />1~2분 걸려요. 다른 화면에 다녀와도 계속 만들어요.</div></div>`;
 
   function noteHTML(n) {
     const c = n.content;
@@ -3112,7 +3452,7 @@
 
 
   // ================= 새 프로젝트 =================
-  const QTYPE = { auto: "코스 형식대로", multiple_choice: "객관식", text: "주관식 (글자)", numeric: "수치형", essay: "서술형",
+  const QTYPE = { auto: "시험 형식대로", multiple_choice: "객관식", text: "주관식 (글자)", numeric: "수치형", essay: "서술형",
     short_answer: "단답형 (정수)", mixed: "객관식 + 단답형" };
   const FORMAT_NAME = { multiple_choice: "객관식", short_answer: "단답형", text: "주관식", numeric: "수치형", essay: "서술형" };
   // "코스 형식대로"가 실제로 무엇인지 (예: 객관식 4지선다 · 주관식)
@@ -3121,7 +3461,7 @@
     const fs = c?.formats?.length ? c.formats : ["multiple_choice"];
     return fs.map((f) => (f === "multiple_choice" ? `객관식 ${c?.choice_count ?? 5}지선다` : FORMAT_NAME[f] ?? f)).join(" · ");
   };
-  const qtypeLabel = (p) => (p.questionType === "auto" || !p.questionType ? `코스 형식대로 (${courseFormats(p.subjectId)})` : QTYPE[p.questionType]);
+  const qtypeLabel = (p) => (p.questionType === "auto" || !p.questionType ? courseFormats(p.subjectId) : QTYPE[p.questionType]);
   const UPLOAD_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
   const fmtSize = (n) => (n > 1048576 ? `${(n / 1048576).toFixed(1)}MB` : `${Math.max(1, Math.round(n / 1024))}KB`);
   const isoAfter = (days) => new Date(Date.now() + days * DAY - new Date().getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
@@ -3344,7 +3684,7 @@
       $("[data-period]", body).textContent = left != null && left >= 0 ? `준비 기간 ${left}일 · ${ddayLabel(left)}` : "";
       if (!w.goalTouched) $("#w-goal").value = w.goal;
       if (!w.nameTouched) $("#w-name").value = defaultName();
-      $("[data-auto-formats]", body).textContent = w.subjectId ? `· 코스 형식대로 = ${courseFormats(w.subjectId)}` : "";
+      $("[data-auto-formats]", body).textContent = w.subjectId ? `· 이 시험의 형식: ${courseFormats(w.subjectId)}` : "";
     }
     function setSubject(id) {
       if (id && !concept(id)) {
@@ -3674,12 +4014,8 @@
   $("#actions").innerHTML = [
     ["pencil-line", "문제 풀기", "미적분 3점짜리 3문제 내줘"],
     ["circle-x", "오답노트", ""],
-    ["chart-no-axes-column", "약점 분석", "이번 주 내 약점 분석해줘"],
+    ["file-text", "시험지 만들기", ""],
     ["book-open", "개념 정리", ""],
-    ["layers", "암기 카드", ""],
-    ["scroll-text", "기출 스타일", "6월 모평 스타일로 화학 2문제"],
-    ["timer", "모의고사", "수학 모의고사 3문항 시작"],
-    ["ellipsis", "더보기", ""],
   ].map(([icon, label, p]) => `<button class="action" data-prompt="${p}"><span class="tile"><i data-lucide="${icon}"></i></span>${label}</button>`).join("");
 
   // 첫 화면 표시 — 서버 모드면 내 데이터를 받아 온 뒤에 그린다

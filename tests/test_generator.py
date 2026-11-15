@@ -140,7 +140,7 @@ def test_tutor_uses_ai_when_configured(db, monkeypatch, auth, client):
     monkeypatch.setattr(tutor, "get_llm", lambda: FakeLLM([good_problem(), good_problem(stem="두 번째")], [verdict("1")] * 2))
     s = client.post("/api/sessions", json={"text": "치환적분 2문제"}, headers=auth).json()
     ai = s["messages"][1]
-    assert "새로 만들고" in ai["text"]
+    assert "만들고 한 번 더 풀어 검산했어요" in ai["text"]
     assert [p["id"].startswith("ai_") for p in ai["problems"]] == [True, True]
     assert all(p["answer"] is None for p in ai["problems"])  # 풀기 전엔 정답 숨김
 
@@ -150,7 +150,7 @@ def test_tutor_falls_back_to_bank(db, monkeypatch, auth, client):
     monkeypatch.setattr(tutor, "get_llm", lambda: failing)
     s = client.post("/api/sessions", json={"text": "치환적분 1문제"}, headers=auth).json()
     ai = s["messages"][1]
-    assert "검증을 통과하지 못해서" in ai["text"]
+    assert "검산을 통과하지 못해서" in ai["text"]
     assert ai["problems"] and all(not p["id"].startswith("ai_") for p in ai["problems"])
     # 탈락한 AI 문제는 학생에게 나가지 않는다
     rejected = db.scalar(select(func.count()).select_from(m.Problem).where(m.Problem.verification == VerificationStatus.REJECTED))
@@ -166,7 +166,7 @@ def test_tutor_bank_stays_in_requested_subject(db, monkeypatch, auth, client):
 def test_tutor_without_ai_uses_bank(db, monkeypatch, auth, client):
     monkeypatch.setattr(tutor, "get_llm", lambda: None)
     ai = client.post("/api/sessions", json={"text": "화학 2문제"}, headers=auth).json()["messages"][1]
-    assert ai["text"].startswith("AI 연결 전이라") and len(ai["problems"]) == 2
+    assert ai["text"].startswith("지금은 검증된 문제 은행에서") and len(ai["problems"]) == 2
 
 
 def test_project_textbook_guides_generation(db, monkeypatch, auth, client):
