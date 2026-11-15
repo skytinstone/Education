@@ -286,6 +286,7 @@ class MaterialOut(Out):
     kind: str = "past_exam"  # past_exam | textbook
     error: str | None
     problem_count: int
+    answer_key_status: str | None = None  # 정답지: null · running · done · failed
     created_at: datetime
 
 

@@ -879,3 +879,71 @@ body.work-full-open { overflow: hidden; }
 .ex-table table { width: 100%; border-collapse: collapse; margin-top: 8px; font-variant-numeric: tabular-nums; }
 .ex-table th, .ex-table td { text-align: right; padding: 4px 8px; border-bottom: 1px solid var(--line); }
 .ex-table th:first-child, .ex-table td:first-child { text-align: left; }
+
+/* ---------- 정답지 ---------- */
+.material { grid-template-columns: auto 1fr auto auto auto; }
+.ak-link { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px; border-radius: 999px; font-size: 12.5px; font-weight: 600;
+  color: var(--accent); background: var(--accent-soft); text-decoration: none; white-space: nowrap; }
+.ak-link:hover { background: color-mix(in srgb, var(--accent) 16%, #fff); }
+.ak-link [data-lucide] { width: 13px; height: 13px; }
+.ak-link:disabled { opacity: .5; }
+@media (max-width: 640px) {
+  .material { grid-template-columns: auto 1fr auto; }
+  .material .status-pill, .material .ak-link { grid-column: 2; justify-self: start; }
+}
+
+.ak-back { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--ink-3); text-decoration: none; margin-bottom: 8px; }
+.ak-back:hover { color: var(--ink); }
+.ak-back [data-lucide] { width: 14px; height: 14px; }
+.ak-actions button { display: inline-flex; align-items: center; gap: 6px; }
+.ak-progress { margin-top: 18px; display: flex; gap: 14px; align-items: flex-start; }
+.ak-progress > [data-lucide] { width: 22px; height: 22px; color: var(--accent); animation: spin 1.2s linear infinite; flex-shrink: 0; }
+.ak-progress p { margin-top: 4px; font-size: 13.5px; color: var(--ink-2); }
+.ak-summary { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-top: 18px; }
+.ak-summary .mini { margin-top: 0; }
+.ak-chip { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border-radius: 999px; font-size: 13px; font-weight: 600; background: rgba(15,23,42,.05); color: var(--ink-2); }
+.ak-chip [data-lucide] { width: 15px; height: 15px; }
+.ak-chip.ok { background: rgba(22,163,74,.09); color: #15803d; }
+.ak-chip.warn { background: rgba(249,115,22,.1); color: #c2410c; }
+
+.ak-quick { margin-top: 14px; }
+.ak-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 6px; margin-top: 12px; }
+.ak-cell { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 4px; border-radius: 10px; text-decoration: none; color: inherit;
+  background: rgba(15,23,42,.035); box-shadow: inset 0 0 0 1px transparent; transition: background .15s; }
+.ak-cell:hover { background: rgba(15,23,42,.07); }
+.ak-cell span { font-size: 11.5px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.ak-cell b { font-size: 16px; font-weight: 700; }
+.ak-cell.warn { background: rgba(249,115,22,.08); box-shadow: inset 0 0 0 1px rgba(249,115,22,.35); }
+.ak-cell.bad { background: rgba(225,29,72,.06); box-shadow: inset 0 0 0 1px rgba(225,29,72,.3); }
+
+.ak-list { display: grid; gap: 12px; margin-top: 14px; }
+.ak-item { display: grid; gap: 12px; scroll-margin-top: 64px; }
+.ak-item-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ak-item-head > b { font-size: 15px; }
+.ak-badge { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgba(15,23,42,.05); color: var(--ink-2); }
+.ak-badge [data-lucide] { width: 13px; height: 13px; }
+.ak-badge.ok { background: rgba(22,163,74,.09); color: #15803d; }
+.ak-badge.warn { background: rgba(249,115,22,.1); color: #c2410c; }
+.ak-badge.bad { background: rgba(225,29,72,.08); color: var(--bad); }
+.ak-item .stem { font-size: 15px; line-height: 1.75; }
+.ak-choices { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 8px; padding: 0; }
+.ak-choices li { display: flex; gap: 8px; padding: 6px 10px; border-radius: 9px; font-size: 14px; }
+.ak-choices li.on { background: rgba(22,163,74,.08); box-shadow: inset 0 0 0 1px rgba(22,163,74,.35); font-weight: 600; }
+.ak-answer { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 10px 12px; border-radius: 12px; background: rgba(79,107,255,.06); }
+.ak-answer > span, .ak-solution > span { font-size: 12.5px; font-weight: 700; color: var(--accent); }
+.ak-answer b { font-size: 17px; }
+.ak-answer small { flex-basis: 100%; font-size: 12.5px; color: var(--ink-2); }
+.ak-solution { display: grid; gap: 6px; font-size: 14.5px; line-height: 1.75; color: var(--ink); }
+
+/* 인쇄·PDF: 사이드바·버튼을 빼고 정답지만 */
+@media print {
+  #dots, .sidebar, .topbar, .ak-actions, .ak-back, .toast { display: none !important; }
+  html, body { height: auto !important; overflow: visible !important; background: #fff !important; }
+  .app { display: block !important; height: auto !important; padding: 0 !important; }
+  .main, .content { overflow: visible !important; padding: 0 !important; }
+  .wrap { max-width: none !important; padding: 0 !important; }
+  #view > * { animation: none !important; }
+  .panel { box-shadow: none !important; border: 1px solid #ddd !important; background: #fff !important; }
+  .ak-item { break-inside: avoid; }
+  .ak-cell { break-inside: avoid; }
+}

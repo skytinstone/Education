@@ -554,6 +554,9 @@ const Store = (() => {
       return api(`/projects/${projectId}/materials`, { method: "POST", form });
     },
     deleteMaterial: (id) => api(`/materials/${id}`, { method: "DELETE" }),
+    // 정답지 — 만들기 시작(백그라운드) / 정답·해설 보기
+    startAnswerKey: (id) => api(`/materials/${id}/answer-key`, { method: "POST" }),
+    answerKey: (id) => api(`/materials/${id}/answer-key`),
     async generateFromPast(projectId, { level, count }) {
       const s = toSession(await api(`/projects/${projectId}/generate`, { method: "POST", body: { level, count } }));
       state.sessions.push(s);

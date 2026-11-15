@@ -24,6 +24,7 @@ src/education/
   services/learning.py      채점, 오답노트, 약점 통계
   services/tutor.py         대화 답변 (AI 연결 전 임시: 문제 은행에서 고르기)
   services/explain.py       계산·설명 질문의 풀이 (단계별 풀이, 그래프, 검산) · mathcheck.py 안전한 수식 읽기·SymPy 검산
+  services/answer_key.py    정답지 (올린 기출·교재 문항의 정답·해설, 정답표 대조·이중 풀이 검산)
   services/notes.py         내 맞춤 개념 정리 + 암기 카드 (생성 → 검증 에이전트)
   services/review.py        서술형 풀이 확인 (손글씨 사진도 읽음, 처음 틀린 단계 표시)
   services/feedback.py      피드백·문제 신고 (두 사람이 신고하면 숨김), mailer.py 운영자 메일
@@ -83,6 +84,7 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 | 라이브러리 | `GET /concepts` · `GET /concepts/{id}` · `GET/POST /concepts/{id}/note` (내 맞춤 개념 정리, 만들 때 카드도 덱에) · `GET /saved` · `PUT/DELETE /saved/{problem_id}` · `GET /cards` · `PATCH /cards/{id}` · `POST /cards/reset` |
 | 통계 | `GET /stats` (오늘 푼 문제, 연속 학습일, 과목별 정답률, 약점) |
 | 기출 | `POST /projects/{id}/materials` (PDF·사진 업로드 → AI 분석) · `GET /projects/{id}/materials` · `GET /projects/{id}/past-problems` · `DELETE /materials/{id}` |
+| 정답지 | `POST /materials/{id}/answer-key` (백그라운드: 문항마다 정답·단계별 해설. 정답표가 있으면 AI 풀이와 대조, 없으면 두 번 풀어 비교) · `GET /materials/{id}/answer-key` |
 | 기출 기반 생성 | `POST /projects/{id}/generate` `{level: easier\|same\|harder, count}` → 결과를 프로젝트의 새 대화로 |
 | 계정 | `PATCH /me` (생년월일·학교·전공·주소·캐릭터) · `POST /me/avatar` (사진) · `GET /users/{id}/avatar` · `GET /search/schools?q=` (나이스 학교 검색) |
 | 피드백 | `POST /feedback` (의견·문제 신고, 같은 문제를 두 사람이 신고하면 숨김) · `GET /feedback/mine` |

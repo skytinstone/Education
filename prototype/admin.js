@@ -104,7 +104,7 @@
   const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["ai", "AI 사용량", "cpu"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"]];
   const METHOD_NAME = { password: "이메일", google: "Google", kakao: "카카오" };
   const PURPOSE_NAME = { generate: "문제 생성", verify: "문제 검증", note_generate: "개념 정리 생성", note_verify: "개념 정리 검증",
-    course: "코스 만들기", extract: "기출·교재 분석", essay_grade: "서술형 채점", review: "풀이 확인", explain: "계산·설명 풀이" };
+    course: "코스 만들기", extract: "기출·교재 분석", essay_grade: "서술형 채점", review: "풀이 확인", explain: "계산·설명 풀이", answer_key: "정답지 풀이", answer_verify: "정답지 검산" };
   const FAIL_REASON = { bad_credentials: "비밀번호 틀림", suspended: "정지된 계정" };
   const adminState = {
     days: 30, aiDays: 30,

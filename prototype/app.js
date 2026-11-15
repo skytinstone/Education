@@ -174,6 +174,7 @@
     else if (page === "notes") renderNotes();
     else if (page === "library") renderLibrary(a ?? "concepts", b);
     else if (page === "settings") renderSettings(params);
+    else if (page === "answer-key") renderAnswerKey(a);
     else if (page === "admin") { location.href = "/admin"; return; }
     else return go("/");
     renderSidebar();
@@ -1269,12 +1270,17 @@
             <i data-lucide="${m.content_type === "application/pdf" ? "file-text" : "image"}"></i>
             <div class="material-name"><b>${esc(m.filename)}</b><small>${m.kind === "textbook" ? "교재 페이지" : "기출·시험지"} · ${fmtSize(m.size_bytes)} · ${relTime(Date.parse(m.created_at))}</small></div>
             <span class="status-pill ${m.status}"><i data-lucide="${icon}"></i>${label}${m.status === "ready" ? ` · ${m.problem_count}문제` : ""}</span>
+            ${m.status === "ready" && m.problem_count ? (m.answer_key_status === "running"
+              ? '<span class="status-pill extracting"><i data-lucide="loader" class="spin"></i>정답지 만드는 중</span>'
+              : m.answer_key_status === "done"
+                ? `<a class="ak-link" href="#/answer-key/${m.id}"><i data-lucide="file-check-2"></i>정답지 보기</a>`
+                : `<button class="ak-link" data-ak-make="${m.id}"><i data-lucide="file-pen-line"></i>${m.answer_key_status === "failed" ? "정답지 다시 시도" : "정답지 만들기"}</button>`) : ""}
             <button class="icon-btn" data-del-material="${m.id}" aria-label="삭제" title="삭제"><i data-lucide="trash-2"></i></button>
             ${m.error ? `<p class="material-error">${esc(m.error)}</p>` : ""}
           </div>`;
       }).join("") : '<p class="mini">아직 올린 기출이 없어요. 기출을 올리면 그 시험의 결을 따라 문제를 만들어요</p>';
       icons();
-      if (list.some((m) => m.status === "uploaded" || m.status === "extracting")) setTimeout(loadMaterials, 4000);
+      if (list.some((m) => m.status === "uploaded" || m.status === "extracting" || m.answer_key_status === "running")) setTimeout(loadMaterials, 4000);
       else loadPast();
     }
     async function loadPast() {
@@ -1298,7 +1304,13 @@
       const b = e.target.closest("[data-level]");
       if (b) $$("#gen-level [data-level]").forEach((x) => x.classList.toggle("on", x === b));
     });
-    $("#materials").addEventListener("click", (e) => {
+    $("#materials").addEventListener("click", async (e) => {
+      const make = e.target.closest("[data-ak-make]");
+      if (make) {
+        make.disabled = true;
+        try { await Store.startAnswerKey(make.dataset.akMake); toast("정답지를 만들기 시작했어요. 다 되면 알림으로 알려 드려요"); } catch (err) { toast(err.message); }
+        return loadMaterials();
+      }
       const del = e.target.closest("[data-del-material]");
       if (del) confirmModal({
         title: "올린 기출을 삭제할까요?", text: "원본 파일과 AI가 읽어 둔 기출 문제가 삭제돼요. 그것으로 만든 문제와 풀이 기록은 남아요.",
@@ -1323,6 +1335,87 @@
       }
     });
     loadMaterials();
+  }
+
+  // ================= 정답지 =================
+  const CIRC = "①②③④⑤⑥⑦⑧⑨";
+  const AK_STATUS = {
+    confirmed: ["정답 확인", "badge-check", "ok", "시험지 정답과 AI 풀이가 같아요"],
+    verified: ["검산 완료", "badge-check", "ok", "두 번 풀어 같은 답이 나왔어요"],
+    conflict: ["정답표와 다름", "triangle-alert", "warn", "시험지 정답과 AI 풀이가 달라요. 한 번 확인해 주세요"],
+    uncertain: ["확인 필요", "circle-help", "warn", "두 번 푼 답이 달라요. 한 번 확인해 주세요"],
+    failed: ["풀이 실패", "circle-x", "bad", "이 문항은 풀지 못했어요"],
+    none: ["아직 없음", "circle-dashed", "", ""],
+  };
+  const akLabel = (it, a = it.answer) => (!a ? "–" : it.choices ? `${CIRC[Number(a) - 1] ?? a}` : a);
+  let akTimer = null;
+
+  async function renderAnswerKey(materialId) {
+    clearTimeout(akTimer);
+    view.innerHTML = '<p class="mini">정답지를 불러오는 중…</p>';
+    let key;
+    try { key = await Store.answerKey(materialId); } catch (e) { view.innerHTML = `<div class="empty"><i data-lucide="file-x"></i><b>${esc(e.message)}</b></div>`; icons(); return; }
+    if (route().parts[0] !== "answer-key" || route().parts[1] !== materialId) return;
+    const mat = key.material, c = key.counts;
+    const running = mat.answer_key_status === "running";
+    const has = key.items.some((i) => i.status !== "none");
+    const need = (c.conflict ?? 0) + (c.uncertain ?? 0) + (c.failed ?? 0);
+
+    view.innerHTML = `
+      <div class="page-head ak-head">
+        <div>
+          <a class="ak-back" href="#/project/${mat.project_id}"><i data-lucide="arrow-left"></i>프로젝트로</a>
+          <h1><i data-lucide="file-check-2"></i>정답지</h1>
+          <p>${esc(mat.filename)} · ${key.items.length}문항${mat.answer_key_at ? ` · ${relTime(Date.parse(mat.answer_key_at))} 만듦` : ""}</p>
+        </div>
+        <div class="page-actions ak-actions">
+          ${has && !running ? `<button class="btn-ghost" data-ak-rebuild><i data-lucide="refresh-cw"></i>다시 만들기</button>
+            <button class="btn-primary" data-ak-print><i data-lucide="printer"></i>인쇄 · PDF 저장</button>` : ""}
+        </div>
+      </div>
+      ${running ? `<div class="ak-progress panel"><i data-lucide="loader" class="spin"></i><div><b>정답지를 만들고 있어요</b><p>문항마다 직접 풀고, 정답표가 없는 문항은 한 번 더 풀어 검산해요. 문항 수에 따라 1~3분 정도 걸려요.</p></div></div>` : ""}
+      ${!has && !running ? `<div class="empty"><i data-lucide="file-pen-line"></i><b>${mat.answer_key_status === "failed" ? esc(mat.answer_key_error ?? "정답지를 만들지 못했어요") : "아직 정답지가 없어요"}</b>
+        <p>문항마다 정답과 단계별 해설을 만들고, 정답표가 없는 문항은 한 번 더 풀어 검산해요.</p>
+        <button class="btn-primary" data-ak-start><i data-lucide="sparkles"></i>정답지 만들기</button></div>` : ""}
+      ${has ? `
+        <div class="ak-summary">
+          <span class="ak-chip ok"><i data-lucide="badge-check"></i>정답 확인 ${(c.confirmed ?? 0) + (c.verified ?? 0)}</span>
+          ${need ? `<span class="ak-chip warn"><i data-lucide="triangle-alert"></i>확인 필요 ${need}</span>` : '<span class="ak-chip">모든 문항이 확인됐어요</span>'}
+          <span class="mini">정답표가 있던 문항은 AI 풀이와 맞춰 봤고, 없던 문항은 두 번 풀어 비교했어요</span>
+        </div>
+        <section class="panel ak-quick">
+          <h3><i data-lucide="table-2"></i>빠른 정답</h3>
+          <div class="ak-grid">${key.items.map((it, n) => `
+            <a href="#ak-${it.id}" class="ak-cell ${AK_STATUS[it.status][2]}" data-ak-jump="${it.id}" title="${esc(AK_STATUS[it.status][0])}">
+              <span>${it.number ?? n + 1}</span><b>${esc(akLabel(it))}</b></a>`).join("")}</div>
+        </section>
+        <div class="ak-list">${key.items.map((it, n) => {
+          const [label, icon, tone, note] = AK_STATUS[it.status];
+          return `
+          <article class="panel ak-item" id="ak-${it.id}">
+            <div class="ak-item-head"><b>${it.number ?? n + 1}번</b>
+              <span class="ak-badge ${tone}"><i data-lucide="${icon}"></i>${label}</span>
+              ${it.needs_figure ? '<span class="ak-badge"><i data-lucide="image"></i>그림 문항</span>' : ""}</div>
+            <p class="stem" data-math>${esc(it.stem)}</p>
+            ${it.choices ? `<ol class="ak-choices">${it.choices.map((ch, k) => `<li class="${String(k + 1) === it.answer ? "on" : ""}"><span>${CIRC[k]}</span><span data-math>${esc(ch)}</span></li>`).join("")}</ol>` : ""}
+            <div class="ak-answer"><span>정답</span><b data-math>${esc(akLabel(it))}</b>
+              ${it.status === "conflict" ? `<small>시험지 정답 ${esc(akLabel(it, it.sheet_answer))} · AI 풀이 ${esc(akLabel(it, it.ai_answer))}</small>` : ""}
+              ${note && tone !== "ok" ? `<small>${esc(note)}</small>` : ""}</div>
+            ${it.solution ? `<div class="ak-solution"><span>해설</span>${it.solution.split(/\n+/).filter(Boolean).map((l) => `<p data-math>${esc(l)}</p>`).join("")}</div>` : ""}
+          </article>`;
+        }).join("")}</div>` : ""}`;
+    icons();
+
+    view.onclick = async (e) => {
+      const jump = e.target.closest("[data-ak-jump]");
+      if (jump) { e.preventDefault(); $(`#ak-${CSS.escape(jump.dataset.akJump)}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+      if (e.target.closest("[data-ak-print]")) return window.print();
+      if (e.target.closest("[data-ak-start], [data-ak-rebuild]")) {
+        try { await Store.startAnswerKey(materialId); toast("정답지를 만들기 시작했어요"); } catch (err) { return toast(err.message); }
+        renderAnswerKey(materialId);
+      }
+    };
+    if (running) akTimer = setTimeout(() => renderAnswerKey(materialId), 4000);
   }
 
   // ================= 오답노트 =================

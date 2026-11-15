@@ -268,10 +268,15 @@ class Material(Base):
     problem_count: Mapped[int] = mapped_column(server_default="0")
     rights_confirmed: Mapped[bool] = mapped_column(Boolean)  # "학습용으로 쓸 수 있는 자료" 확인
     kind: Mapped[str] = mapped_column(String(12), server_default="past_exam")  # past_exam | textbook
+    # 정답지 (services/answer_key.py): 없음(null) → running → done | failed
+    answer_key_status: Mapped[str | None] = mapped_column(String(12))
+    answer_key_error: Mapped[str | None] = mapped_column(Text)
+    answer_key_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = created_at()
 
     __table_args__ = (CheckConstraint("status IN ('uploaded', 'extracting', 'ready', 'failed')", name="material_status"),
-                      CheckConstraint("kind IN ('past_exam', 'textbook')", name="material_kind"))
+                      CheckConstraint("kind IN ('past_exam', 'textbook')", name="material_kind"),
+                      CheckConstraint("answer_key_status IN ('running', 'done', 'failed')", name="material_answer_key_status"))
 
 
 class ChatSession(Base):

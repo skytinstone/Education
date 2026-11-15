@@ -15,7 +15,7 @@ from education.api.routers.sessions import session_detail
 from education.db import models as m
 from education.db.session import session_factory
 from education.schemas import ConceptLevel
-from education.services import generator, learning, materials, tutor
+from education.services import answer_key, generator, learning, materials, tutor
 from education.services.llm import LLMError, get_llm
 
 router = APIRouter(prefix="/projects", tags=["프로젝트"])
@@ -132,6 +132,29 @@ def delete_material(material_id: UUID, user: CurrentUser, db: DB) -> Response:
     db.delete(material)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------- 정답지 ----------
+@material_router.post("/{material_id}/answer-key", status_code=status.HTTP_202_ACCEPTED)
+def start_answer_key(material_id: UUID, user: CurrentUser, db: DB, background: BackgroundTasks,
+                     open_session=Depends(session_factory)) -> MaterialOut:
+    """올린 자료의 모든 문항에 정답과 단계별 해설을 붙인다 (백그라운드, 문항 수에 따라 1~3분). 다시 부르면 새로 만든다."""
+    material = owned(db, m.Material, material_id, user)
+    if material.status != "ready" or not material.problem_count:
+        raise HTTPException(status.HTTP_409_CONFLICT, "문항을 다 읽은 자료만 정답지를 만들 수 있어요")
+    if material.answer_key_status == "running":
+        raise HTTPException(status.HTTP_409_CONFLICT, "정답지를 만들고 있어요. 잠시만 기다려 주세요")
+    if get_llm() is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 설정되지 않아 정답지를 만들 수 없어요")
+    material.answer_key_status, material.answer_key_error = "running", None
+    db.commit()
+    background.add_task(answer_key.build, material.id, open_session)
+    return MaterialOut.model_validate(material)
+
+
+@material_router.get("/{material_id}/answer-key")
+def get_answer_key(material_id: UUID, user: CurrentUser, db: DB) -> dict:
+    return answer_key.view(db, owned(db, m.Material, material_id, user))
 
 
 # ---------- 기출 기반 문제 만들기 ----------
