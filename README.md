@@ -102,6 +102,11 @@ uv run python scripts/export_concepts.py           # 개념 트리를 바꿨을 
 - 모든 사용자 데이터는 본인 것만 보이고, 남의 데이터는 존재 여부와 상관없이 404
 - '오늘'의 기준 시간대는 `Asia/Seoul` (`TIMEZONE` 으로 변경)
 - 로그인·가입은 성공·실패 모두 `login_events` 에 남기고(IP·브라우저), **90일이 지나면 지운다** (개인정보처리방침의 로그 보관 기간)
+- 같은 이메일로 15분 안에 5번, 같은 IP 에서 30번 로그인에 실패하면 잠시 막는다 (429)
+- 비밀번호 찾기: `POST /auth/password/forgot` → 메일의 30분짜리 링크(`login.html#reset=…`) → `POST /auth/password/reset`. 링크는 한 번만 쓸 수 있다 (SMTP·PUBLIC_BASE_URL 필요)
+- AI 하루 한도: 사용자별 비용(`AI_DAILY_LIMIT_USD`)·호출 수(`AI_DAILY_LIMIT_CALLS`). 넘으면 429, 대화는 문제 은행으로 답한다. 운영자는 제외
+- 업로드 분석·정답지가 배포·재시작으로 멈추면, 목록·정답지를 열 때 오래된 '진행 중'을 실패로 바꿔 다시 시도할 수 있게 한다 (`services/jobs.py`)
+- 모든 응답에 보안 헤더, `/robots.txt`·`/sitemap.xml`, 앱 설치(PWA: `prototype/manifest.webmanifest`), 오류 추적(`SENTRY_DSN`, 선택)
 - 이용 정지(`users.suspended_at`)된 계정은 로그인과 모든 API 가 막히고, 이미 받은 토큰도 바로 무효가 된다. 운영자 계정은 정지·삭제할 수 없다
 
 ## 간편 로그인 (Google · 카카오)

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from education.db import models as m
 from education.schemas import Domain, VerificationStatus
-from education.services import explain, generator, learning
+from education.services import explain, generator, learning, quota
 from education.services.llm import LLMError, get_llm
 
 log = logging.getLogger(__name__)
@@ -71,6 +71,10 @@ def textbook_label(project: m.Project) -> str | None:
 def reply_full(db: Session, user: m.User, text: str, project: m.Project | None) -> tuple[str, list[str], dict | None]:
     """(답변 문장, 문제 id 목록, 풀이). 계산·설명 질문이면 문제 대신 풀이로 답한다."""
     llm = get_llm()
+    if llm and quota.exceeded(db, user):  # 하루 한도를 넘으면 AI 없이 문제 은행에서
+        ids = _from_bank(db, user, text, detect_domain(text), None)
+        return (f"오늘 쓸 수 있는 AI 사용량을 다 써서, 문제 은행의 검증된 문제 {len(ids)}개를 보여드려요. 내일 다시 AI 로 만들어 드릴게요."
+                if ids else quota.MESSAGE), ids, None
     if llm and explain.is_explain_request(text):
         try:
             line, payload = explain.explain(db, llm, user, text)

@@ -40,6 +40,15 @@ def _strong(v: str) -> str:
 Password = Annotated[str, Field(min_length=8, max_length=128), AfterValidator(_strong)]
 
 
+class ForgotIn(BaseModel):
+    email: EmailStr
+
+
+class ResetIn(BaseModel):
+    token: str = Field(max_length=2000)
+    password: Password
+
+
 class SignupIn(BaseModel):
     name: str = Field(min_length=1, max_length=40)
     email: EmailStr

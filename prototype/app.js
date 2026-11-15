@@ -325,6 +325,7 @@
     const name = st.user?.name;
     $("#greeting").textContent = name ? `${name}님, 오늘은 무엇을 공부할까요?` : "오늘은 무엇을 공부할까요?";
 
+    renderOnboard();
     renderGoal();
     renderTodo();
     renderExam();
@@ -356,6 +357,42 @@
   }
 
   const dayKey = (t) => new Date(new Date(t).toDateString()).getTime();
+
+  // ---------- 첫 사용 안내: 목표 정하기 → 첫 문제 → 기출 올리기 (다 하거나 닫으면 사라짐) ----------
+  const ONBOARD_KEY = "eureka.onboard.closed";
+  function renderOnboard() {
+    const el = $("#onboard");
+    const st = Store.state;
+    let closed = false;
+    try { closed = localStorage.getItem(ONBOARD_KEY) === "1"; } catch { /* 저장소 없음 */ }
+    const steps = [
+      { done: st.projects.length > 0, icon: "target", title: "목표 정하기", text: "준비하는 시험과 날짜를 적으면 범위와 D-day를 챙겨 드려요", action: "목표 만들기", act: "wizard" },
+      { done: st.attempts.length > 0, icon: "pencil-line", title: "첫 문제 풀어 보기", text: "입력창에 풀고 싶은 문제를 말해 보세요. 마이크로 말해도 돼요", action: "예시로 시작", act: "try" },
+      { done: false, icon: "file-up", title: "기출 올리기", text: "가진 기출을 올리면 같은 스타일로 문제를 만들고 정답지도 만들어요", action: "기출 올리러 가기", act: "upload" },
+    ];
+    if (closed || (steps[0].done && steps[1].done)) { el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = `
+      <div class="onboard-head"><div><h2>Eureka에 오신 걸 환영해요</h2><p>세 단계면 준비가 끝나요</p></div>
+        <button class="icon-btn" data-onboard-close aria-label="안내 닫기" title="다음에 볼게요"><i data-lucide="x"></i></button></div>
+      <ol class="onboard-steps">${steps.map((s, i) => `
+        <li class="${s.done ? "done" : ""}">
+          <span class="ob-ic">${s.done ? '<i data-lucide="check"></i>' : `<i data-lucide="${s.icon}"></i>`}</span>
+          <div><b>${i + 1}. ${s.title}</b><p>${s.text}</p>
+            ${s.done ? '<small>완료</small>' : `<button class="btn-ghost" data-onboard="${s.act}">${s.action}</button>`}</div>
+        </li>`).join("")}</ol>`;
+    el.onclick = (e) => {
+      if (e.target.closest("[data-onboard-close]")) {
+        try { localStorage.setItem(ONBOARD_KEY, "1"); } catch { /* 저장소 없음 */ }
+        el.hidden = true;
+        return;
+      }
+      const act = e.target.closest("[data-onboard]")?.dataset.onboard;
+      if (act === "wizard") projectWizard();
+      else if (act === "try") { prompt.value = "로그 성질 3점짜리 2문제 내줘"; send.disabled = false; prompt.focus(); }
+      else if (act === "upload") st.projects.length ? go(`/project/${st.projects[0].id}`) : projectWizard();
+    };
+  }
 
   // ---------- 오늘 목표: 링 + 연속 학습 ----------
   // 오늘 아직 안 풀었으면 어제까지 이어진 연속 기록을 보여 주고 이어 가자고 한다
@@ -1668,6 +1705,7 @@
     if (running) akTimer = setTimeout(() => renderAnswerKey(materialId), 4000);
   }
 
+  document.addEventListener("click", (e) => { if (e.target.closest("[data-print-notes]")) window.print(); });
   // ================= 오답노트 =================
   const noteFilter = { domain: "all", error: "all", openOnly: true, project: null };
 
@@ -1683,6 +1721,7 @@
           <h1><i data-lucide="circle-x"></i>오답노트</h1>
           <p>${proj ? `${esc(proj.name)}의 오답 · <a href="#/notes" style="color:inherit">전체 보기</a>` : "틀린 문제를 다시 풀어 맞히면 극복으로 표시돼요"}</p>
         </div>
+        <div class="page-actions print-hide"><button class="btn-ghost" data-print-notes title="지금 보이는 오답을 인쇄하거나 PDF로 저장"><i data-lucide="printer"></i>인쇄 · PDF</button></div>
       </div>
       <div class="note-stats" id="note-stats"></div>
       <div class="toolbar glass-bar">

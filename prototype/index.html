@@ -4,6 +4,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Eureka</title>
+<link rel="manifest" href="/app/manifest.webmanifest" />
+<meta name="theme-color" content="#f7f8fb" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Eureka" />
+<link rel="apple-touch-icon" href="/app/icons/icon-180.png" />
+<link rel="icon" type="image/png" sizes="192x192" href="/app/icons/icon-192.png" />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
 <!-- Horcrux Technologies 로고 폰트 (회사 웹사이트 --font-heading 과 동일) -->
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap" />
@@ -465,6 +471,7 @@
         <section class="actions" id="actions"></section>
 
         <!-- 오늘: 목표 · 할 일 · 다가오는 시험 -->
+        <section class="onboard panel" id="onboard" hidden aria-label="시작 안내"></section>
         <section class="today" aria-label="오늘">
           <article class="panel goal" id="goal-card"></article>
           <article class="panel todo">

@@ -101,11 +101,11 @@
   // ================= 운영 콘솔 (운영자 계정만) =================
   // #/(개요) · #/users[/id] · #/ai · #/logins · #/voc
   const FB_STATUS = { open: "접수", reviewing: "확인 중", resolved: "해결" };
-  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["ai", "AI 사용량", "cpu"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"]];
+  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["ai", "AI 사용량", "cpu"], ["quality", "문제 품질", "gauge"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"]];
   const METHOD_NAME = { password: "이메일", google: "Google", kakao: "카카오" };
   const PURPOSE_NAME = { generate: "문제 생성", verify: "문제 검증", note_generate: "개념 정리 생성", note_verify: "개념 정리 검증",
     course: "코스 만들기", extract: "기출·교재 분석", essay_grade: "서술형 채점", review: "풀이 확인", explain: "계산·설명 풀이", answer_key: "정답지 풀이", answer_verify: "정답지 검산" };
-  const FAIL_REASON = { bad_credentials: "비밀번호 틀림", suspended: "정지된 계정" };
+  const FAIL_REASON = { bad_credentials: "비밀번호 틀림", suspended: "정지된 계정", throttled: "여러 번 실패해 잠시 막음" };
   const adminState = {
     days: 30, aiDays: 30,
     users: { q: "", state: "all", sort: "recent", offset: 0 },
@@ -142,6 +142,7 @@
     : `<p class="mini">${empty}</p>`;
 
   const TAB_DESC = { overview: "가입·이용 현황과 오늘 챙길 것", users: "회원 검색, 상세, 이용 정지·삭제", ai: "AI 호출 비용·토큰·실패",
+    quality: "AI 가 만든 문제의 검산 통과율과 탈락 이유, 정답지 상태",
     logins: "로그인·가입 기록 (90일 보관)", voc: "의견·문제 신고 확인과 답변, 전체 공지" };
   async function renderAdmin(tab = "overview", id = null) {
     if (!ADMIN_TABS.some(([k]) => k === tab)) tab = "overview";
@@ -158,6 +159,7 @@
       if (tab === "overview") await adminOverview(body);
       else if (tab === "users") await (id ? adminUser(body, id) : adminUsers(body));
       else if (tab === "ai") await adminAI(body);
+      else if (tab === "quality") await adminQuality(body);
       else if (tab === "logins") await adminLogins(body);
       else await adminVOC(body);
     } catch (err) {
@@ -168,10 +170,11 @@
 
   // ---------- 개요 ----------
   async function adminOverview(body) {
-    const [o, recentUsers, recentVoc] = await Promise.all([
+    const [o, recentUsers, recentVoc, fn] = await Promise.all([
       Store.adminGet("/overview", { days: adminState.days }),
       Store.adminGet("/users", { limit: 6, sort: "recent" }),
       Store.adminFeedback({ state: "open" }),
+      Store.adminGet("/funnel", { days: 30 }),
     ]);
     if (!body.isConnected) return;
     const u = o.users, a = o.active, ai = o.ai, sm = o.sign_in_methods;
@@ -202,12 +205,62 @@
         </section>
       </div>
       <div class="admin-grid">
+        <section class="panel"><h3><i data-lucide="filter"></i>가입 전환 (최근 30일)</h3>${funnelHTML(fn.steps)}</section>
+        <section class="panel"><h3><i data-lucide="repeat-2"></i>주간 재방문</h3>
+          <p class="mini" style="margin-top:-6px">가입한 주의 다음 주에도 문제를 풀거나 로그인한 비율</p>
+          ${table(["가입 주", "#가입", "#다음 주에도 씀"], fn.cohorts.slice(-8).reverse().map((c) => `
+            <tr><td class="nowrap">${c.week.slice(5).replace("-", "/")} 주</td><td class="n">${num(c.size)}</td>
+              <td class="n"><b>${c.rate == null ? "–" : `${Math.round(c.rate * 100)}%`}</b> <small>${num(c.week1)}명</small></td></tr>`), "아직 가입 기록이 없어요")}</section>
+      </div>
+      <div class="admin-grid">
         <section class="panel"><div class="panel-row"><h3><i data-lucide="user-round-plus"></i>최근 가입자</h3><a class="mini" href="#/users">전체 보기</a></div>
           ${table(["회원", "로그인 방법", "가입"], recentUsers.items.map((x) => `
             <tr class="row-link" data-href="#/users/${x.id}"><td>${userLink(x.id, x.name)}<small>${esc(x.email)}</small></td><td>${methodChips(x.methods)}</td><td class="nowrap">${ago(x.created_at)}</td></tr>`), "아직 가입자가 없어요")}</section>
         <section class="panel"><div class="panel-row"><h3><i data-lucide="inbox"></i>처리할 문의</h3><a class="mini" href="#/voc">VOC 열기</a></div>
           ${recentVoc.length ? `<ul class="mini-list voc-peek">${recentVoc.slice(0, 6).map((f) => `<li><span class="fb-status ${f.status}">${FB_STATUS[f.status]}</span> <b>${esc(FEEDBACK_KINDS[f.kind])}</b> · ${esc(f.message.slice(0, 80))}<small>${esc(f.user_name)} · ${ago(f.created_at)}</small></li>`).join("")}</ul>` : '<p class="mini">처리할 문의가 없어요</p>'}</section>
       </div>`;
+  }
+
+  // 퍼널: 단계별 막대 + 앞 단계 대비 비율
+  function funnelHTML(steps) {
+    const top = Math.max(1, steps[0].count, ...steps.map((s) => s.count));
+    return `<div class="funnel">${steps.map((s, i) => {
+      const prev = i ? steps[i - 1].count : null;
+      return `<div class="fstep"><span>${s.label}</span>
+        <span class="track"><i style="width:${(s.count / top) * 100}%"></i></span>
+        <b>${num(s.count)}</b><small>${prev && s.count <= prev ? `${Math.round((s.count / prev) * 100)}%` : ""}</small></div>`;
+    }).join("")}</div>${steps[1].count > steps[0].count ? '<p class="mini">방문 수는 방문 기록을 시작한 날부터 세서, 그 전에 가입한 사람이 있으면 가입보다 적게 보일 수 있어요</p>' : ""}`;
+  }
+
+  // ---------- 문제 품질 ----------
+  async function adminQuality(body) {
+    const q = await Store.adminGet("/quality", { days: adminState.aiDays });
+    if (!body.isConnected) return;
+    const g = q.generated, k = q.answer_keys;
+    const keyTotal = Object.values(k).reduce((a, b) => a + b, 0);
+    const KEY_NAME = { sheet: "정답표만", confirmed: "정답 확인", verified: "검산 완료", conflict: "정답표와 다름", uncertain: "확인 필요", failed: "풀이 실패" };
+    body.innerHTML = `
+      <div class="panel-row top"><p class="mini">AI 가 만든 문제는 정답을 모르는 다른 AI 가 다시 풀어 통과한 것만 학생에게 나가요. 떨어진 문제의 이유와 개념을 보고 출제 지시를 다듬을 수 있어요.</p>
+        <div class="seg small">${[7, 30, 90].map((d) => `<button data-aidays="${d}" class="${adminState.aiDays === d ? "on" : ""}">${d}일</button>`).join("")}</div></div>
+      <div class="kpis">
+        ${kpi("검산 통과율", g.rate == null ? "–" : `${Math.round(g.rate * 100)}%`, `만든 문제 ${num(g.total)}개 중 ${num(g.passed)}개 통과`, g.rate != null && g.rate < 0.6 ? "warn" : "")}
+        ${kpi("탈락", num(g.total - g.passed), q.reasons[0] ? `가장 많은 이유: ${esc(q.reasons[0].reason)}` : "")}
+        ${kpi("정답지 문항", num(keyTotal), `확인 필요 ${num((k.conflict ?? 0) + (k.uncertain ?? 0))}`)}
+        ${kpi("문제 신고", num(q.reports), "문제·해설 오류 신고")}
+      </div>
+      <section class="panel"><h3><i data-lucide="chart-column"></i>일별 통과율</h3>
+        ${dayBars(q.by_day.map((d) => ({ ...d, rate: d.total ? d.passed / d.total * 100 : 0 })), "rate", (v) => `${Math.round(v)}%`)}</section>
+      <div class="admin-grid">
+        <section class="panel"><h3><i data-lucide="list-x"></i>탈락 이유</h3>
+          ${table(["이유", "#문제 수"], q.reasons.map((r) => `<tr><td>${esc(r.reason)}</td><td class="n">${num(r.count)}</td></tr>`), "떨어진 문제가 없어요")}</section>
+        <section class="panel"><h3><i data-lucide="target"></i>통과율이 낮은 개념</h3>
+          ${table(["개념", "#만든 문제", "#통과율"], q.weak_concepts.map((c) => `<tr><td>${esc(c.name)}<small>${esc(c.concept_id)}</small></td>
+            <td class="n">${num(c.total)}</td><td class="n ${c.rate < 0.5 ? "bad" : ""}"><b>${Math.round(c.rate * 100)}%</b></td></tr>`), "3문제 이상 만든 개념이 아직 없어요")}</section>
+      </div>
+      <section class="panel"><h3><i data-lucide="file-check-2"></i>정답지 문항 상태</h3>
+        <div class="hbars">${Object.entries(KEY_NAME).map(([key, name]) => `
+          <div class="hbar"><span>${name}</span><span class="track"><i class="${["conflict", "uncertain", "failed"].includes(key) ? "m-kakao" : "m-google"}" style="width:${keyTotal ? ((k[key] ?? 0) / keyTotal) * 100 : 0}%"></i></span><b>${num(k[key] ?? 0)}</b></div>`).join("")}</div></section>`;
+    icons();
   }
 
   // ---------- AI 사용량 ----------

@@ -1,0 +1,16 @@
+{
+  "name": "Eureka — 시험 준비 AI",
+  "short_name": "Eureka",
+  "description": "검산을 마친 문제, 이유까지 남는 오답노트, 개념별 약점 분석",
+  "lang": "ko",
+  "start_url": "/app/index.html",
+  "scope": "/app/",
+  "display": "standalone",
+  "background_color": "#f7f8fb",
+  "theme_color": "#f7f8fb",
+  "icons": [
+    { "src": "/app/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/app/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/app/icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

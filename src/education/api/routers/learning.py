@@ -13,7 +13,7 @@ from education.api.dto import (
 )
 from education.db import models as m
 from education.schemas import ErrorType
-from education.services import learning, notes, review
+from education.services import quota, learning, notes, review
 from education.services.llm import get_llm
 
 router = APIRouter(tags=["학습"])
@@ -62,6 +62,7 @@ def create_note(concept_id: str, user: CurrentUser, db: DB) -> ConceptNoteCreate
     llm = get_llm()
     if llm is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 아직 설정되지 않았어요")
+    quota.check(db, user)
     try:
         result = notes.create_note(db, llm, user, concept_id)
     except notes.NoteError as e:
@@ -100,6 +101,7 @@ def review_solution(problem_id: str, body: SolutionReviewIn, user: CurrentUser, 
     llm = get_llm()
     if llm is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 아직 설정되지 않았어요")
+    quota.check(db, user)
     attempted = db.scalar(select(m.Attempt.id).where(m.Attempt.user_id == user.id, m.Attempt.problem_id == problem_id).limit(1)) is not None
     try:
         return review.review_solution(db, llm, user, p, text=body.text, image=body.image, attempted=attempted)
@@ -118,6 +120,7 @@ def submit_attempt(body: AttemptIn, user: CurrentUser, db: DB) -> AttemptResult:
         llm = get_llm()
         if llm is None:
             raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 아직 설정되지 않아 서술형은 채점할 수 없어요")
+        quota.check(db, user)
         try:
             essay = review.grade_essay(db, llm, user, p, body.answer)
         except review.ReviewError as e:

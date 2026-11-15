@@ -303,6 +303,7 @@ class Material(Base):
     answer_key_error: Mapped[str | None] = mapped_column(Text)
     answer_key_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     answer_key_done: Mapped[int] = mapped_column(server_default="0")  # 진행률: 풀이를 마친 문항 수
+    answer_key_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 오래 멈춘 작업을 가려내는 데 씀
     created_at: Mapped[datetime] = created_at()
 
     __table_args__ = (CheckConstraint("status IN ('uploaded', 'extracting', 'ready', 'failed')", name="material_status"),

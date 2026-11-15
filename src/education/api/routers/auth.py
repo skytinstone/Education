@@ -1,5 +1,7 @@
+import hashlib
 import secrets
-from datetime import timedelta
+import time
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 from uuid import UUID
 
@@ -13,13 +15,13 @@ from sqlalchemy.orm import Session
 
 from education.api.deps import DB, CurrentUser
 from education.api.dto import (
-    AccountDeleteIn, ConnectionOut, ConnectionsOut, LinkStartOut, LoginIn, PasswordIn, SignupIn, SocialLinkIn, SocialSignupIn, TicketIn,
-    TokenOut, UserOut, UserPatch,
+    AccountDeleteIn, ConnectionOut, ConnectionsOut, ForgotIn, LinkStartOut, LoginIn, PasswordIn, ResetIn, SignupIn, SocialLinkIn,
+    SocialSignupIn, TicketIn, TokenOut, UserOut, UserPatch,
 )
 from education.config import get_settings
 from education.db import models as m
 from education.security import create_ticket, create_token, hash_password, read_ticket, verify_password
-from education.services import accounts, audit, avatars, oauth, schools
+from education.services import accounts, audit, avatars, mailer, oauth, schools
 from education.services.oauth import OAuthError, Provider, SocialProfile
 
 router = APIRouter(tags=["인증 · 사용자"])
@@ -63,14 +65,73 @@ def signup(body: SignupIn, request: Request, db: DB) -> TokenOut:
     return _issue(db, request, user, "password", kind="signup")
 
 
+# 무차별 대입 방지: 15분 안에 같은 이메일로 5번, 같은 IP 에서 30번 틀리면 잠시 막는다 (실패 기록은 login_events)
+FAIL_WINDOW = timedelta(minutes=15)
+EMAIL_FAIL_LIMIT = 5
+IP_FAIL_LIMIT = 30
+THROTTLED = "로그인에 여러 번 실패해서 잠시 막았어요. 15분 뒤에 다시 시도하거나 '비밀번호 찾기'를 이용해 주세요"
+
+
+def _throttled(db: Session, request: Request, email: str) -> bool:
+    since = datetime.now(timezone.utc) - FAIL_WINDOW
+    fails = select(func.count()).select_from(m.LoginEvent).where(~m.LoginEvent.ok, m.LoginEvent.created_at >= since)
+    if (db.scalar(fails.where(m.LoginEvent.email == email.lower())) or 0) >= EMAIL_FAIL_LIMIT:
+        return True
+    ip = audit.client_ip(request)
+    return bool(ip and (db.scalar(fails.where(m.LoginEvent.ip == ip)) or 0) >= IP_FAIL_LIMIT)
+
+
 @router.post("/auth/login")
 def login(body: LoginIn, request: Request, db: DB) -> TokenOut:
+    if _throttled(db, request, body.email):
+        audit.record_login(db, request, method="password", ok=False, email=body.email, reason="throttled")
+        db.commit()
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, THROTTLED)
     user = db.scalar(select(m.User).where(m.User.email == body.email.lower()))
     # 이메일이 없는 경우와 비밀번호가 틀린 경우를 구분하지 않는다 (계정 존재 여부 노출 방지)
     if not user or not verify_password(body.password, user.password_hash):
         audit.record_login(db, request, method="password", ok=False, user=user, email=body.email, reason="bad_credentials")
         db.commit()
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "이메일 또는 비밀번호를 확인해 주세요")
+    return _issue(db, request, user, "password")
+
+
+# ---------- 비밀번호 재설정 (메일 링크) ----------
+RESET_TTL = timedelta(minutes=30)
+_reset_sent: dict[str, float] = {}  # 같은 이메일로는 1분에 한 번만 보낸다 (메일 폭탄 방지)
+
+
+def _fingerprint(user: m.User) -> str:
+    """비밀번호가 바뀌면 달라지는 값 — 재설정 링크를 한 번만 쓸 수 있게 한다."""
+    return hashlib.sha256(f"{user.id}|{user.password_hash or '-'}".encode()).hexdigest()[:16]
+
+
+@router.post("/auth/password/forgot", status_code=status.HTTP_202_ACCEPTED)
+def forgot_password(body: ForgotIn, db: DB) -> dict:
+    """가입된 이메일이면 30분짜리 재설정 링크를 보낸다. 가입 여부는 알려 주지 않는다."""
+    email = body.email.lower()
+    now = time.monotonic()
+    if now - _reset_sent.get(email, -1e9) >= 60:
+        _reset_sent[email] = now
+        user = db.scalar(select(m.User).where(m.User.email == email))
+        if user and not audit.is_suspended(user):
+            token = create_ticket("reset", {"sub": str(user.id), "fp": _fingerprint(user)}, RESET_TTL)
+            link = f"{get_settings().public_base_url}/app/login.html#reset={token}"
+            mailer.send_later(user.email, "[Eureka] 비밀번호 재설정 안내", (
+                f"{user.name}님, 비밀번호를 새로 정하려면 30분 안에 아래 링크를 열어 주세요.\n\n{link}\n\n"
+                "요청하지 않으셨다면 이 메일은 무시하셔도 돼요. 비밀번호는 바뀌지 않아요.\n\n— Eureka"))
+    return {"mail": mailer.configured()}
+
+
+@router.post("/auth/password/reset")
+def reset_password(body: ResetIn, request: Request, db: DB) -> TokenOut:
+    """메일 링크의 토큰으로 새 비밀번호를 정하고 바로 로그인한다. 링크는 한 번만 쓸 수 있다."""
+    c = read_ticket(body.token, "reset")
+    user = db.get(m.User, UUID(c["sub"])) if c else None
+    if user is None or c.get("fp") != _fingerprint(user):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "링크가 만료됐거나 이미 사용했어요. 비밀번호 찾기를 다시 해 주세요")
+    user.password_hash = hash_password(body.password)
+    user.email_verified = True  # 메일을 받아 링크를 열었으니 이메일 주인이 확인됐다
     return _issue(db, request, user, "password")
 
 

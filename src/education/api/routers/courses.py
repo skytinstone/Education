@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 from education.api.deps import DB, CurrentUser
 from education.api.dto import ConceptOut, CourseDetail, CourseIn, CourseOut
 from education.db import models as m
-from education.services import courses
+from education.services import courses, quota
 from education.services.llm import get_llm
 
 router = APIRouter(prefix="/courses", tags=["코스"])
@@ -39,6 +39,7 @@ def create_course(body: CourseIn, user: CurrentUser, db: DB) -> CourseDetail:
     llm = get_llm()
     if llm is None:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 아직 설정되지 않았어요")
+    quota.check(db, user)
     try:
         course = courses.create_course(db, llm, user, title=body.title.strip(), scope_text=body.scope_text,
                                        exam=body.exam.strip(), level=body.level.strip(), textbook=body.textbook.strip(),

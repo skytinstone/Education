@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import DateTime, Select, distinct, func, literal, or_, select, union
+from sqlalchemy import DateTime, Select, distinct, func, literal, or_, select, text, union
 from sqlalchemy.orm import Session
 
 from education.api.deps import DB, admin_user, is_admin
@@ -294,3 +294,91 @@ def delete_user(user_id: UUID, body: AdminDeleteIn, db: DB) -> Response:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "이메일이 맞지 않아요")
     accounts.delete_account(db, u)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# ---------- 문제 품질: AI 가 만든 문제의 통과율 · 탈락 이유 · 개념별 ----------
+@router.get("/quality")
+def quality(db: DB, days: int = Query(30, ge=1, le=180)) -> dict:
+    since = _since_local(db, days)
+    P, PC = m.Problem, m.ProblemConcept
+    made = (P.source == "generated") & (P.created_at >= since)
+    ok = P.verification == "verified"
+    total, passed = db.execute(select(func.count(), func.count().filter(ok)).where(made)).one()
+
+    reason = func.split_part(P.generation_meta["reject_reason"].astext, ":", 1)
+    reasons = [{"reason": r or "기타", "count": n} for r, n in db.execute(
+        select(reason, func.count()).where(made, ~ok).group_by(reason).order_by(func.count().desc())).all()]
+
+    day = _local_date(P.created_at)
+    daily = {d: {"total": t, "passed": p} for d, t, p in db.execute(
+        select(day, func.count(), func.count().filter(ok)).where(made).group_by(day)).all()}
+
+    by_concept = db.execute(
+        select(PC.concept_id, m.Concept.name, func.count(), func.count().filter(ok))
+        .join(P, P.id == PC.problem_id).join(m.Concept, m.Concept.id == PC.concept_id)
+        .where(made).group_by(PC.concept_id, m.Concept.name).having(func.count() >= 3)
+        .order_by((func.count().filter(ok) * 1.0 / func.count()).asc()).limit(10)).all()
+
+    keys = dict(db.execute(select(m.ProblemAnswer.status, func.count()).where(m.ProblemAnswer.status.is_not(None))
+                           .group_by(m.ProblemAnswer.status)).all())
+    reports = db.scalar(select(func.count()).select_from(m.Feedback).where(
+        m.Feedback.kind.in_(("problem", "solution")), m.Feedback.created_at >= since)) or 0
+    return {
+        "days": days,
+        "generated": {"total": total, "passed": passed, "rate": (passed / total) if total else None},
+        "reasons": reasons,
+        "by_day": _fill_days(db, daily, min(days, 60), {"total": 0, "passed": 0}),
+        "weak_concepts": [{"concept_id": c, "name": n, "total": t, "passed": p, "rate": p / t} for c, n, t, p in by_concept],
+        "answer_keys": keys,
+        "reports": reports,
+    }
+
+
+# ---------- 가입 전환 퍼널 · 주간 재방문 ----------
+FUNNEL_SQL = text("""
+WITH cohort AS (
+  SELECT u.id, date(timezone(:tz, u.created_at)) AS joined
+  FROM users u WHERE u.created_at >= :since
+), activity AS (
+  SELECT user_id, date(timezone(:tz, created_at)) AS day FROM attempts WHERE created_at >= :since
+  UNION
+  SELECT user_id, date(timezone(:tz, created_at)) FROM login_events WHERE ok AND user_id IS NOT NULL AND created_at >= :since
+)
+SELECT
+  (SELECT count(DISTINCT visitor_id) FROM site_visits WHERE day >= date(timezone(:tz, :since))) AS visitors,
+  (SELECT count(*) FROM cohort) AS signups,
+  (SELECT count(*) FROM cohort c WHERE EXISTS (SELECT 1 FROM attempts a WHERE a.user_id = c.id)) AS activated,
+  (SELECT count(*) FROM cohort c WHERE EXISTS (SELECT 1 FROM activity x WHERE x.user_id = c.id AND x.day > c.joined)) AS returned
+""")
+
+COHORT_SQL = text("""
+WITH cohort AS (
+  SELECT u.id, date_trunc('week', timezone(:tz, u.created_at))::date AS week
+  FROM users u WHERE u.created_at >= :since
+), activity AS (
+  SELECT user_id, timezone(:tz, created_at)::date AS day FROM attempts WHERE created_at >= :since
+  UNION
+  SELECT user_id, timezone(:tz, created_at)::date FROM login_events WHERE ok AND user_id IS NOT NULL AND created_at >= :since
+)
+SELECT c.week, count(*) AS size,
+       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM activity a WHERE a.user_id = c.id
+                                      AND a.day >= c.week + 7 AND a.day < c.week + 14)) AS week1
+FROM cohort c GROUP BY c.week ORDER BY c.week
+""")
+
+
+@router.get("/funnel")
+def funnel(db: DB, days: int = Query(30, ge=7, le=180)) -> dict:
+    """방문 → 가입 → 첫 문제 → 다음 날 이후 다시 옴. 주간 가입 묶음별로 다음 주에도 쓴 비율."""
+    since = _since_local(db, days)
+    tz = get_settings().timezone
+    v = db.execute(FUNNEL_SQL, {"tz": tz, "since": since}).one()
+    cohorts = db.execute(COHORT_SQL, {"tz": tz, "since": _since_local(db, 7 * 8)}).all()
+    return {
+        "days": days,
+        "steps": [{"key": "visitors", "label": "방문", "count": v.visitors},
+                  {"key": "signups", "label": "가입", "count": v.signups},
+                  {"key": "activated", "label": "첫 문제 풀이", "count": v.activated},
+                  {"key": "returned", "label": "다른 날 다시 옴", "count": v.returned}],
+        "cohorts": [{"week": w.isoformat(), "size": n, "week1": k, "rate": (k / n) if n else None} for w, n, k in cohorts],
+    }
