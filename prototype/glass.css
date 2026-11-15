@@ -173,6 +173,28 @@ body {
 /* 시험지(인쇄용)는 종이 그대로 */
 .exam-paper { background: #fff !important; -webkit-backdrop-filter: none; backdrop-filter: none; }
 
+/* ---------- 입력창 보내기 버튼: 포인트 파랑 ---------- */
+:root { --blue: #2f6bff; --blue-2: #1d4fe0; }
+.send, .ask-send {
+  background: linear-gradient(180deg, #4d82ff, var(--blue)) !important; color: #fff !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 4px 14px rgba(47, 107, 255, 0.35) !important;
+  transition: transform .15s, opacity .2s, box-shadow .25s, background .25s !important;
+}
+/* 비어 있을 때: 옅은 파랑 (자리만 보여 줌) */
+.send:disabled, .ask-send:disabled {
+  opacity: 1 !important;
+  background: rgba(47, 107, 255, 0.14) !important; color: rgba(47, 107, 255, 0.55) !important;
+  box-shadow: none !important;
+}
+.send:not(:disabled):hover, .ask-send:not(:disabled):hover { background: linear-gradient(180deg, #3f76ff, var(--blue-2)) !important; transform: scale(1.06); }
+.send:not(:disabled):active, .ask-send:not(:disabled):active { transform: scale(0.94); }
+/* 글자를 쓰기 시작하면 입력창 테두리도 파랑으로 */
+.composer { transition: box-shadow .25s; }
+.composer:focus-within { box-shadow: 0 12px 40px rgba(31, 41, 80, 0.1), inset 0 1px 0 #fff, 0 0 0 1.5px rgba(47, 107, 255, 0.35) !important; }
+.composer:has(input:not(:placeholder-shown)), .composer:has(textarea:not(:placeholder-shown)) {
+  box-shadow: 0 12px 40px rgba(47, 107, 255, 0.16), inset 0 1px 0 #fff, 0 0 0 1.5px var(--blue) !important;
+}
+
 /* 체크박스·라디오는 채움 칸 규칙에서 뺀다 */
 .field input[type="radio"] { width: auto !important; height: auto !important; padding: 0 !important;
   background: none !important; box-shadow: none !important; accent-color: var(--accent); }
