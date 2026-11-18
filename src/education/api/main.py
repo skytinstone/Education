@@ -41,6 +41,10 @@ async def security_headers(request: Request, call_next):
     h.setdefault("Permissions-Policy", "microphone=(self), camera=(), geolocation=(), payment=()")
     if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https":
         h.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    # 화면 파일(js·css·html)은 매번 바뀌었는지 확인하게 — 배포하면 강력 새로고침 없이 바로 새 화면 (안 바뀌었으면 304 라 가벼움)
+    path = request.url.path
+    if path.startswith("/app/") and not path.startswith(("/app/icons/", "/app/avatars/")):
+        h.setdefault("Cache-Control", "no-cache")
     return res
 
 
