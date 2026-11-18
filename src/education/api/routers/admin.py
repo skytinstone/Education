@@ -8,12 +8,14 @@ from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+import secrets
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import DateTime, Select, distinct, func, literal, or_, select, text, union
 from sqlalchemy.orm import Session
 
-from education.api.deps import DB, admin_user, is_admin
+from education.api.deps import DB, FORCED_PREFIX, AdminUser, admin_user, is_admin
 from education.config import get_settings
 from education.db import models as m
 from education.services import accounts, audit, learning
@@ -282,6 +284,29 @@ def export_users(db: DB, q: str | None = None, state: str = "all", sort: str = "
                     headers={"Content-Disposition": f'attachment; filename="eureka-members-{stamp}.csv"', "Cache-Control": "no-store"})
 
 
+def _action(a: m.AdminAction) -> dict:
+    return {"id": str(a.id), "at": a.created_at.isoformat(), "admin_email": a.admin_email, "action": a.action,
+            "target_user_id": str(a.target_user_id) if a.target_user_id else None, "target_email": a.target_email,
+            "detail": a.detail, "ip": a.ip}
+
+
+@router.get("/actions")
+def admin_actions(db: DB, action: str | None = None, q: str | None = None, before: datetime | None = None,
+                  limit: int = Query(100, ge=1, le=500)) -> dict:
+    """관리 기록 — 운영자가 한 조치 (최신순). before 로 이전 페이지를 이어서 받는다."""
+    A = m.AdminAction
+    stmt = select(A).order_by(A.created_at.desc()).limit(limit)
+    if action:
+        stmt = stmt.where(A.action == action)
+    if before:
+        stmt = stmt.where(A.created_at < before)
+    if q and q.strip():
+        like = f"%{q.strip()}%"
+        stmt = stmt.where(or_(A.admin_email.ilike(like), A.target_email.ilike(like), A.detail.ilike(like)))
+    counts = dict(db.execute(select(A.action, func.count()).where(A.created_at >= _ago(30)).group_by(A.action)).all())
+    return {"items": [_action(a) for a in db.scalars(stmt)], "last_30d": counts}
+
+
 @router.get("/presence")
 def presence(db: DB) -> dict:
     """지금 접속 중(2분 안)과 방금 전까지(15분 안) 접속한 회원 — 운영 콘솔이 15초마다 다시 받는다."""
@@ -327,6 +352,8 @@ def user_detail(user_id: UUID, db: DB) -> dict:
         "ai": {"calls": ai[0], "cost_usd": _cost(ai[1])},
         "logins": [_event(e, u.name) for e in events],
         "ips": [{"ip": ip, "logins": n, "failed": f, "last_at": at.isoformat()} for ip, n, at, f in ips],
+        "actions": [_action(a) for a in db.scalars(select(m.AdminAction).where(m.AdminAction.target_user_id == u.id)
+                                                   .order_by(m.AdminAction.created_at.desc()).limit(20))],
         "feedback": [{"id": str(f.id), "kind": f.kind, "status": f.status, "message": f.message[:300],
                       "created_at": f.created_at.isoformat()} for f in feedback],
     }
@@ -346,31 +373,51 @@ def _guard(target: m.User) -> None:
 
 
 @router.post("/users/{user_id}/suspend")
-def suspend(user_id: UUID, body: SuspendIn, db: DB) -> dict:
+def suspend(user_id: UUID, body: SuspendIn, db: DB, request: Request, me: AdminUser) -> dict:
     """이용 정지 — 로그인과 모든 API 가 바로 막힌다 (이미 받은 로그인 토큰도)."""
     u = _target(db, user_id)
     _guard(u)
     u.suspended_at, u.suspended_reason = datetime.now(timezone.utc), body.reason.strip()
+    audit.log_admin(db, request, me, "suspend", u, body.reason.strip())
     db.commit()
     return user_detail(user_id, db)
 
 
 @router.post("/users/{user_id}/unsuspend")
-def unsuspend(user_id: UUID, db: DB) -> dict:
+def unsuspend(user_id: UUID, db: DB, request: Request, me: AdminUser) -> dict:
     u = _target(db, user_id)
     u.suspended_at = u.suspended_reason = None
+    audit.log_admin(db, request, me, "unsuspend", u)
+    db.commit()
+    return user_detail(user_id, db)
+
+
+class LogoutIn(BaseModel):
+    reason: str | None = Field(default=None, max_length=500)
+
+
+@router.post("/users/{user_id}/logout")
+def force_logout(user_id: UUID, body: LogoutIn, db: DB, request: Request, me: AdminUser) -> dict:
+    """강제 로그아웃 — 그 회원이 쓰던 모든 곳의 로그인을 끊는다 (화면은 다음 요청, 길어도 1분 안에 로그아웃).
+    계정은 그대로라 다시 로그인하면 쓸 수 있다. 도용이 의심되면 이용 정지와 함께 쓴다."""
+    u = _target(db, user_id)
+    if u.id == me.id:
+        raise HTTPException(status.HTTP_409_CONFLICT, "내 계정은 여기서 로그아웃할 수 없어요")
+    u.session_id = FORCED_PREFIX + secrets.token_hex(15)
+    audit.log_admin(db, request, me, "logout", u, (body.reason or "").strip() or None)
     db.commit()
     return user_detail(user_id, db)
 
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_user(user_id: UUID, body: AdminDeleteIn, db: DB) -> Response:
+def delete_user(user_id: UUID, body: AdminDeleteIn, db: DB, request: Request, me: AdminUser) -> Response:
     """계정 삭제 — 회원 탈퇴와 똑같이 학습 기록·올린 파일·프로필 사진까지 지운다. 실수 방지로 이메일을 한 번 더 받는다."""
     u = _target(db, user_id)
     _guard(u)
     if body.confirm_email.strip().lower() != u.email:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "이메일이 맞지 않아요")
-    accounts.delete_account(db, u)
+    audit.log_admin(db, request, me, "delete", u, u.name)
+    accounts.delete_account(db, u)  # 여기서 함께 커밋된다
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

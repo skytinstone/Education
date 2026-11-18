@@ -194,6 +194,7 @@
     else if (page === "settings") renderSettings(params);
     else if (page === "answer-key") renderAnswerKey(a);
     else if (page === "exam") renderExamPaper(a, params);
+    else if (page === "exam-record") renderExamRecord(a);
     else if (page === "admin") { location.href = "/admin"; return; }
     else return go("/");
     renderSidebar();
@@ -1457,6 +1458,7 @@
           <button data-ws-tab="weak" class="on"><i data-lucide="target"></i>약점 TOP 3</button>
           <button data-ws-tab="units"><i data-lucide="list-tree"></i>학습 범위</button>
           <button data-ws-tab="chats"><i data-lucide="messages-square"></i>대화 ${sessions.length}</button>
+          ${api ? '<button data-ws-tab="exams"><i data-lucide="trending-up"></i>시험 기록</button>' : ""}
         </div>
         <div data-ws-pane="weak">
           ${weak.length ? `<ul class="weak-list">${weak.map((w) => `
@@ -1468,6 +1470,7 @@
         <div data-ws-pane="units" hidden>
           <div class="unit-list">${units.map((u) => `<span class="pill" style="--c:${COLOR[d]}">${esc(concept(u)?.name ?? "")}</span>`).join("")}</div>
         </div>
+        ${api ? '<div data-ws-pane="exams" hidden><p class="mini">시험 기록을 불러오는 중…</p></div>' : ""}
         <div data-ws-pane="chats" hidden>
           ${sessions.length ? `<div class="list">${sessions.slice(0, 8).map((s) => `
             <a href="#/chat/${s.id}"><i data-lucide="message-circle"></i>${esc(s.title)}<span>${relTime(s.updatedAt)}</span></a>`).join("")}</div>`
@@ -1480,8 +1483,10 @@
       if (!t) return;
       $$("#ws-more [data-ws-tab]").forEach((b) => b.classList.toggle("on", b === t));
       $$("#ws-more [data-ws-pane]").forEach((pane) => (pane.hidden = pane.dataset.wsPane !== t.dataset.wsTab));
+      if (t.dataset.wsTab === "exams") drawExamHistory(id, $('#ws-more [data-ws-pane="exams"]'));
     });
     $$("[data-proj-edit]").forEach((b) => b.addEventListener("click", () => projectModal(p)));
+    if (params?.get("tab") === "exams" && api) { $('#ws-more [data-ws-tab="exams"]')?.click(); requestAnimationFrame(() => $("#ws-more")?.scrollIntoView({ block: "start" })); }
     if (api) bindWorkspace(id, params?.get("exam") === "1");
   }
 
@@ -1899,6 +1904,98 @@
     };
   }
 
+  // ================= 시험 기록 · 점수 추이 =================
+  const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec) % 60).padStart(2, "0")}`;
+  // 점수(%) 꺾은선 — 오래된 것부터 왼쪽
+  function trendSVG(rows) {
+    const pts = rows.filter((r) => r.rate != null).slice(0, 30).reverse();
+    if (pts.length < 2) return "";
+    const W = 1000, H = 170, L = 34, Rr = 12, T = 14, B = 26;
+    const x = (i) => L + (i * (W - L - Rr)) / (pts.length - 1), y = (v) => T + (1 - v) * (H - T - B);
+    const line = pts.map((r, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(r.rate).toFixed(1)}`).join(" ");
+    const best = Math.max(...pts.map((r) => r.rate));
+    return `
+      <svg class="trend" viewBox="0 0 ${W} ${H}" role="img" aria-label="시험 점수 추이, 최근 ${Math.round(pts.at(-1).rate * 100)}%">
+        ${[0, 0.5, 1].map((v) => `<line x1="${L}" x2="${W - Rr}" y1="${y(v)}" y2="${y(v)}" class="grid"/><text x="${L - 6}" y="${y(v) + 4}" class="ax" text-anchor="end">${v * 100}</text>`).join("")}
+        <path d="${line} L${x(pts.length - 1)},${y(0)} L${x(0)},${y(0)} Z" class="area"/>
+        <path d="${line}" class="ln"/>
+        ${pts.map((r, i) => `<circle cx="${x(i)}" cy="${y(r.rate)}" r="${r.rate === best ? 5 : 3.5}" class="${r.rate === best ? "best" : ""}"><title>${new Date(r.created_at).toLocaleDateString("ko-KR")} · ${Math.round(r.rate * 100)}%</title></circle>`).join("")}
+        <text x="${L}" y="${H - 6}" class="ax">${new Date(pts[0].created_at).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })}</text>
+        <text x="${W - Rr}" y="${H - 6}" class="ax" text-anchor="end">${new Date(pts.at(-1).created_at).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })}</text>
+      </svg>`;
+  }
+  async function drawExamHistory(projectId, el) {
+    if (!el || el.dataset.loaded) return;
+    let rows;
+    try { rows = await Store.listExams(projectId); } catch (err) { el.innerHTML = `<p class="mini">${esc(err.message)}</p>`; return; }
+    el.dataset.loaded = "1";
+    if (!rows.length) {
+      el.innerHTML = '<p class="mini">아직 시험 기록이 없어요. 오른쪽 "시험 준비하기"에서 화면 시험을 보면 점수와 걸린 시간이 여기에 쌓여요</p>';
+      return;
+    }
+    const rates = rows.filter((r) => r.rate != null).map((r) => r.rate);
+    el.innerHTML = `
+      <div class="exh-stats">
+        <div><span>시험</span><b>${rows.length}번</b></div>
+        <div><span>최근</span><b>${rates.length ? `${Math.round(rates[0] * 100)}%` : "–"}</b></div>
+        <div><span>최고</span><b>${rates.length ? `${Math.round(Math.max(...rates) * 100)}%` : "–"}</b></div>
+        <div><span>평균</span><b>${rates.length ? `${Math.round((rates.reduce((a, b) => a + b, 0) / rates.length) * 100)}%` : "–"}</b></div>
+      </div>
+      ${trendSVG(rows) || '<p class="mini">시험을 두 번 이상 보면 점수 추이 그래프가 나와요</p>'}
+      <div class="exh-list">${rows.map((r) => `
+        <a class="exh-row" href="#/exam-record/${r.id}">
+          <span class="exh-rate ${r.rate >= 0.8 ? "ok" : r.rate < 0.5 ? "bad" : ""}">${r.rate == null ? "–" : `${Math.round(r.rate * 100)}%`}</span>
+          <span class="exh-main"><b>${esc(r.title)}</b><small>${new Date(r.created_at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })} · ${r.score}/${r.total_points}점 · ${r.correct}/${r.total}문항${r.auto_submitted ? " · 시간 초과 제출" : ""}</small></span>
+          <span class="exh-time"><i data-lucide="timer"></i>${mmss(r.used_sec)}${r.time_limit_sec ? ` / ${Math.round(r.time_limit_sec / 60)}분` : ""}</span>
+          <i data-lucide="chevron-right" class="go"></i>
+        </a>`).join("")}</div>`;
+    icons();
+  }
+
+  async function renderExamRecord(id) {
+    view.innerHTML = '<p class="mini">시험 기록을 불러오는 중…</p>';
+    let r;
+    try { r = await Store.exam(id); } catch (err) { view.innerHTML = `<div class="empty"><i data-lucide="file-x"></i><b>${esc(err.message)}</b></div>`; icons(); return; }
+    if (route().parts[0] !== "exam-record") return;
+    const label = (it, a) => (a ? (it.choices ? CIRC[Number(a) - 1] ?? a : a) : "–");
+    const maxSec = Math.max(1, ...r.items.map((i) => i.sec));
+    const avg = r.items.reduce((a, i) => a + i.sec, 0) / r.items.length;
+    const wrong = r.items.filter((i) => i.correct === false).map((i) => i.problem_id);
+    const slow = [...r.items].map((it, k) => ({ ...it, k })).sort((a, b) => b.sec - a.sec).slice(0, 3);
+    view.innerHTML = `
+      <div class="xt-result">
+        ${r.project_id ? `<a class="ak-back" href="#/project/${r.project_id}?tab=exams"><i data-lucide="arrow-left"></i>시험 기록</a>` : ""}
+        <div class="xt-score panel">
+          <span>${esc(r.title)} · ${new Date(r.created_at).toLocaleString("ko-KR")}</span>
+          <b>${r.score}<small> / ${r.total_points}점</small></b>
+          <div class="xt-stats"><div><span>맞힌 문항</span><b>${r.correct}/${r.total}</b></div>
+            <div><span>걸린 시간</span><b>${mmss(r.used_sec)}${r.time_limit_sec ? `<small> / ${Math.round(r.time_limit_sec / 60)}분</small>` : ""}</b></div>
+            <div><span>문항당 평균</span><b>${mmss(avg)}</b></div>
+            <div><span>안 푼 문항</span><b>${r.skipped}</b></div></div>
+          ${r.auto_submitted ? '<p class="mini">시간이 다 돼서 저절로 제출된 시험이에요</p>' : ""}
+          <div class="page-actions">
+            ${wrong.length && r.project_id ? '<button class="btn-primary" data-er-retry><i data-lucide="rotate-ccw"></i>틀린 문항만 다시 풀기</button>' : ""}
+            <button class="btn-ghost danger-text" data-er-del><i data-lucide="trash-2"></i>기록 삭제</button>
+          </div>
+        </div>
+        <div class="panel xt-slow"><h3><i data-lucide="hourglass"></i>시간이 오래 걸린 문항</h3>
+          <div class="xt-slow-list">${slow.map((it) => `<div><b>${it.k + 1}번</b><span>${mmss(it.sec)}</span><small>${it.correct ? "맞음" : !it.my ? "안 풂" : it.correct === false ? "틀림" : "채점 못 함"}</small></div>`).join("")}</div></div>
+        <div class="panel xt-table"><h3><i data-lucide="list-checks"></i>문항별 결과 · 걸린 시간</h3>
+          ${r.items.map((it, k) => `<div class="xt-row ${it.correct ? "ok" : it.correct === false ? "bad" : ""}">
+            <b>${k + 1}</b><span class="xt-st"><i data-lucide="${it.correct ? "circle-check" : it.correct === false ? "circle-x" : "circle-help"}"></i>${it.correct ? "맞음" : !it.my ? "안 풂" : it.correct === false ? "틀림" : "채점 못 함"}</span>
+            <span class="xt-stem1" data-math>${esc((it.stem || "").slice(0, 80))}</span>
+            <span class="xt-ans">내 답 <b data-math>${esc(label(it, it.my))}</b> · 정답 <b data-math>${esc(label(it, it.answer))}</b></span>
+            <span class="xt-secbar ${it.sec > avg * 1.5 ? "slow" : ""}"><i style="width:${(it.sec / maxSec) * 100}%"></i><em>${mmss(it.sec)}</em></span></div>`).join("")}
+        </div>
+      </div>`;
+    icons();
+    view.onclick = (e) => {
+      if (e.target.closest("[data-er-retry]")) return go(`/exam/${r.project_id}?${new URLSearchParams({ m: r.scope || "all", take: "1", per: String(r.per), t: "0", ids: wrong.join(",") })}`);
+      if (e.target.closest("[data-er-del]")) return confirmModal({ title: "이 시험 기록을 지울까요?", text: "점수 추이에서도 빠져요. 문제 풀이 기록과 오답노트는 그대로 남아요.",
+        run: async () => { try { await Store.deleteExam(id); toast("시험 기록을 지웠어요"); go(r.project_id ? `/project/${r.project_id}?tab=exams` : "/"); } catch (err) { toast(err.message); } } });
+    };
+  }
+
   // ================= 화면에서 시험 보기 =================
   // 한 문제씩 / 4문제씩, 타이머(선택) — 제출하면 바로 채점하고 틀린 문항은 오답노트에 담긴다
   const takeFields = (n = 0) => `
@@ -1990,6 +2087,14 @@
       </section>`;
     };
 
+    // 문항별 시간: 한 화면에 머문 시간을 그 화면의 문항들에 나눠 더한다 (한 문제씩이면 그 문항의 시간)
+    s.secs ??= {};
+    let pageAt = Date.now();
+    const tick = () => {
+      const shown = list.slice(s.page * per, s.page * per + per), sec = (Date.now() - pageAt) / 1000;
+      if (document.visibilityState === "visible") shown.forEach((q) => (s.secs[q.id] = (s.secs[q.id] ?? 0) + sec / shown.length));
+      pageAt = Date.now();
+    };
     function draw() {
       const from = s.page * per, shown = list.slice(from, from + per);
       view.innerHTML = `
@@ -2017,11 +2122,12 @@
       $(".xt-prog em").style.width = `${(answered() / list.length) * 100}%`;
       list.forEach((q, i) => $(`.xt-omr [data-jump="${i}"]`)?.classList.toggle("done", (s.answers[q.id] ?? "") !== ""));
     };
-    const goPage = (n) => { s.page = Math.max(0, Math.min(pages - 1, n)); save(); draw(); view.scrollIntoView?.({ block: "start" }); };
+    const goPage = (n) => { tick(); s.page = Math.max(0, Math.min(pages - 1, n)); save(); draw(); view.scrollIntoView?.({ block: "start" }); };
 
     async function submit(auto = false) {
       if (s.done) return;
       clearInterval(takeTimer);
+      tick();
       s.done = true;
       save();
       const usedMs = Date.now() - s.startedAt;
@@ -2040,11 +2146,28 @@
         }
       }
       try { sessionStorage.removeItem(KEY); } catch { /* 무시 */ }
+      rows.forEach((r) => (r.sec = Math.round(s.secs[r.q.id] ?? 0)));
+      // 시험 기록 남기기 (점수 추이 · 오래 걸린 문항)
+      let saved = null;
+      if (Store.mode === "api") {
+        try {
+          saved = await Store.saveExam(p.id, {
+            title: `${subject || p.name}${scopeName ? ` · ${scopeName}` : ""}${params.get("ids") ? " · 틀린 문항" : ""}`.slice(0, 200),
+            scope: params.get("m") ?? "all", per, time_limit_sec: limit ? Math.round(limit / 1000) : null,
+            used_sec: Math.round(usedMs / 1000), auto_submitted: auto,
+            items: rows.map((r) => ({ problem_id: r.q.id, number: r.q.number ?? null, my: r.my, answer: r.answer ? String(r.answer).slice(0, 200) : null,
+              correct: r.correct, points: pts(r.q), sec: r.sec })),
+          });
+        } catch (err) { toast(`시험 기록을 저장하지 못했어요: ${err.message}`); }
+      }
       if (location.hash !== here) return;
-      showResult(rows, usedMs, auto);
+      showResult(rows, usedMs, auto, saved);
     }
 
-    function showResult(rows, usedMs, auto) {
+    function showResult(rows, usedMs, auto, saved = null) {
+      const diff = saved?.previous_rate != null && saved.rate != null ? Math.round((saved.rate - saved.previous_rate) * 100) : null;
+      const slow = rows.filter((r) => r.sec > 0).sort((a, b) => b.sec - a.sec).slice(0, 3);
+      const mmss = (sec) => `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
       const graded = rows.filter((r) => r.correct !== null);
       const right = rows.filter((r) => r.correct);
       const score = right.reduce((a, r) => a + pts(r.q), 0);
@@ -2056,6 +2179,8 @@
             ${auto ? '<p class="mini"><i data-lucide="alarm-clock"></i> 시간이 다 돼서 저절로 제출했어요</p>' : ""}
             <span>${esc(subject || p.name)} · ${list.length}문항</span>
             <b>${score}<small> / ${totalPts}점</small></b>
+            ${saved ? `<p class="xt-trend ${diff > 0 ? "up" : diff < 0 ? "down" : ""}">${diff == null ? "이 프로젝트의 첫 시험 기록이에요"
+              : `지난번보다 <b>${diff > 0 ? "+" : ""}${diff}%p</b>${saved.best_rate != null && saved.rate > saved.best_rate ? " · 최고 기록!" : ""}`} · ${saved.attempts}번째 시험</p>` : ""}
             <div class="xt-stats"><div><span>맞힌 문항</span><b>${right.length}/${list.length}</b></div>
               <div><span>걸린 시간</span><b>${clock(usedMs)}</b></div>
               <div><span>안 푼 문항</span><b>${rows.filter((r) => r.skipped).length}</b></div></div>
@@ -2064,15 +2189,20 @@
               ${wrongIds.length ? '<button class="btn-primary" data-xt-retry><i data-lucide="rotate-ccw"></i>틀린 문항만 다시 풀기</button>' : ""}
               ${wrongIds.length ? '<a class="btn-ghost" href="#/notes"><i data-lucide="circle-x"></i>오답노트 보기</a>' : ""}
               <button class="btn-ghost" data-xt-again><i data-lucide="refresh-cw"></i>처음부터 다시</button>
+              ${saved ? `<a class="btn-ghost" href="#/project/${p.id}?tab=exams"><i data-lucide="trending-up"></i>점수 추이</a>` : ""}
               <a class="btn-ghost" href="#/project/${p.id}"><i data-lucide="folder"></i>프로젝트로</a>
             </div>
           </div>
+          ${slow.length ? `<div class="panel xt-slow"><h3><i data-lucide="hourglass"></i>시간이 오래 걸린 문항</h3>
+            <div class="xt-slow-list">${slow.map((r) => `<div><b>${rows.indexOf(r) + 1}번</b><span>${mmss(r.sec)}</span><small>${r.correct ? "맞음" : r.skipped ? "안 풂" : r.correct === false ? "틀림" : "채점 못 함"}</small></div>`).join("")}</div>
+            <p class="mini">평균 ${mmss(Math.round(rows.reduce((a, r) => a + r.sec, 0) / rows.length))} · 오래 걸렸는데 틀린 문항부터 다시 보면 좋아요</p></div>` : ""}
           <div class="panel xt-table"><h3><i data-lucide="list-checks"></i>문항별 결과</h3>
             ${rows.map((r, i) => `<div class="xt-row ${r.correct ? "ok" : r.correct === false ? "bad" : ""}">
               <b>${i + 1}</b><span class="xt-st"><i data-lucide="${r.correct ? "circle-check" : r.correct === false ? "circle-x" : "circle-help"}"></i>${r.correct ? "맞음" : r.skipped ? "안 풂" : r.correct === false ? "틀림" : "채점 못 함"}</span>
               <span class="xt-stem1" data-math>${esc(r.q.stem.slice(0, 80))}</span>
               <span class="xt-ans">내 답 <b data-math>${esc(label(r.q, r.my))}</b></span>
-              <span class="xt-ans">정답 <b data-math>${esc(label(r.q, r.answer))}</b></span></div>`).join("")}
+              <span class="xt-ans">정답 <b data-math>${esc(label(r.q, r.answer))}</b></span>
+              <span class="xt-ans xt-sec">${mmss(r.sec)}</span></div>`).join("")}
           </div>
         </div>`;
       icons();

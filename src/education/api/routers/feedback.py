@@ -3,13 +3,13 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import func, or_, select
 
-from education.api.deps import DB, CurrentUser, admin_user
+from education.api.deps import DB, AdminUser, CurrentUser, admin_user
 from education.api.dto import AdminFeedbackOut, AdminFeedbackPatch, AnnouncementIn, FeedbackIn, FeedbackOut
 from education.db import models as m
-from education.services import feedback, notifications
+from education.services import audit, feedback, notifications
 
 router = APIRouter(tags=["피드백"])
 
@@ -70,14 +70,18 @@ def feedback_summary(db: DB) -> dict:
 
 
 @admin.patch("/feedback/{feedback_id}")
-def update_feedback(feedback_id: UUID, body: AdminFeedbackPatch, db: DB) -> AdminFeedbackOut:
+def update_feedback(feedback_id: UUID, body: AdminFeedbackPatch, db: DB, request: Request, me: AdminUser) -> AdminFeedbackOut:
     fb = db.get(m.Feedback, feedback_id)
     if fb is None:
         raise HTTPException(404, "피드백을 찾을 수 없어요")
+    target = db.get(m.User, fb.user_id) if fb.user_id else None
+    if body.status and body.status != fb.status:
+        audit.log_admin(db, request, me, "voc_status", target, f"{fb.status} → {body.status} · {fb.message[:200]}")
     if body.status:
         fb.status = body.status
     if body.reply is not None and body.reply.strip() and body.reply.strip() != fb.reply:
         fb.reply, fb.replied_at = body.reply.strip(), datetime.now(timezone.utc)
+        audit.log_admin(db, request, me, "voc_reply", target, fb.reply[:500])
         notifications.notify(db, fb.user_id, "feedback_reply", f"보내 주신 의견에 답변했어요 · {feedback.KIND_NAME[fb.kind]}",
                              body=f"내 의견: {fb.message[:200]}\n\n답변: {fb.reply}")
     db.commit()
@@ -85,18 +89,20 @@ def update_feedback(feedback_id: UUID, body: AdminFeedbackPatch, db: DB) -> Admi
 
 
 @admin.post("/announcements", status_code=status.HTTP_201_CREATED)
-def announce(body: AnnouncementIn, db: DB) -> dict:
+def announce(body: AnnouncementIn, db: DB, request: Request, me: AdminUser) -> dict:
     """모든 사용자에게 공지 알림."""
     n = notifications.announce(db, body.title.strip(), body=(body.body or "").strip() or None, link=body.link or None)
+    audit.log_admin(db, request, me, "announce", None, f"{body.title.strip()} ({n}명)")
     db.commit()
     return {"sent": n}
 
 
 @admin.post("/problems/{problem_id}/restore", status_code=status.HTTP_204_NO_CONTENT)
-def restore_problem(problem_id: str, db: DB) -> Response:
+def restore_problem(problem_id: str, db: DB, request: Request, me: AdminUser) -> Response:
     """신고로 숨겨진 문제가 실제로는 맞을 때 다시 보이게 한다."""
     problem = db.get(m.Problem, problem_id)
     if problem is None or not feedback.is_hidden(problem):
         raise HTTPException(404, "숨겨진 문제가 아니에요")
+    audit.log_admin(db, request, me, "restore", None, f"문제 {problem_id} · {problem.stem[:200]}")
     feedback.restore(db, problem)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

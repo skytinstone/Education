@@ -129,6 +129,10 @@
   .live-dev { color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
   .tbl td.bad { color: var(--bad); font-weight: 600; }
+  .achip { display: inline-flex; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgba(118,118,128,.1); color: var(--ink-2); white-space: nowrap; }
+  .achip.bad { background: rgba(225,29,72,.1); color: #be123c; }
+  .achip.ok { background: rgba(34,197,94,.12); color: #15803d; }
+  .achip.warn { background: rgba(249,115,22,.12); color: #c2410c; }
   @media (max-width: 760px) {
     .live-row { grid-template-columns: 1fr auto; }
     .live-page, .live-dev { display: none; }
@@ -189,6 +193,7 @@
       <a href="#/quality" data-tab="quality"><i data-lucide="gauge"></i>문제 품질</a>
       <a href="#/logins" data-tab="logins"><i data-lucide="log-in"></i>로그인 기록</a>
       <a href="#/voc" data-tab="voc"><i data-lucide="inbox"></i>VOC</a>
+      <a href="#/actions" data-tab="actions"><i data-lucide="scroll-text"></i>관리 기록</a>
     </nav>
     <div class="side-foot">
       <div class="me"><span id="me-name"></span><small id="me-email"></small></div>

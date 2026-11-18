@@ -19,6 +19,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     SmallInteger,
     String,
@@ -90,6 +91,50 @@ class User(Base):
         CheckConstraint("daily_goal BETWEEN 1 AND 200", name="daily_goal_range"),
         CheckConstraint("avatar_type IN ('initial', 'preset', 'photo')", name="user_avatar_type"),
     )
+
+
+class ExamRecord(Base):
+    """화면에서 본 시험 한 번 — 점수·걸린 시간·문항별 결과 (점수 추이·오래 걸린 문항)."""
+    __tablename__ = "exam_records"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    project_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("projects.id", ondelete="SET NULL"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    scope: Mapped[str | None] = mapped_column(String(80))  # 자료 id 또는 all
+    per: Mapped[int] = mapped_column(SmallInteger, server_default="1")  # 한 화면에 1 · 4 문제
+    time_limit_sec: Mapped[int | None] = mapped_column(Integer)
+    used_sec: Mapped[int] = mapped_column(Integer)
+    auto_submitted: Mapped[bool] = mapped_column(Boolean, server_default="false")  # 시간이 다 돼서 저절로 제출
+    score: Mapped[int] = mapped_column(SmallInteger)
+    total_points: Mapped[int] = mapped_column(SmallInteger)
+    correct: Mapped[int] = mapped_column(SmallInteger)
+    total: Mapped[int] = mapped_column(SmallInteger)
+    skipped: Mapped[int] = mapped_column(SmallInteger)
+    ungraded: Mapped[int] = mapped_column(SmallInteger)
+    # [{problem_id, number, my, answer, correct, points, sec}]
+    items: Mapped[list] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (Index("ix_exam_records_user_created", "user_id", "created_at"),)
+
+
+class AdminAction(Base):
+    """운영자가 한 조치 기록 — 누가 언제 누구에게 무엇을 했는지 (정지·해제·삭제·강제 로그아웃·VOC·공지).
+    대상 계정이 지워져도 기록은 남도록 대상은 외래 키 없이 id·이메일로 적는다."""
+    __tablename__ = "admin_actions"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    admin_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    admin_email: Mapped[str] = mapped_column(String(320))
+    action: Mapped[str] = mapped_column(String(24))
+    target_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), index=True)
+    target_email: Mapped[str | None] = mapped_column(String(320))
+    detail: Mapped[str | None] = mapped_column(String(1000))
+    ip: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp(), nullable=False)
+
+    __table_args__ = (Index("ix_admin_actions_created", "created_at"),)
 
 
 class LoginEvent(Base):

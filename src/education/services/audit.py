@@ -33,6 +33,14 @@ def record_login(db: Session, request: Request | None, *, method: str, ok: bool,
         user.last_login_at = datetime.now(timezone.utc)
 
 
+def log_admin(db: Session, request: Request | None, admin: m.User, action: str, target: m.User | None = None,
+              detail: str | None = None) -> None:
+    """운영자 조치 한 건을 남긴다. 커밋은 호출한 쪽이 한다."""
+    db.add(m.AdminAction(admin_id=admin.id, admin_email=admin.email, action=action,
+                         target_user_id=target.id if target else None, target_email=target.email if target else None,
+                         detail=(detail or "")[:1000] or None, ip=client_ip(request)))
+
+
 def purge_old(db: Session) -> int:
     """보관 기간이 지난 로그인 기록을 지운다. 지운 개수를 돌려준다."""
     cutoff = datetime.now(timezone.utc) - timedelta(days=RETENTION_DAYS)

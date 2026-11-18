@@ -115,7 +115,7 @@
   // ================= 운영 콘솔 (운영자 계정만) =================
   // #/(개요) · #/users[/id] · #/ai · #/logins · #/voc
   const FB_STATUS = { open: "접수", reviewing: "확인 중", resolved: "해결" };
-  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["ai", "AI 사용량", "cpu"], ["quality", "문제 품질", "gauge"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"]];
+  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["ai", "AI 사용량", "cpu"], ["quality", "문제 품질", "gauge"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"], ["actions", "관리 기록", "scroll-text"]];
   const METHOD_NAME = { password: "이메일", google: "Google", kakao: "카카오" };
   const PURPOSE_NAME = { generate: "문제 생성", verify: "문제 검증", note_generate: "개념 정리 생성", note_verify: "개념 정리 검증",
     course: "코스 만들기", extract: "기출·교재 분석", essay_grade: "서술형 채점", review: "풀이 확인", explain: "계산·설명 풀이", answer_key: "정답지 풀이", answer_verify: "정답지 검산" };
@@ -132,6 +132,7 @@
   const adminState = {
     days: 30, aiDays: 30,
     users: { q: "", state: "all", sort: "recent", offset: 0 },
+    actions: { q: "", action: "" },
     logins: { q: "", result: "all", method: "" },
     voc: { state: "open", kind: "", q: "", user_id: "" },
   };
@@ -166,7 +167,11 @@
 
   const TAB_DESC = { overview: "가입·이용 현황과 오늘 챙길 것", users: "회원 검색, 상세, 이용 정지·삭제", ai: "AI 호출 비용·토큰·실패",
     quality: "AI 가 만든 문제의 검산 통과율과 탈락 이유, 정답지 상태",
-    logins: "로그인·가입 기록 (90일 보관)", voc: "의견·문제 신고 확인과 답변, 전체 공지" };
+    logins: "로그인·가입 기록 (90일 보관)", voc: "의견·문제 신고 확인과 답변, 전체 공지",
+    actions: "운영자가 한 조치 — 정지·해제·삭제·강제 로그아웃·VOC·공지 (누가 · 언제 · 누구에게)" };
+  const ACTION_NAME = { suspend: ["이용 정지", "bad"], unsuspend: ["정지 해제", "ok"], delete: ["계정 삭제", "bad"], logout: ["강제 로그아웃", "warn"],
+    voc_status: ["VOC 상태 변경", ""], voc_reply: ["VOC 답변", ""], announce: ["전체 공지", ""], restore: ["문제 복구", ""] };
+  const actionChip = (a) => { const [t, tone] = ACTION_NAME[a] ?? [a, ""]; return `<span class="achip ${tone}">${esc(t)}</span>`; };
   async function renderAdmin(tab = "overview", id = null) {
     if (tab !== "users" || id) clearInterval(liveTimer);
     if (!ADMIN_TABS.some(([k]) => k === tab)) tab = "overview";
@@ -185,6 +190,7 @@
       else if (tab === "ai") await adminAI(body);
       else if (tab === "quality") await adminQuality(body);
       else if (tab === "logins") await adminLogins(body);
+      else if (tab === "actions") await adminActions(body);
       else await adminVOC(body);
     } catch (err) {
       if (body.isConnected) body.innerHTML = `<p class="mini">${esc(err.message)}</p>`;
@@ -424,6 +430,7 @@
       <section class="panel user-head">
         <div class="who"><h2>${esc(u.name)} ${presenceBadge(u, true)}</h2><p>${esc(u.email)}</p><div>${methodChips(u.methods)}${u.is_admin ? '<span class="upill">운영자</span>' : ""}</div></div>
         <div class="uactions">${u.is_admin ? '<p class="mini">운영자 계정은 정지·삭제할 수 없어요</p>' : `
+          <button class="btn-ghost" data-ulogout title="이 회원이 쓰던 모든 곳의 로그인을 끊어요"><i data-lucide="log-out"></i>강제 로그아웃</button>
           ${u.suspended_at ? '<button class="btn-ghost" data-unsuspend><i data-lucide="user-check"></i>정지 해제</button>' : '<button class="btn-ghost" data-suspend><i data-lucide="user-x"></i>이용 정지</button>'}
           <button class="btn-ghost danger-text" data-udelete><i data-lucide="trash-2"></i>계정 삭제</button>`}</div>
         ${u.suspended_at ? `<div class="suspend-note"><i data-lucide="ban"></i><span><b>${when(u.suspended_at)}부터 이용 정지</b> · ${esc(u.suspended_reason ?? "")}</span></div>` : ""}
@@ -439,6 +446,8 @@
         <section class="panel"><div class="panel-row"><h3><i data-lucide="inbox"></i>보낸 문의</h3>${d.feedback.length ? `<a class="mini" href="#/voc" data-voc-user="${u.id}">VOC에서 보기</a>` : ""}</div>
           ${d.feedback.length ? `<ul class="mini-list">${d.feedback.map((f) => `<li><span class="fb-status ${f.status}">${FB_STATUS[f.status]}</span> ${esc(FEEDBACK_KINDS[f.kind])} · ${esc(f.message)}<small>${when(f.created_at)}</small></li>`).join("")}</ul>` : '<p class="mini">보낸 문의가 없어요</p>'}</section>
       </div>
+      ${d.actions.length ? `<section class="panel"><h3><i data-lucide="scroll-text"></i>이 회원에 대한 조치</h3>${table(["시각", "조치", "운영자", "내용"], d.actions.map((a) => `
+        <tr><td class="nowrap">${when(a.at)}</td><td>${actionChip(a.action)}</td><td>${esc(a.admin_email)}</td><td>${esc(a.detail ?? "–")}</td></tr>`), "")}</section>` : ""}
       <section class="panel"><h3><i data-lucide="network"></i>접속한 IP</h3>${table(["IP", "#로그인", "#실패", "마지막"], d.ips.map((x) => `
         <tr><td class="mono">${esc(x.ip)}${x.ip === u.last_seen_ip ? ' <span class="upill ok">최근</span>' : ""}</td><td class="n">${num(x.logins)}</td>
           <td class="n ${x.failed ? "bad" : ""}">${num(x.failed)}</td><td class="nowrap">${when(x.last_at)} · ${ago(x.last_at)}</td></tr>`), "최근 90일 로그인 기록이 없어요")}
@@ -446,6 +455,32 @@
       <section class="panel"><h3><i data-lucide="log-in"></i>최근 로그인 기록</h3>${table(["시각", "방법", "결과", "IP", "기기"], d.logins.map((e) => `
         <tr class="${e.ok ? "" : "fail"}"><td class="nowrap">${when(e.at)}</td><td>${methodChips([e.method])}${e.kind === "signup" ? '<span class="mchip new">가입</span>' : ""}</td>
           <td>${e.ok ? '<span class="ok">성공</span>' : `<span class="bad">실패</span><small>${FAIL_REASON[e.reason] ?? ""}</small>`}</td><td class="mono">${esc(e.ip ?? "–")}</td><td>${device(e.user_agent ?? "")}</td></tr>`), "최근 90일 기록이 없어요")}</section>`;
+    icons();
+  }
+
+  // ---------- 관리 기록 ----------
+  async function adminActions(body) {
+    const f = adminState.actions;
+    const r = await Store.adminGet("/actions", { limit: 200, ...(f.action && { action: f.action }), ...(f.q && { q: f.q }) });
+    if (!body.isConnected) return;
+    const c = r.last_30d;
+    body.innerHTML = `
+      <div class="kpis">
+        ${kpi("이용 정지 (30일)", num(c.suspend), `정지 해제 ${num(c.unsuspend)}`, c.suspend ? "warn" : "")}
+        ${kpi("강제 로그아웃 (30일)", num(c.logout))}
+        ${kpi("계정 삭제 (30일)", num(c.delete))}
+        ${kpi("VOC 처리 (30일)", num((c.voc_status ?? 0) + (c.voc_reply ?? 0)), `답변 ${num(c.voc_reply)} · 공지 ${num(c.announce)}`)}
+      </div>
+      <div class="filters">
+        <label class="search-box"><i data-lucide="search"></i><input id="ac-q" placeholder="운영자·대상 이메일 또는 내용" value="${esc(f.q)}" /></label>
+        <select id="ac-action" class="sel"><option value="">모든 조치</option>${Object.entries(ACTION_NAME).map(([k, [t]]) => `<option value="${k}" ${f.action === k ? "selected" : ""}>${t}</option>`).join("")}</select>
+        <span class="mini grow">${num(r.items.length)}건${r.items.length >= 200 ? " (최근 200건)" : ""}</span>
+      </div>
+      <section class="panel flush">${table(["시각", "조치", "대상", "내용", "운영자", "IP"], r.items.map((a) => `
+        <tr><td class="nowrap">${when(a.at)}<small>${ago(a.at)}</small></td><td>${actionChip(a.action)}</td>
+          <td>${a.target_user_id ? `${userLink(a.target_user_id, a.target_email ?? "")}` : esc(a.target_email ?? "–")}</td>
+          <td>${esc(a.detail ?? "–")}</td><td>${esc(a.admin_email)}</td><td class="mono">${esc(a.ip ?? "–")}</td></tr>`), "아직 기록된 조치가 없어요")}</section>
+      <p class="mini">조치 기록은 지우지 않아요. 대상 계정이 삭제돼도 이메일과 함께 남아요</p>`;
     icons();
   }
 
@@ -501,11 +536,12 @@
   function adminChange(e, tab) {
     const t = e.target;
     if (t.id === "lg-method") { adminState.logins.method = t.value; rerender(tab); }
+    else if (t.id === "ac-action") { adminState.actions.action = t.value; rerender(tab); }
     else if (t.id === "us-sort") { adminState.users.sort = t.value; adminState.users.offset = 0; rerender(tab); }
     else if (t.id === "voc-kind") { adminState.voc.kind = t.value; rerender(tab); }
   }
   view.addEventListener("input", (e) => {
-    const map = { "lg-q": ["logins", "logins"], "us-q": ["users", "users"], "voc-q": ["voc", "voc"] };
+    const map = { "lg-q": ["logins", "logins"], "us-q": ["users", "users"], "voc-q": ["voc", "voc"], "ac-q": ["actions", "actions"] };
     const hit = map[e.target.id];
     if (!hit) return;
     adminState[hit[0]].q = e.target.value.trim();
@@ -547,6 +583,19 @@
 
     // 계정 관리
     const u = adminUserCache?.user;
+    if (el("[data-ulogout]")) {
+      const u = adminUserCache.user;
+      return formModal({
+        title: `${u.name} 님을 강제 로그아웃할까요?`, submit: "로그아웃시키기", danger: true,
+        body: `<p class="modal-text">이 회원이 쓰던 <b>모든 PC·폰의 로그인이 끊겨요</b>. 화면을 열어 둔 곳은 1분 안에 "운영자가 로그아웃시켰어요" 안내가 뜨고, 다시 로그인하면 계속 쓸 수 있어요.
+          도용이 의심되면 이용 정지와 함께 쓰세요.</p>
+          <div class="field"><label for="lo-reason">사유 (관리 기록에 남아요, 선택)</label><input id="lo-reason" maxlength="500" placeholder="예: 도용 의심 · 본인 요청" /></div>`,
+        onSubmit: (form) => {
+          Store.adminPost(`/users/${u.id}/logout`, { reason: $("#lo-reason", form).value.trim() || null })
+            .then(() => { toast("강제 로그아웃했어요"); rerender(tab, id); }).catch((err) => toast(err.message));
+        },
+      });
+    }
     if (el("[data-suspend]") && u) {
       return formModal({
         title: `${u.name}님의 이용을 정지할까요?`, submit: "이용 정지", danger: true,

@@ -1,4 +1,4 @@
-/* Eureka — Liquid Glass 통일 레이어
+﻿/* Eureka — Liquid Glass 통일 레이어
    app.css · index.html 의 개별 스타일 위에 마지막으로 얹어, 화면 전체를 같은 규칙으로 맞춘다.
    원칙: ① 표면은 두 단계뿐 (떠 있는 유리 카드 / 카드 안의 옅은 채움)  ② 모서리는 세 가지 (12 · 18 · 26) + 캡슐
          ③ 테두리 대신 빛(위쪽 하이라이트)과 그림자로 구분  ④ 색은 강조 1가지 + 상태색(초록·주황·빨강)만 */
@@ -240,4 +240,49 @@
 @media print {
   body { background: #fff !important; }
   .panel, .ak-card, .ak-quick, .ak-item { background: #fff !important; box-shadow: none !important; border: 1px solid #ddd !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+}
+
+/* ---------- 시험 기록 · 점수 추이 ---------- */
+.xt-trend { margin: -6px 0 14px; font-size: 13px; color: var(--ink-2); }
+.xt-trend.up b { color: var(--ok); }
+.xt-trend.down b { color: var(--bad); }
+.xt-slow-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 10px 0 8px; }
+.xt-slow-list > div { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 14px; background: var(--fill); }
+.xt-slow-list b { font-size: 13px; }
+.xt-slow-list span { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.xt-slow-list small { font-size: 12px; color: var(--ink-3); }
+.xt-row { grid-template-columns: 28px 86px minmax(0, 1fr) auto auto auto !important; }
+.xt-sec { font-variant-numeric: tabular-nums; }
+.xt-secbar { position: relative; width: 120px; height: 20px; border-radius: 6px; background: var(--fill); overflow: hidden; }
+.xt-secbar i { position: absolute; inset: 0 auto 0 0; background: rgba(79,107,255,.18); }
+.xt-secbar.slow i { background: rgba(249,115,22,.28); }
+.xt-secbar em { position: relative; display: block; padding: 0 8px; font-style: normal; font-size: 12px; line-height: 20px; font-variant-numeric: tabular-nums; }
+.exh-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.exh-stats > div { padding: 10px 14px; border-radius: 14px; background: var(--fill); display: flex; flex-direction: column; }
+.exh-stats span { font-size: 12px; color: var(--ink-3); }
+.exh-stats b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.trend { width: 100%; height: auto; max-height: 200px; display: block; margin: 4px 0 10px; }
+.trend .grid { stroke: rgba(15,23,42,.07); }
+.trend .ax { font-size: 11px; fill: var(--ink-3); }
+.trend .area { fill: rgba(79,107,255,.08); }
+.trend .ln { fill: none; stroke: var(--accent); stroke-width: 2.2; stroke-linejoin: round; stroke-linecap: round; }
+.trend circle { fill: #fff; stroke: var(--accent); stroke-width: 2; }
+.trend circle.best { fill: var(--accent); }
+.exh-list { display: grid; gap: 6px; }
+.exh-list .exh-row { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto 16px; align-items: center; gap: 12px; padding: 10px 12px;
+  border-radius: 14px; background: var(--fill); color: inherit; text-decoration: none; }
+.exh-row:hover { background: var(--fill-hover); }
+.exh-rate { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.exh-rate.ok { color: var(--ok); } .exh-rate.bad { color: var(--bad); }
+.exh-main { min-width: 0; }
+.exh-main b, .exh-main small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.exh-main small { font-size: 12px; color: var(--ink-3); }
+.exh-time { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.exh-time svg { width: 13px; height: 13px; }
+.exh-row .go { width: 15px; height: 15px; color: var(--ink-3); }
+@media (max-width: 760px) {
+  .exh-stats, .xt-slow-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .exh-time { display: none; }
+  .exh-list .exh-row { grid-template-columns: 52px minmax(0, 1fr) 16px; }
+  .xt-secbar { width: 100%; grid-column: 3; }
 }

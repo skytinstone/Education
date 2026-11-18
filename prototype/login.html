@@ -784,6 +784,9 @@
     history.replaceState(null, "", location.pathname); // 링크가 방문 기록에 남지 않게
     setMode("reset");
     $("#rs-pw").focus();
+  } else if (location.hash === "#forced") {
+    history.replaceState(null, "", location.pathname);
+    notice("운영자가 로그아웃시켰어요. 다시 로그인해 주세요. 문의: horcruxtech.ai@gmail.com", "info");
   } else if (location.hash === "#replaced") {
     history.replaceState(null, "", location.pathname);
     notice("다른 PC에서 접속해서 이곳은 로그아웃됐어요. 여기서 다시 로그인하면 다른 PC가 로그아웃돼요", "info");

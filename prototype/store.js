@@ -111,18 +111,19 @@ const Store = (() => {
 
   // 같은 계정으로 다른 PC에서 로그인 → 팝업을 띄우고 잠시 뒤 로그인 화면으로 (여러 요청이 동시에 와도 한 번만)
   let replacedShown = false;
-  function sessionReplaced() {
+  function sessionReplaced(kind = "1") {
     if (replacedShown) return;
+    const forced = kind === "admin";
     replacedShown = true;
     const SEC = 5;
-    const go = () => { location.href = "login.html#replaced"; };
+    const go = () => { location.href = forced ? "login.html#forced" : "login.html#replaced"; };
     const bd = document.createElement("div");
     bd.className = "backdrop session-out";
     bd.style.zIndex = "200";
     bd.innerHTML = `
       <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="so-title" style="max-width:380px;text-align:center">
         <div style="width:48px;height:48px;margin:4px auto 14px;border-radius:50%;display:grid;place-items:center;background:rgba(249,115,22,.12);color:#ea580c;font-size:22px">!</div>
-        <h2 id="so-title" style="font-size:17px;font-weight:700;margin-bottom:8px">다른 PC에서 접속 중입니다.</h2>
+        <h2 id="so-title" style="font-size:17px;font-weight:700;margin-bottom:8px">${forced ? "운영자가 로그아웃시켰어요." : "다른 PC에서 접속 중입니다."}</h2>
         <p style="font-size:14px;color:var(--ink-2);line-height:1.6">자동으로 로그아웃 됩니다.<br /><small style="color:var(--ink-3)"><b id="so-sec">${SEC}</b>초 뒤 로그인 화면으로 이동해요</small></p>
         <div class="modal-foot" style="justify-content:center"><button type="button" class="btn-primary" id="so-ok">확인</button></div>
       </div>`;
@@ -140,7 +141,7 @@ const Store = (() => {
     const res = await fetch(`/api${path}`, { method, headers, body: form ?? (body !== undefined ? JSON.stringify(body) : undefined) });
     if (res.status === 401) {
       try { localStorage.removeItem("eureka.token"); } catch { /* 무시 */ }
-      if (res.headers.get("X-Session-Replaced")) { sessionReplaced(); throw new Error("다른 곳에서 로그인했어요"); }
+      if (res.headers.get("X-Session-Replaced")) { sessionReplaced(res.headers.get("X-Session-Replaced")); throw new Error("로그아웃됐어요"); }
       const why = await res.clone().json().catch(() => ({}));
       location.href = String(why.detail ?? "").includes("정지") ? "login.html#suspended" : "login.html";
       throw new Error("로그인이 필요해요");
@@ -571,6 +572,11 @@ const Store = (() => {
     listMaterials: (projectId) => api(`/projects/${projectId}/materials`),
     workspace: (projectId) => api(`/projects/${projectId}/workspace`),
     // 접속 상태 알림 (운영 콘솔 '지금 접속 중') — 실패해도 조용히 넘어간다
+    // 시험 기록
+    saveExam: (projectId, body) => api(`/projects/${projectId}/exams`, { method: "POST", body }),
+    listExams: (projectId) => api(`/projects/${projectId}/exams`),
+    exam: (id) => api(`/exams/${id}`),
+    deleteExam: (id) => api(`/exams/${id}`, { method: "DELETE" }),
     ping: (page) => (MODE === "api" ? api("/me/ping", { method: "POST", body: { page } }).catch(() => {}) : Promise.resolve()),
     // 정답 연결 편집 — { manual_answer } · { reset_manual: true } · { number }
     editProblem: (materialId, problemId, body) => api(`/materials/${materialId}/problems/${encodeURIComponent(problemId)}`, { method: "PATCH", body }),
