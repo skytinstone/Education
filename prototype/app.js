@@ -4040,6 +4040,12 @@
   render();
   setUnread(Store.state.user?.unreadNotifications ?? 0);
 
+  // 접속 상태: 화면이 보이는 동안 1분마다, 다시 보일 때 바로 알린다
+  const pingNow = () => { if (document.visibilityState === "visible") Store.ping(route().parts[0] || "home"); };
+  pingNow();
+  setInterval(pingNow, 60_000);
+  document.addEventListener("visibilitychange", pingNow);
+
   // 홈 요소: 스크롤하면 아래에서 위로 떠오름
   [[".hero h1", ".hero p", ".hero .composer"], [".action"], [".today > .panel"], [".activity"], [".section-head"], ["#cards-recent .card"], [".subject"]]
     .forEach((group) => group.flatMap((s) => $$(s)).forEach((el, i) => { el.classList.add("reveal"); el.style.setProperty("--d", `${i * 70}ms`); }));

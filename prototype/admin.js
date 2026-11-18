@@ -105,6 +105,15 @@
   const METHOD_NAME = { password: "이메일", google: "Google", kakao: "카카오" };
   const PURPOSE_NAME = { generate: "문제 생성", verify: "문제 검증", note_generate: "개념 정리 생성", note_verify: "개념 정리 검증",
     course: "코스 만들기", extract: "기출·교재 분석", essay_grade: "서술형 채점", review: "풀이 확인", explain: "계산·설명 풀이", answer_key: "정답지 풀이", answer_verify: "정답지 검산" };
+  // 접속 상태
+  const PAGE_NAME = { home: "홈", chat: "대화", project: "프로젝트", notes: "오답노트", library: "라이브러리", settings: "설정",
+    "answer-key": "정답지", exam: "시험", admin: "운영 콘솔" };
+  const PRESENCE = { online: ["접속 중", "on"], recent: ["방금 전까지", "recent"], offline: ["", "off"] };
+  function presenceBadge(u, long = false) {
+    const [label, tone] = PRESENCE[u.presence] ?? PRESENCE.offline;
+    const text = u.presence === "offline" ? (u.last_seen_at ? ago(u.last_seen_at) : "기록 없음") : long && u.presence === "recent" ? `${ago(u.last_seen_at)} 활동` : label;
+    return `<span class="presence ${tone}"><i></i>${esc(text)}</span>`;
+  }
   const FAIL_REASON = { bad_credentials: "비밀번호 틀림", suspended: "정지된 계정", throttled: "여러 번 실패해 잠시 막음" };
   const adminState = {
     days: 30, aiDays: 30,
@@ -145,6 +154,7 @@
     quality: "AI 가 만든 문제의 검산 통과율과 탈락 이유, 정답지 상태",
     logins: "로그인·가입 기록 (90일 보관)", voc: "의견·문제 신고 확인과 답변, 전체 공지" };
   async function renderAdmin(tab = "overview", id = null) {
+    if (tab !== "users" || id) clearInterval(liveTimer);
     if (!ADMIN_TABS.some(([k]) => k === tab)) tab = "overview";
     const [, title, icon] = ADMIN_TABS.find(([k]) => k === tab);
     $$(".side-nav a").forEach((el) => el.classList.toggle("on", el.dataset.tab === tab));
@@ -182,7 +192,7 @@
     body.innerHTML = `
       <div class="kpis">
         ${kpi("전체 가입자", num(u.total), `오늘 +${num(u.new_today)} · 7일 +${num(u.new_7d)} · 30일 +${num(u.new_30d)}`)}
-        ${kpi("활성 사용자 (오늘 / 7일 / 30일)", `${num(a.dau)} / ${num(a.wau)} / ${num(a.mau)}`, "로그인하거나 문제를 푼 사람")}
+        ${kpi("활성 사용자 (오늘 / 7일 / 30일)", `${num(a.dau)} / ${num(a.wau)} / ${num(a.mau)}`, `로그인하거나 문제를 푼 사람 · <a href="#/users" class="live-link"><span class="presence on"><i></i>지금 ${num(o.online_now)}명 접속 중</span></a>`)}
         ${kpi("AI 비용 (30일)", usd(ai.cost_30d), `오늘 ${usd(ai.cost_today)} · 7일 ${usd(ai.cost_7d)} · 실패 ${num(ai.failed_30d)}회`)}
         ${kpi("처리할 VOC", num(o.voc.open + o.voc.reviewing), `접수 ${num(o.voc.open)} · 확인 중 ${num(o.voc.reviewing)}`, o.voc.open ? "warn" : "")}
       </div>
@@ -327,14 +337,17 @@
     const r = await Store.adminGet("/users", { limit: PAGE, offset: f.offset, state: f.state, sort: f.sort, ...(f.q && { q: f.q }) });
     if (!body.isConnected) return;
     body.innerHTML = `
+      <section class="panel live" id="live-panel"><p class="mini">접속 현황을 불러오는 중…</p></section>
       <div class="filters">
-        <label class="search-box"><i data-lucide="search"></i><input id="us-q" placeholder="이름 또는 이메일" value="${esc(f.q)}" /></label>
-        <div class="seg small">${[["all", "전체"], ["active", "이용 중"], ["suspended", "정지"]].map(([k, t]) => `<button data-ustate="${k}" class="${f.state === k ? "on" : ""}">${t}</button>`).join("")}</div>
-        <select id="us-sort" class="sel">${[["recent", "최근 가입순"], ["login", "최근 로그인순"], ["attempts", "푼 문제 많은 순"], ["cost", "AI 비용 많은 순"]].map(([k, t]) => `<option value="${k}" ${f.sort === k ? "selected" : ""}>${t}</option>`).join("")}</select>
+        <label class="search-box"><i data-lucide="search"></i><input id="us-q" placeholder="이름, 이메일 또는 IP" value="${esc(f.q)}" /></label>
+        <div class="seg small">${[["all", "전체"], ["online", "접속 중"], ["active", "이용 중"], ["suspended", "정지"]].map(([k, t]) => `<button data-ustate="${k}" class="${f.state === k ? "on" : ""}">${t}</button>`).join("")}</div>
+        <select id="us-sort" class="sel">${[["recent", "최근 가입순"], ["seen", "최근 활동순"], ["login", "최근 로그인순"], ["attempts", "푼 문제 많은 순"], ["cost", "AI 비용 많은 순"]].map(([k, t]) => `<option value="${k}" ${f.sort === k ? "selected" : ""}>${t}</option>`).join("")}</select>
         <span class="mini grow">${num(r.total)}명</span>
       </div>
-      <section class="panel flush">${table(["회원", "로그인 방법", "가입", "최근 로그인", "#푼 문제", "#AI 비용", "상태"], r.items.map((u) => `
+      <section class="panel flush">${table(["회원", "접속", "최근 IP · 기기", "로그인 방법", "가입", "최근 로그인", "#푼 문제", "#AI 비용", "상태"], r.items.map((u) => `
         <tr class="row-link" data-href="#/users/${u.id}"><td>${userLink(u.id, u.name)}<small>${esc(u.email)}</small></td>
+          <td class="nowrap">${presenceBadge(u)}</td>
+          <td class="nowrap"><span class="mono">${esc(u.last_seen_ip ?? "–")}</span><small>${device(u.last_seen_ua ?? "")}</small></td>
           <td>${methodChips(u.methods)}</td><td class="nowrap">${when(u.created_at).slice(0, 10)}</td><td class="nowrap">${ago(u.last_login_at)}</td>
           <td class="n">${num(u.attempts)}</td><td class="n">${usd(u.cost_usd)}</td>
           <td>${u.suspended_at ? '<span class="upill bad">정지</span>' : u.is_admin ? '<span class="upill">운영자</span>' : '<span class="upill ok">이용 중</span>'}</td></tr>`), "조건에 맞는 회원이 없어요")}</section>
@@ -344,6 +357,38 @@
         <button class="btn-ghost" data-upage="1" ${f.offset + PAGE < r.total ? "" : "disabled"}>다음</button>
       </div>`;
     icons();
+    startLive();
+  }
+
+  // 지금 접속 중 — 회원 목록을 보는 동안 15초마다 새로 받는다
+  let liveTimer = null;
+  function startLive() {
+    clearInterval(liveTimer);
+    const draw = async () => {
+      const el = $("#live-panel");
+      if (!el) return clearInterval(liveTimer);
+      let p;
+      try { p = await Store.adminGet("/presence"); } catch (err) { el.innerHTML = `<p class="mini">${esc(err.message)}</p>`; return; }
+      if (!el.isConnected) return;
+      const rows = p.items;
+      el.innerHTML = `
+        <div class="live-head">
+          <h3><span class="pulse"></span>지금 접속 중</h3>
+          <div class="live-stats"><span><b>${num(p.online)}</b>명 접속 중</span><span><b>${num(p.recent)}</b>명 15분 안 활동</span><span><b>${num(p.today)}</b>명 오늘 접속</span></div>
+          <span class="mini">15초마다 새로 고침 · ${new Date(p.at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+        </div>
+        ${rows.length ? `<div class="live-list">${rows.map((u) => `
+          <a class="live-row" href="#/users/${u.id}">
+            ${presenceBadge(u, true)}
+            <span class="live-who"><b>${esc(u.name)}</b><small>${esc(u.email)}</small></span>
+            <span class="live-page"><i data-lucide="monitor"></i>${esc(PAGE_NAME[u.last_seen_page] ?? "–")}</span>
+            <span class="mono live-ip">${esc(u.last_seen_ip ?? "–")}</span>
+            <span class="live-dev">${device(u.last_seen_ua ?? "")}</span>
+          </a>`).join("")}</div>` : '<p class="mini">지금은 접속한 회원이 없어요. 학습 화면을 열어 둔 회원은 1분마다 여기에 나타나요</p>'}`;
+      icons();
+    };
+    draw();
+    liveTimer = setInterval(() => { if (document.visibilityState === "visible") draw(); }, 15_000);
   }
 
   let adminUserCache = null;
@@ -354,13 +399,15 @@
     const u = d.user, l = d.learning;
     const facts = [
       ["가입", when(u.created_at)], ["최근 로그인", u.last_login_at ? `${when(u.last_login_at)} (${ago(u.last_login_at)})` : "없음"],
+      ["마지막 활동", u.last_seen_at ? `${when(u.last_seen_at)} (${ago(u.last_seen_at)})` : "기록 없음"],
+      ["보고 있던 화면", PAGE_NAME[u.last_seen_page] ?? "–"], ["최근 접속 IP", u.last_seen_ip ?? "–"], ["기기", device(u.last_seen_ua ?? "")],
       ["이메일 인증", u.email_verified ? "인증됨" : "미인증"], ["마케팅 수신", u.agreed_marketing ? "동의" : "미동의"],
       ["학교 · 전공", [u.school, u.major].filter(Boolean).join(" · ") || "–"], ["하루 목표", `${u.daily_goal}문제`],
     ];
     body.innerHTML = `
       <a class="back-link" href="#/users"><i data-lucide="arrow-left"></i>회원 목록</a>
       <section class="panel user-head">
-        <div class="who"><h2>${esc(u.name)}</h2><p>${esc(u.email)}</p><div>${methodChips(u.methods)}${u.is_admin ? '<span class="upill">운영자</span>' : ""}</div></div>
+        <div class="who"><h2>${esc(u.name)} ${presenceBadge(u, true)}</h2><p>${esc(u.email)}</p><div>${methodChips(u.methods)}${u.is_admin ? '<span class="upill">운영자</span>' : ""}</div></div>
         <div class="uactions">${u.is_admin ? '<p class="mini">운영자 계정은 정지·삭제할 수 없어요</p>' : `
           ${u.suspended_at ? '<button class="btn-ghost" data-unsuspend><i data-lucide="user-check"></i>정지 해제</button>' : '<button class="btn-ghost" data-suspend><i data-lucide="user-x"></i>이용 정지</button>'}
           <button class="btn-ghost danger-text" data-udelete><i data-lucide="trash-2"></i>계정 삭제</button>`}</div>
@@ -377,6 +424,10 @@
         <section class="panel"><div class="panel-row"><h3><i data-lucide="inbox"></i>보낸 문의</h3>${d.feedback.length ? `<a class="mini" href="#/voc" data-voc-user="${u.id}">VOC에서 보기</a>` : ""}</div>
           ${d.feedback.length ? `<ul class="mini-list">${d.feedback.map((f) => `<li><span class="fb-status ${f.status}">${FB_STATUS[f.status]}</span> ${esc(FEEDBACK_KINDS[f.kind])} · ${esc(f.message)}<small>${when(f.created_at)}</small></li>`).join("")}</ul>` : '<p class="mini">보낸 문의가 없어요</p>'}</section>
       </div>
+      <section class="panel"><h3><i data-lucide="network"></i>접속한 IP</h3>${table(["IP", "#로그인", "#실패", "마지막"], d.ips.map((x) => `
+        <tr><td class="mono">${esc(x.ip)}${x.ip === u.last_seen_ip ? ' <span class="upill ok">최근</span>' : ""}</td><td class="n">${num(x.logins)}</td>
+          <td class="n ${x.failed ? "bad" : ""}">${num(x.failed)}</td><td class="nowrap">${when(x.last_at)} · ${ago(x.last_at)}</td></tr>`), "최근 90일 로그인 기록이 없어요")}
+        <p class="mini">로그인 기록 기준 (90일 보관). 여러 IP에서 실패가 많으면 계정 도용 시도일 수 있어요</p></section>
       <section class="panel"><h3><i data-lucide="log-in"></i>최근 로그인 기록</h3>${table(["시각", "방법", "결과", "IP", "기기"], d.logins.map((e) => `
         <tr class="${e.ok ? "" : "fail"}"><td class="nowrap">${when(e.at)}</td><td>${methodChips([e.method])}${e.kind === "signup" ? '<span class="mchip new">가입</span>' : ""}</td>
           <td>${e.ok ? '<span class="ok">성공</span>' : `<span class="bad">실패</span><small>${FAIL_REASON[e.reason] ?? ""}</small>`}</td><td class="mono">${esc(e.ip ?? "–")}</td><td>${device(e.user_agent ?? "")}</td></tr>`), "최근 90일 기록이 없어요")}</section>`;

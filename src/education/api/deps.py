@@ -1,7 +1,8 @@
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, TypeVar
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
@@ -14,13 +15,35 @@ DB = Annotated[Session, Depends(get_db)]
 _bearer = HTTPBearer(auto_error=False)
 
 
-def current_user(db: DB, cred: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]) -> m.User:
+SEEN_EVERY = timedelta(seconds=60)
+
+
+def touch_seen(db: Session, user: m.User, request: Request | None, page: str | None = None, force: bool = False) -> None:
+    """마지막 활동 시각·IP·기기를 남긴다. 요청마다 쓰지 않도록 1분에 한 번 (IP·화면이 바뀌면 바로)."""
+    from education.services.audit import client_ip  # 순환 import 방지
+
+    now = datetime.now(timezone.utc)
+    ip = client_ip(request)
+    stale = user.last_seen_at is None or now - user.last_seen_at >= SEEN_EVERY
+    if not (force or stale or (ip and ip != user.last_seen_ip) or (page and page != user.last_seen_page)):
+        return
+    user.last_seen_at, user.last_seen_ip = now, ip or user.last_seen_ip
+    ua = request.headers.get("user-agent") if request else None
+    if ua:
+        user.last_seen_ua = ua[:300]
+    if page:
+        user.last_seen_page = page[:24]
+    db.commit()
+
+
+def current_user(request: Request, db: DB, cred: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]) -> m.User:
     user_id = read_token(cred.credentials) if cred else None
     user = db.get(m.User, user_id) if user_id else None
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "로그인이 필요해요", headers={"WWW-Authenticate": "Bearer"})
     if user.suspended_at:  # 정지되면 이미 받은 토큰도 바로 막힌다 (화면은 401 을 받으면 로그아웃)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "이용이 정지된 계정이에요", headers={"WWW-Authenticate": "Bearer"})
+    touch_seen(db, user, request)
     return user
 
 

@@ -8,7 +8,7 @@
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Request
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 from sqlalchemy.orm import Session
 
 from education.db import models as m
@@ -39,6 +39,9 @@ def purge_old(db: Session) -> int:
     n = db.execute(delete(m.LoginEvent).where(m.LoginEvent.created_at < cutoff)).rowcount or 0
     # 방문자 수 기록도 같은 기간만 남긴다
     db.execute(delete(m.SiteVisit).where(m.SiteVisit.created_at < cutoff))
+    # 회원의 마지막 접속 IP·기기도 같은 기간이 지나면 비운다 (접속 시각은 남김)
+    db.execute(update(m.User).where(m.User.last_seen_at < cutoff, m.User.last_seen_ip.is_not(None))
+               .values(last_seen_ip=None, last_seen_ua=None))
     return n
 
 

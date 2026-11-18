@@ -545,6 +545,8 @@ const Store = (() => {
     // ---------- 기출 업로드 · 기출 기반 생성 (서버 모드 전용) ----------
     listMaterials: (projectId) => api(`/projects/${projectId}/materials`),
     workspace: (projectId) => api(`/projects/${projectId}/workspace`),
+    // 접속 상태 알림 (운영 콘솔 '지금 접속 중') — 실패해도 조용히 넘어간다
+    ping: (page) => (MODE === "api" ? api("/me/ping", { method: "POST", body: { page } }).catch(() => {}) : Promise.resolve()),
     // 정답 연결 편집 — { manual_answer } · { reset_manual: true } · { number }
     editProblem: (materialId, problemId, body) => api(`/materials/${materialId}/problems/${encodeURIComponent(problemId)}`, { method: "PATCH", body }),
     // 올린 원본 파일 (그림 문항 원본 보기)

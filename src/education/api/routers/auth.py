@@ -9,11 +9,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, HTTPException, Request, Response, UploadFile, status
 from fastapi.responses import FileResponse, RedirectResponse
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from education.api.deps import DB, CurrentUser
+from education.api.deps import DB, CurrentUser, touch_seen
 from education.api.dto import (
     AccountDeleteIn, ConnectionOut, ConnectionsOut, ForgotIn, LinkStartOut, LoginIn, PasswordIn, ResetIn, SignupIn, SocialLinkIn,
     SocialSignupIn, TicketIn, TokenOut, UserOut, UserPatch,
@@ -325,6 +326,18 @@ def social_complete(body: SocialSignupIn, request: Request, db: DB) -> TokenOut:
         db.rollback()
         raise HTTPException(status.HTTP_409_CONFLICT, "이미 처리된 가입이에요. 다시 로그인해 주세요") from None
     return _issue(db, request, user, c["provider"], kind="signup")
+
+
+# ---------- 접속 상태 (1분마다) ----------
+class PingIn(BaseModel):
+    page: str | None = Field(default=None, max_length=24, pattern=r"^[a-z-]*$")
+
+
+@router.post("/me/ping", status_code=status.HTTP_204_NO_CONTENT)
+def ping(body: PingIn, request: Request, user: CurrentUser, db: DB) -> Response:
+    """로그인된 화면이 열려 있는 동안 1분마다 부른다 — 운영 콘솔의 '지금 접속 중'."""
+    touch_seen(db, user, request, page=body.page or None, force=True)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ---------- 내 정보 ----------

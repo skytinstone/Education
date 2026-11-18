@@ -100,6 +100,40 @@
     .main { padding: 16px 16px 48px; }
     .topbar-m { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-weight: 700; }
   }
+  /* ---------- 접속 상태 ---------- */
+  .presence { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--ink-3); white-space: nowrap; vertical-align: middle; }
+  .presence i { width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; flex-shrink: 0; }
+  .presence.on { color: #15803d; }
+  .presence.on i { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.18); }
+  .presence.recent { color: #b45309; }
+  .presence.recent i { background: #f59e0b; }
+  h2 .presence { margin-left: 8px; font-size: 12.5px; }
+  .live-link { text-decoration: none; }
+  .live-head { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 12px; }
+  .live-head h3 { display: flex; align-items: center; gap: 9px; margin: 0; }
+  .pulse { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; position: relative; }
+  .pulse::after { content: ""; position: absolute; inset: 0; border-radius: 50%; background: #22c55e; animation: live-pulse 1.8s ease-out infinite; }
+  @keyframes live-pulse { to { transform: scale(2.8); opacity: 0; } }
+  .live-stats { display: flex; gap: 14px; font-size: 13px; color: var(--ink-2); }
+  .live-stats b { font-size: 16px; color: var(--ink); margin-right: 2px; }
+  .live-head .mini { margin: 0 0 0 auto; }
+  .live-list { display: grid; gap: 4px; max-height: 320px; overflow-y: auto; }
+  .live-row { display: grid; grid-template-columns: 130px minmax(0, 1.4fr) 110px 140px minmax(0, 1fr); align-items: center; gap: 12px;
+    padding: 9px 12px; border-radius: 12px; background: rgba(118,118,128,.06); color: inherit; text-decoration: none; font-size: 13px; }
+  .live-row:hover { background: rgba(118,118,128,.12); }
+  .live-who { min-width: 0; }
+  .live-who b, .live-who small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .live-who small { font-size: 11.5px; color: var(--ink-3); }
+  .live-page { display: inline-flex; align-items: center; gap: 5px; color: var(--ink-2); }
+  .live-page svg { width: 13px; height: 13px; }
+  .live-dev { color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  .tbl td.bad { color: var(--bad); font-weight: 600; }
+  @media (max-width: 760px) {
+    .live-row { grid-template-columns: 1fr auto; }
+    .live-page, .live-dev { display: none; }
+    .live-head .mini { margin-left: 0; }
+  }
 </style>
 <link rel="stylesheet" href="/app/glass.css" />
 </head>

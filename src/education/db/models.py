@@ -77,6 +77,11 @@ class User(Base):
     suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     suspended_reason: Mapped[str | None] = mapped_column(String(500))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 접속 상태 (운영 콘솔 '회원') — 로그인된 화면이 1분마다 알리고, API 요청 때도 갱신한다 (1분에 한 번만 씀)
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    last_seen_ip: Mapped[str | None] = mapped_column(String(64))
+    last_seen_ua: Mapped[str | None] = mapped_column(String(300))
+    last_seen_page: Mapped[str | None] = mapped_column(String(24))  # 보고 있던 화면 종류 (home · chat · project …)
     created_at: Mapped[datetime] = created_at()
 
     __table_args__ = (

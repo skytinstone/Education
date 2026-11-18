@@ -96,6 +96,7 @@ def overview(db: DB, days: int = Query(30, ge=7, le=180)) -> dict:
         "ai": {"cost_today": _cost(ai[0]), "cost_7d": _cost(ai[1]), "cost_30d": _cost(ai[2]), "calls_30d": ai[3], "failed_30d": ai[4]},
         "voc": {"open": voc.get("open", 0), "reviewing": voc.get("reviewing", 0)},
         "failed_logins_24h": failed_logins,
+        "online_now": db.scalar(select(func.count()).where(m.User.last_seen_at >= datetime.now(timezone.utc) - ONLINE_WITHIN)) or 0,
         "visitors_today": db.scalar(select(func.count()).select_from(m.SiteVisit).where(m.SiteVisit.day == learning.local_today(db))) or 0,
     }
 
@@ -187,9 +188,25 @@ def _methods(db: Session, user_ids: list[UUID]) -> dict[UUID, list[str]]:
     return out
 
 
+ONLINE_WITHIN = timedelta(minutes=2)   # 화면이 1분마다 알리므로, 2분 안에 소식이 있으면 '접속 중'
+RECENT_WITHIN = timedelta(minutes=15)  # 15분 안이면 '방금 전까지'
+
+
+def _presence(u: m.User) -> str:
+    if not u.last_seen_at:
+        return "offline"
+    gap = datetime.now(timezone.utc) - u.last_seen_at
+    return "online" if gap <= ONLINE_WITHIN else "recent" if gap <= RECENT_WITHIN else "offline"
+
+
+def _seen(u: m.User) -> dict:
+    return {"presence": _presence(u), "last_seen_at": u.last_seen_at.isoformat() if u.last_seen_at else None,
+            "last_seen_ip": u.last_seen_ip, "last_seen_ua": u.last_seen_ua, "last_seen_page": u.last_seen_page}
+
+
 def _user_row(u: m.User, methods: list[str], attempts: int, cost) -> dict:
     return {"id": str(u.id), "email": u.email, "name": u.name, "created_at": u.created_at.isoformat(),
-            "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None,
+            "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None, **_seen(u),
             "suspended_at": u.suspended_at.isoformat() if u.suspended_at else None,
             "methods": (["password"] if u.password_hash else []) + sorted(methods),
             "attempts": attempts, "cost_usd": _cost(cost), "is_admin": is_admin(u)}
@@ -198,20 +215,23 @@ def _user_row(u: m.User, methods: list[str], attempts: int, cost) -> dict:
 @router.get("/users")
 def list_users(db: DB, q: str | None = None, state: str = "all", sort: str = "recent",
                limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)) -> dict:
-    """state: all · active · suspended. sort: recent(가입순) · login(최근 로그인) · attempts · cost"""
+    """state: all · online(지금 접속 중) · active · suspended. sort: recent(가입순) · seen(최근 활동) · login · attempts · cost"""
     attempts = select(m.Attempt.user_id, func.count().label("n")).group_by(m.Attempt.user_id).subquery()
     cost = select(m.LLMCall.user_id, func.sum(m.LLMCall.cost_usd).label("c")).group_by(m.LLMCall.user_id).subquery()
     base: Select = select(m.User).outerjoin(attempts, attempts.c.user_id == m.User.id).outerjoin(cost, cost.c.user_id == m.User.id)
     if q and q.strip():
         like = f"%{q.strip()}%"
-        base = base.where(or_(m.User.email.ilike(like), m.User.name.ilike(like)))
-    if state == "suspended":
+        base = base.where(or_(m.User.email.ilike(like), m.User.name.ilike(like), m.User.last_seen_ip.ilike(like)))
+    if state == "online":
+        base = base.where(m.User.last_seen_at >= datetime.now(timezone.utc) - ONLINE_WITHIN)
+    elif state == "suspended":
         base = base.where(m.User.suspended_at.is_not(None))
     elif state == "active":
         base = base.where(m.User.suspended_at.is_(None))
     total = db.scalar(select(func.count()).select_from(base.subquery()))
     order = {
         "login": m.User.last_login_at.desc().nulls_last(),
+        "seen": m.User.last_seen_at.desc().nulls_last(),
         "attempts": func.coalesce(attempts.c.n, 0).desc(),
         "cost": func.coalesce(cost.c.c, 0).desc(),
     }.get(sort, m.User.created_at.desc())
@@ -219,6 +239,18 @@ def list_users(db: DB, q: str | None = None, state: str = "all", sort: str = "re
                       .order_by(order, m.User.created_at.desc()).limit(limit).offset(offset)).all()
     methods = _methods(db, [u.id for u, *_ in rows])
     return {"total": total, "items": [_user_row(u, methods.get(u.id, []), n, c) for u, n, c in rows]}
+
+
+@router.get("/presence")
+def presence(db: DB) -> dict:
+    """지금 접속 중(2분 안)과 방금 전까지(15분 안) 접속한 회원 — 운영 콘솔이 15초마다 다시 받는다."""
+    now = datetime.now(timezone.utc)
+    rows = db.scalars(select(m.User).where(m.User.last_seen_at >= now - RECENT_WITHIN)
+                      .order_by(m.User.last_seen_at.desc()).limit(200)).all()
+    today = db.scalar(select(func.count()).where(m.User.last_seen_at >= _since_local(db, 1))) or 0
+    items = [{"id": str(u.id), "name": u.name, "email": u.email, **_seen(u)} for u in rows]
+    return {"online": sum(x["presence"] == "online" for x in items), "recent": sum(x["presence"] == "recent" for x in items),
+            "today": today, "items": items, "at": now.isoformat()}
 
 
 def _target(db: Session, user_id: UUID) -> m.User:
@@ -238,6 +270,10 @@ def user_detail(user_id: UUID, db: DB) -> dict:
     open_notes = db.scalar(select(func.count()).where(m.WrongNote.user_id == u.id, m.WrongNote.resolved_at.is_(None))) or 0
     events = db.scalars(select(m.LoginEvent).where(m.LoginEvent.user_id == u.id).order_by(m.LoginEvent.created_at.desc()).limit(20))
     feedback = db.scalars(select(m.Feedback).where(m.Feedback.user_id == u.id).order_by(m.Feedback.created_at.desc()).limit(20))
+    E = m.LoginEvent
+    ips = db.execute(select(E.ip, func.count(), func.max(E.created_at), func.count().filter(~E.ok))
+                     .where(E.user_id == u.id, E.ip.is_not(None)).group_by(E.ip)
+                     .order_by(func.max(E.created_at).desc()).limit(20)).all()
     return {
         "user": {**_user_row(u, _methods(db, [u.id]).get(u.id, []), a[0], ai[1]),
                  "email_verified": u.email_verified, "daily_goal": u.daily_goal, "agreed_marketing": u.agreed_marketing,
@@ -249,6 +285,7 @@ def user_detail(user_id: UUID, db: DB) -> dict:
                      "sessions": count(m.ChatSession), "cards": count(m.Card), "materials": count(m.Material)},
         "ai": {"calls": ai[0], "cost_usd": _cost(ai[1])},
         "logins": [_event(e, u.name) for e in events],
+        "ips": [{"ip": ip, "logins": n, "failed": f, "last_at": at.isoformat()} for ip, n, at, f in ips],
         "feedback": [{"id": str(f.id), "kind": f.kind, "status": f.status, "message": f.message[:300],
                       "created_at": f.created_at.isoformat()} for f in feedback],
     }
