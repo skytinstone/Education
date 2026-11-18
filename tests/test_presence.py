@@ -74,3 +74,16 @@ def test_user_detail_lists_ips_and_old_ip_is_cleared(client, admin, auth, db):
 
 def test_presence_is_admin_only(client, auth):
     assert client.get("/api/admin/presence", headers=auth).status_code == 404
+
+
+def test_members_csv_follows_filters_and_is_excel_safe(client, admin, auth, db):
+    client.post("/api/me/ping", json={}, headers=auth)
+    signup(client, name="=HYPERLINK(\"x\")", email="csv@example.com")
+    r = client.get("/api/admin/users.csv", headers=admin)
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+    assert "attachment" in r.headers["content-disposition"] and r.text.startswith("\ufeff이름,이메일")
+    assert "'=HYPERLINK" in r.text                       # 수식 실행 방지
+    online = client.get("/api/admin/users.csv", params={"state": "online"}, headers=admin).text
+    assert "접속 중" in online and "csv@example.com" not in online
+    assert client.get("/api/admin/users.csv", headers=auth).status_code == 404
+

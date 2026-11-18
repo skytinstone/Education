@@ -57,6 +57,19 @@
     adminGet: (path, params) => api(`/admin${path}${qs(params)}`),
     adminPost: (path, body) => api(`/admin${path}`, { method: "POST", body }),
     adminDelete: (path, body) => api(`/admin${path}`, { method: "DELETE", body }),
+    // 파일 내려받기 (CSV) — 로그인 토큰을 붙여 받아서 브라우저 저장으로 넘긴다
+    async adminDownload(path, params) {
+      const res = await fetch(`/api/admin${path}${qs(params)}`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!res.ok) throw new ApiError(res.status, "파일을 만들지 못했어요");
+      const name = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "")?.[1] ?? "export.csv";
+      const url = URL.createObjectURL(await res.blob());
+      const a = Object.assign(document.createElement("a"), { href: url, download: name });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return name;
+    },
     adminFeedback: (params) => api(`/admin/feedback${qs(params)}`),
     adminUpdateFeedback: (id, patch) => api(`/admin/feedback/${id}`, { method: "PATCH", body: patch }),
     adminRestoreProblem: (pid) => api(`/admin/problems/${encodeURIComponent(pid)}/restore`, { method: "POST" }),
@@ -343,6 +356,7 @@
         <div class="seg small">${[["all", "전체"], ["online", "접속 중"], ["active", "이용 중"], ["suspended", "정지"]].map(([k, t]) => `<button data-ustate="${k}" class="${f.state === k ? "on" : ""}">${t}</button>`).join("")}</div>
         <select id="us-sort" class="sel">${[["recent", "최근 가입순"], ["seen", "최근 활동순"], ["login", "최근 로그인순"], ["attempts", "푼 문제 많은 순"], ["cost", "AI 비용 많은 순"]].map(([k, t]) => `<option value="${k}" ${f.sort === k ? "selected" : ""}>${t}</option>`).join("")}</select>
         <span class="mini grow">${num(r.total)}명</span>
+        <button class="btn-ghost" data-ucsv title="지금 검색·필터·정렬 그대로 전체 회원을 내려받아요"><i data-lucide="download"></i>CSV 내려받기</button>
       </div>
       <section class="panel flush">${table(["회원", "접속", "최근 IP · 기기", "로그인 방법", "가입", "최근 로그인", "#푼 문제", "#AI 비용", "상태"], r.items.map((u) => `
         <tr class="row-link" data-href="#/users/${u.id}"><td>${userLink(u.id, u.name)}<small>${esc(u.email)}</small></td>
@@ -514,6 +528,16 @@
     if (el("[data-lmore]")) return adminLogins($("#admin-body"), true);
     if ((x = el("[data-ustate]"))) { adminState.users.state = x.dataset.ustate; adminState.users.offset = 0; return rerender(tab); }
     if ((x = el("[data-users-state]"))) { adminState.users.state = x.dataset.usersState; adminState.users.offset = 0; return; }
+    if ((x = el("[data-ucsv]"))) {
+      const f = adminState.users;
+      x.disabled = true;
+      try {
+        const name = await Store.adminDownload("/users.csv", { state: f.state, sort: f.sort, ...(f.q && { q: f.q }) });
+        toast(`${name} 파일을 내려받았어요`);
+      } catch (err) { toast(err.message); }
+      x.disabled = false;
+      return;
+    }
     if ((x = el("[data-upage]"))) { adminState.users.offset = Math.max(0, adminState.users.offset + Number(x.dataset.upage) * 50); return rerender(tab); }
     if ((x = el("[data-voc-user]"))) { Object.assign(adminState.voc, { user_id: x.dataset.vocUser, state: "all", kind: "", q: "" }); return; }
     if (el("[data-voc-clear-user]")) { adminState.voc.user_id = ""; return rerender(tab); }

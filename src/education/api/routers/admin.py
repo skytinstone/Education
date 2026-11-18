@@ -6,6 +6,7 @@
 
 from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
@@ -216,6 +217,14 @@ def _user_row(u: m.User, methods: list[str], attempts: int, cost) -> dict:
 def list_users(db: DB, q: str | None = None, state: str = "all", sort: str = "recent",
                limit: int = Query(50, ge=1, le=200), offset: int = Query(0, ge=0)) -> dict:
     """state: all · online(지금 접속 중) · active · suspended. sort: recent(가입순) · seen(최근 활동) · login · attempts · cost"""
+    stmt, total = _users_query(db, q, state, sort)
+    rows = db.execute(stmt.limit(limit).offset(offset)).all()
+    methods = _methods(db, [u.id for u, *_ in rows])
+    return {"total": total, "items": [_user_row(u, methods.get(u.id, []), n, c) for u, n, c in rows]}
+
+
+def _users_query(db: Session, q: str | None, state: str, sort: str) -> tuple[Select, int]:
+    """회원 목록과 CSV 가 같은 검색·필터·정렬을 쓰도록. (User, 푼 문제 수, AI 비용) 행과 전체 수."""
     attempts = select(m.Attempt.user_id, func.count().label("n")).group_by(m.Attempt.user_id).subquery()
     cost = select(m.LLMCall.user_id, func.sum(m.LLMCall.cost_usd).label("c")).group_by(m.LLMCall.user_id).subquery()
     base: Select = select(m.User).outerjoin(attempts, attempts.c.user_id == m.User.id).outerjoin(cost, cost.c.user_id == m.User.id)
@@ -235,10 +244,42 @@ def list_users(db: DB, q: str | None = None, state: str = "all", sort: str = "re
         "attempts": func.coalesce(attempts.c.n, 0).desc(),
         "cost": func.coalesce(cost.c.c, 0).desc(),
     }.get(sort, m.User.created_at.desc())
-    rows = db.execute(base.add_columns(func.coalesce(attempts.c.n, 0), cost.c.c)
-                      .order_by(order, m.User.created_at.desc()).limit(limit).offset(offset)).all()
+    return base.add_columns(func.coalesce(attempts.c.n, 0), cost.c.c).order_by(order, m.User.created_at.desc()), total
+
+
+def _csv_cell(v) -> str:
+    """엑셀에서 수식으로 실행되지 않도록 =,+,-,@ 로 시작하는 글자는 앞에 ' 를 붙인다."""
+    s = "" if v is None else str(v)
+    return "'" + s if s[:1] in ("=", "+", "-", "@", "\t", "\r") else s
+
+
+@router.get("/users.csv")
+def export_users(db: DB, q: str | None = None, state: str = "all", sort: str = "recent") -> Response:
+    """회원 목록 CSV — 화면의 검색·필터·정렬 그대로, 전체 행 (엑셀에서 한글이 깨지지 않게 UTF-8 BOM)."""
+    import csv
+    import io
+
+    tz = ZoneInfo(get_settings().timezone)
+    fmt = lambda t: t.astimezone(tz).strftime("%Y-%m-%d %H:%M") if t else ""  # noqa: E731
+    stmt, _ = _users_query(db, q, state, sort)
+    rows = db.execute(stmt.limit(10_000)).all()
     methods = _methods(db, [u.id for u, *_ in rows])
-    return {"total": total, "items": [_user_row(u, methods.get(u.id, []), n, c) for u, n, c in rows]}
+    presence = {"online": "접속 중", "recent": "15분 안 활동", "offline": ""}
+    names = {"password": "이메일", "google": "Google", "kakao": "카카오"}
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["이름", "이메일", "상태", "접속", "가입일", "로그인 방법", "최근 로그인", "마지막 활동", "최근 IP", "기기(브라우저)",
+                "푼 문제", "AI 비용(USD)", "이메일 인증", "마케팅 수신", "학교", "전공", "하루 목표", "정지 사유"])
+    for u, n, c in rows:
+        ms = (["password"] if u.password_hash else []) + sorted(methods.get(u.id, []))
+        w.writerow([_csv_cell(x) for x in (
+            u.name, u.email, "정지" if u.suspended_at else "운영자" if is_admin(u) else "이용 중", presence[_presence(u)],
+            fmt(u.created_at), " · ".join(names.get(k, k) for k in ms), fmt(u.last_login_at), fmt(u.last_seen_at),
+            u.last_seen_ip, u.last_seen_ua, n, f"{float(c or 0):.4f}", "인증" if u.email_verified else "미인증",
+            "동의" if u.agreed_marketing else "미동의", u.school, u.major, u.daily_goal, u.suspended_reason)])
+    stamp = datetime.now(tz).strftime("%Y%m%d-%H%M")
+    return Response("\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="eureka-members-{stamp}.csv"', "Cache-Control": "no-store"})
 
 
 @router.get("/presence")
