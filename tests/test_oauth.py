@@ -207,7 +207,10 @@ def test_cannot_remove_last_login_method_until_password_set(client, configured, 
     assert client.put("/api/me/password", headers=h, json={"new_password": "short"}).status_code == 422
     r = client.put("/api/me/password", headers=h, json={"new_password": "newpass123"})
     assert r.status_code == 200 and r.json()["has_password"]
-    assert client.post("/api/auth/login", json={"email": "only@gmail.com", "password": "newpass123"}).status_code == 200
+    r = client.post("/api/auth/login", json={"email": "only@gmail.com", "password": "newpass123"})
+    assert r.status_code == 200
+    assert client.get("/api/me", headers=h).status_code == 401           # 새로 로그인하면 먼저 받은 토큰은 끊긴다
+    h = {"Authorization": f"Bearer {r.json()['access_token']}"}
     # 비밀번호가 생긴 뒤에는 바꿀 때 현재 비밀번호가 필요하다
     assert client.put("/api/me/password", headers=h, json={"new_password": "another123"}).status_code == 403
     assert client.put("/api/me/password", headers=h, json={"current_password": "newpass123", "new_password": "another123"}).status_code == 200

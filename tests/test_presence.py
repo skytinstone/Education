@@ -87,3 +87,31 @@ def test_members_csv_follows_filters_and_is_excel_safe(client, admin, auth, db):
     assert "접속 중" in online and "csv@example.com" not in online
     assert client.get("/api/admin/users.csv", headers=auth).status_code == 404
 
+
+# ---------- 동시 접속 막기 ----------
+def test_second_login_logs_out_the_first(client):
+    signup(client, name="한명", email="one@example.com", password="password123")
+    login = lambda: {"Authorization": "Bearer " + client.post(  # noqa: E731
+        "/api/auth/login", json={"email": "one@example.com", "password": "password123"}).json()["access_token"]}
+    pc1 = login()
+    assert client.get("/api/me", headers=pc1).status_code == 200
+    pc2 = login()                                                     # 다른 PC 에서 로그인
+    r = client.get("/api/me", headers=pc1)
+    assert r.status_code == 401 and r.headers["X-Session-Replaced"] == "1"
+    assert r.json()["detail"] == "다른 PC에서 접속 중입니다. 자동으로 로그아웃 됩니다."
+    assert client.get("/api/me", headers=pc2).status_code == 200      # 마지막 로그인만 통과
+    assert client.post("/api/me/ping", json={}, headers=pc1).status_code == 401
+
+
+def test_tokens_from_before_the_feature_still_work_until_next_login(client, db):
+    from education.security import create_token
+    h = signup(client, name="예전", email="old@example.com", password="password123")
+    uid = client.get("/api/me", headers=h).json()["id"]
+    user = db.get(m.User, __import__("uuid").UUID(uid))
+    user.session_id = None
+    db.commit()
+    old = {"Authorization": "Bearer " + create_token(user.id)}       # sid 없는 예전 토큰
+    assert client.get("/api/me", headers=old).status_code == 200
+    client.post("/api/auth/login", json={"email": "old@example.com", "password": "password123"})
+    assert client.get("/api/me", headers=old).status_code == 401
+

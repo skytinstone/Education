@@ -784,6 +784,9 @@
     history.replaceState(null, "", location.pathname); // 링크가 방문 기록에 남지 않게
     setMode("reset");
     $("#rs-pw").focus();
+  } else if (location.hash === "#replaced") {
+    history.replaceState(null, "", location.pathname);
+    notice("다른 PC에서 접속해서 이곳은 로그아웃됐어요. 여기서 다시 로그인하면 다른 PC가 로그아웃돼요", "info");
   } else if (location.hash === "#suspended") {
     history.replaceState(null, "", location.pathname);
     notice("이용이 정지된 계정이에요. 문의: horcruxtech.ai@gmail.com");

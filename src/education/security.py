@@ -47,14 +47,21 @@ def read_ticket(token: str, kind: str) -> dict | None:
     return payload if payload.get("kind") == kind else None
 
 
-def create_token(user_id: UUID) -> str:
-    return create_ticket("access", {"sub": str(user_id)}, timedelta(days=get_settings().jwt_expire_days))
+def create_token(user_id: UUID, session_id: str | None = None) -> str:
+    claims = {"sub": str(user_id), **({"sid": session_id} if session_id else {})}
+    return create_ticket("access", claims, timedelta(days=get_settings().jwt_expire_days))
 
 
 def read_token(token: str) -> UUID | None:
     """유효한 로그인 토큰이면 사용자 id, 아니면 None (만료·위조·용도 불일치·형식 오류 모두)."""
+    got = read_access(token)
+    return got[0] if got else None
+
+
+def read_access(token: str) -> tuple[UUID, str | None] | None:
+    """유효한 로그인 토큰이면 (사용자 id, 접속 id). 접속 id 는 동시 접속을 막는 데 쓴다."""
     payload = read_ticket(token, "access")
     try:
-        return UUID(payload["sub"]) if payload else None
+        return (UUID(payload["sub"]), payload.get("sid")) if payload else None
     except (KeyError, ValueError):
         return None

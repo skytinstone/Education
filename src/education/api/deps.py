@@ -9,7 +9,10 @@ from sqlalchemy.orm import Session
 from education.config import get_settings
 from education.db import models as m
 from education.db.session import get_db
-from education.security import read_token
+from education.security import read_access
+
+# 같은 계정으로 다른 곳에서 로그인하면, 먼저 로그인한 쪽은 다음 요청에서 이 문구로 로그아웃된다 (화면이 팝업으로 보여 줌)
+REPLACED = "다른 PC에서 접속 중입니다. 자동으로 로그아웃 됩니다."
 
 DB = Annotated[Session, Depends(get_db)]
 _bearer = HTTPBearer(auto_error=False)
@@ -37,10 +40,14 @@ def touch_seen(db: Session, user: m.User, request: Request | None, page: str | N
 
 
 def current_user(request: Request, db: DB, cred: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)]) -> m.User:
-    user_id = read_token(cred.credentials) if cred else None
-    user = db.get(m.User, user_id) if user_id else None
+    got = read_access(cred.credentials) if cred else None
+    user = db.get(m.User, got[0]) if got else None
     if not user:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "로그인이 필요해요", headers={"WWW-Authenticate": "Bearer"})
+    # 동시 접속 막기: 마지막으로 로그인한 곳의 토큰만 통과 (이 기능 전에 받은 토큰은 새로 로그인하기 전까지 그대로 둠)
+    if user.session_id and got[1] != user.session_id:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, REPLACED,
+                            headers={"WWW-Authenticate": "Bearer", "X-Session-Replaced": "1"})
     if user.suspended_at:  # 정지되면 이미 받은 토큰도 바로 막힌다 (화면은 401 을 받으면 로그아웃)
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "이용이 정지된 계정이에요", headers={"WWW-Authenticate": "Bearer"})
     touch_seen(db, user, request)

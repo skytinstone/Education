@@ -82,6 +82,8 @@ class User(Base):
     last_seen_ip: Mapped[str | None] = mapped_column(String(64))
     last_seen_ua: Mapped[str | None] = mapped_column(String(300))
     last_seen_page: Mapped[str | None] = mapped_column(String(24))  # 보고 있던 화면 종류 (home · chat · project …)
+    # 동시 접속 막기 — 로그인할 때마다 새로 정하고 토큰에 넣는다. 토큰의 값과 다르면 다른 곳에서 다시 로그인한 것
+    session_id: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = created_at()
 
     __table_args__ = (

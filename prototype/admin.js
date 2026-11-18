@@ -45,7 +45,8 @@
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const d = data.detail;
-      if (res.status === 401) showGate("login", typeof d === "string" && d.includes("정지") ? d : "로그인이 필요해요");
+      if (res.status === 401 && res.headers.get("X-Session-Replaced")) sessionReplaced();
+      else if (res.status === 401) showGate("login", typeof d === "string" && d.includes("정지") ? d : "로그인이 필요해요");
       // 운영자가 아니면 서버가 운영자 경로를 '없는 것처럼' 404 + "찾을 수 없어요" 로 답한다 (없는 회원 404 와 구분)
       else if (res.status === 404 && path.startsWith("/admin/") && d === "찾을 수 없어요") showGate("denied");
       throw new ApiError(res.status, typeof d === "string" ? d : Array.isArray(d) ? (d[0]?.msg ?? "입력을 확인해 주세요") : "잠시 후 다시 시도해 주세요");
@@ -604,6 +605,28 @@
 
   // ================= 입장: 로그인 · 권한 확인 =================
   const gate = $("#gate"), shell = $("#shell");
+  // 같은 계정으로 다른 PC에서 로그인 → 팝업 후 로그아웃
+  let replacedShown = false;
+  function sessionReplaced() {
+    if (replacedShown) return;
+    replacedShown = true;
+    clearInterval(liveTimer);
+    try { localStorage.removeItem(TOKEN_KEY); } catch { /* 무시 */ }
+    closeOverlays();
+    const bd = document.createElement("div");
+    bd.className = "backdrop";
+    bd.innerHTML = `
+      <div class="modal" role="alertdialog" aria-modal="true" style="max-width:380px;text-align:center">
+        <h2 style="font-size:17px;font-weight:700;margin-bottom:8px">다른 PC에서 접속 중입니다.</h2>
+        <p style="font-size:14px;color:var(--ink-2);line-height:1.6">자동으로 로그아웃 됩니다.</p>
+        <div class="modal-foot" style="justify-content:center"><button type="button" class="btn-primary" data-so-ok>확인</button></div>
+      </div>`;
+    document.body.append(bd);
+    const out = () => { bd.remove(); showGate("login", "다른 PC에서 접속해서 로그아웃됐어요. 다시 로그인하면 다른 PC가 로그아웃돼요"); };
+    $("[data-so-ok]", bd).onclick = out;
+    setTimeout(out, 5000);
+  }
+
   function showGate(mode, msg = "") {
     shell.hidden = true;
     gate.hidden = false;

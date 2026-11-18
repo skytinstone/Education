@@ -39,7 +39,7 @@ SUSPENDED = "이용이 정지된 계정이에요. 문의: horcruxtech.ai@gmail.c
 
 
 def _token(user: m.User) -> TokenOut:
-    return TokenOut(access_token=create_token(user.id), user=UserOut.model_validate(user))
+    return TokenOut(access_token=create_token(user.id, user.session_id), user=UserOut.model_validate(user))
 
 
 def _issue(db: Session, request: Request, user: m.User, method: str, kind: str = "login") -> TokenOut:
@@ -49,6 +49,7 @@ def _issue(db: Session, request: Request, user: m.User, method: str, kind: str =
         db.commit()
         raise HTTPException(status.HTTP_403_FORBIDDEN, SUSPENDED)
     audit.record_login(db, request, method=method, kind=kind, ok=True, user=user)
+    user.session_id = secrets.token_hex(16)  # 새 로그인 → 다른 곳에 있던 로그인은 끊긴다
     db.commit()
     return _token(user)
 
