@@ -204,7 +204,7 @@ def test_concept_detail(client, auth):
 
 
 def test_health(client):
-    assert client.get("/api/health").json() == {"status": "ok"}
+    assert client.get("/api/health").json()["status"] == "ok"
 
 
 def test_demo_account_seed_and_login(client, db):

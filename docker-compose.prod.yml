@@ -25,6 +25,7 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://eureka:${POSTGRES_PASSWORD}@db:5432/eureka
       PUBLIC_BASE_URL: https://${DOMAIN:?.env 에 DOMAIN 을 설정하세요}
+      APP_VERSION: ${APP_VERSION:-dev}  # 자동 배포가 커밋 번호를 넣는다 (/api/health 의 version)
       CORS_ORIGINS: '[]'
     volumes:
       - ./data/uploads:/app/data/uploads

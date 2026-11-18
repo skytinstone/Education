@@ -137,14 +137,23 @@ crontab -e
 서버 `backups/` 에 14일치, S3 버킷에 90일치가 남는다.
 
 ## 9. 자동 배포
-서버가 2분마다 GitHub `main` 을 확인해서, 새 커밋이 있으면 받아서 다시 빌드한다. GitHub 가 서버에 접속하는 방식이 아니라서 SSH 포트를 '내 IP' 로 막아 둔 채로 쓸 수 있다.
+서버가 2분마다 GitHub `main` 을 확인해서 새 커밋을 스스로 배포한다. GitHub 가 서버에 접속하는 방식이 아니라서 SSH 포트를 '내 IP' 로 막아 둔 채로 쓸 수 있다.
 ```bash
-crontab -e
-# 맨 아래에 추가:
-*/2 * * * * cd ~/Education && sh scripts/auto_deploy.sh >> backups/deploy.log 2>&1
+cd ~/Education && sh scripts/install_auto_deploy.sh     # 한 번만 (cron 등록, 매일 백업도 없으면 함께)
 ```
-이후로는 내 PC 에서 `git push` 만 하면 몇 분 안에 반영된다. 기록은 `tail backups/deploy.log`.
-테스트는 GitHub Actions(`.github/workflows/ci.yml`)가 push 마다 돌린다 — 저장소 **Actions** 탭에서 확인. 테스트가 실패해도 배포는 진행되므로, 실패하면 바로 고쳐서 다시 push 한다.
+이후로는 내 PC 에서 `git push` 만 하면 된다. 서버가 하는 일:
+1. GitHub Actions 테스트(`test`)가 **통과할 때까지 기다린다** — 실패한 커밋은 배포하지 않는다
+2. 배포 직전 **백업** (`scripts/backup.sh`)
+3. 받아서 빌드·실행 (마이그레이션은 컨테이너가 시작할 때 자동)
+4. `/api/health` 로 **상태 확인** — 3분 안에 응답이 없으면 **이전 버전으로 되돌린다**
+
+확인 방법
+- 저장소 **Actions** 탭의 '운영 반영 확인' 이 초록색이면 운영 서버에 새 버전이 떠 있는 것 (보통 push 후 3~6분)
+- 서버 기록: `tail -f ~/Education/backups/deploy.log`
+- 지금 운영 버전: `curl https://도메인/api/health` 의 `version`
+- 테스트를 기다리지 않고 바로: `FORCE=1 sh scripts/auto_deploy.sh`
+- 배포 결과를 Slack·Discord 로 받으려면 `.env` 에 `DEPLOY_WEBHOOK_URL=웹훅주소`
+- 끄기: `crontab -l | grep -v auto_deploy.sh | crontab -`
 
 ## 10. 서버 보안 기본 설정 (한 번만)
 ```bash

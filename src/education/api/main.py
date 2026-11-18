@@ -7,6 +7,8 @@
     → 프로토타입 http://127.0.0.1:8000/app/login.html
 """
 
+import os
+
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse, Response
@@ -57,8 +59,9 @@ for r in (auth.router, projects.router, projects.material_router, sessions.route
 
 @api.get("/health", tags=["상태"])
 def health(db: DB) -> dict:
+    """상태 확인. version 은 자동 배포가 넣는 커밋 번호 (GitHub Actions 가 반영됐는지 이것으로 확인)."""
     db.execute(text("select 1"))
-    return {"status": "ok"}
+    return {"status": "ok", "version": os.environ.get("APP_VERSION", "dev")}
 
 
 app.include_router(api)

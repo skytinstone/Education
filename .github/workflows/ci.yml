@@ -31,3 +31,29 @@ jobs:
           python-version: "3.12"
       - run: uv sync --locked
       - run: uv run pytest -q
+
+  # 운영 서버가 2분마다 GitHub 를 확인해 테스트를 통과한 커밋을 스스로 배포한다 (scripts/auto_deploy.sh).
+  # 이 job 은 그 결과를 기다렸다가, 운영 서버의 /api/health version 이 이 커밋이 되면 성공으로 표시한다.
+  deploy:
+    name: 운영 반영 확인
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    concurrency:
+      group: deploy-check
+      cancel-in-progress: true     # 새 커밋이 오면 이전 확인은 그만 (서버는 최신 커밋만 배포)
+    env:
+      PROD_URL: ${{ vars.PROD_URL || 'https://eurekai.cloud' }}
+    steps:
+      - name: 운영 서버에 새 버전이 뜰 때까지 기다리기 (최대 15분)
+        run: |
+          want=$(echo "$GITHUB_SHA" | cut -c1-7)
+          for i in $(seq 1 90); do
+            got=$(curl -fsS -m 10 "$PROD_URL/api/health" | python3 -c 'import sys,json; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)
+            echo "운영 버전: ${got:-?} · 기다리는 버전: $want"
+            if [ "$got" = "$want" ]; then echo "반영 완료 🎉"; exit 0; fi
+            sleep 10
+          done
+          echo "::error::15분 안에 운영 서버에 반영되지 않았어요. 서버에서 'tail -50 ~/Education/backups/deploy.log' 를 확인하세요 (자동 배포가 꺼져 있으면 sh scripts/install_auto_deploy.sh)"
+          exit 1
