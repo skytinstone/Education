@@ -11,7 +11,15 @@
 #   기록:         tail -f backups/deploy.log
 #   .env 에 DEPLOY_WEBHOOK_URL (Slack·Discord 웹훅) 을 넣으면 배포 결과를 알려 준다 (선택)
 set -eu
-cd "$(dirname "$0")/.."
+# 배포가 이 스크립트 파일 자체를 바꿀 수 있어서 (sh 는 실행하면서 파일을 읽는다), 임시 복사본으로 실행한다
+if [ -z "${DEPLOY_DIR:-}" ]; then
+  DEPLOY_DIR=$(cd "$(dirname "$0")/.." && pwd)
+  COPY=$(mktemp /tmp/eureka-deploy.XXXXXX)
+  cp "$0" "$COPY"
+  DEPLOY_DIR=$DEPLOY_DIR exec sh "$COPY" "$@"
+fi
+trap 'rm -f "$0"' EXIT
+cd "$DEPLOY_DIR"
 
 REPO=skytinstone/Education
 CI_CHECK=test                     # .github/workflows/ci.yml 의 테스트 job 이름
@@ -34,7 +42,17 @@ flock -n 9 || exit 0
 git fetch -q origin main
 LOCAL=$(git rev-parse HEAD)
 REMOTE=$(git rev-parse origin/main)
-[ "$LOCAL" = "$REMOTE" ] && exit 0
+if [ "$LOCAL" = "$REMOTE" ]; then
+  # 코드는 최신인데 실행 중인 앱의 버전 표시가 다르면 (손으로 docker compose up 했거나, 예전 스크립트로 배포한 경우)
+  # 다시 빌드하지 않고 버전만 넣어 앱을 다시 띄운다 → /api/health 의 version 과 GitHub '운영 반영 확인'이 맞아진다
+  RUNNING=$($COMPOSE exec -T app sh -c 'echo "${APP_VERSION:-}"' 2>/dev/null | tr -d '\r' || true)
+  HEAD7=$(git rev-parse --short=7 HEAD)
+  if [ -n "$RUNNING" ] && [ "$RUNNING" != "$HEAD7" ]; then
+    log "실행 중인 버전 표시($RUNNING)를 $HEAD7 로 맞춰요"
+    APP_VERSION=$HEAD7 $COMPOSE up -d app
+  fi
+  exit 0
+fi
 [ "$(cat "$SKIP" 2>/dev/null || true)" = "$REMOTE" ] && [ "${FORCE:-0}" != 1 ] && exit 0
 SHORT=$(git rev-parse --short=7 origin/main)
 TITLE=$(git log -1 --format=%s origin/main)

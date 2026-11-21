@@ -25,8 +25,8 @@ jobs:
       TEST_DATABASE_URL: postgresql+psycopg://eureka:ci@127.0.0.1:5432/eureka_test
       JWT_SECRET: ci-only-secret-not-used-anywhere-else
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
       - run: uv sync --locked
