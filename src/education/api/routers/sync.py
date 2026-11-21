@@ -29,6 +29,11 @@ def sync(user: CurrentUser, db: DB) -> dict:
     tried = {a.problem_id for a in attempts}
     problems = db.scalars(select(m.Problem).where(learning.visible_to(user), m.Problem.verification != VerificationStatus.REJECTED))
     sessions = db.scalars(select(m.ChatSession).where(m.ChatSession.user_id == user.id))
+    files: dict = {}  # message_id → 첨부 (한 번에 읽어 메시지마다 조회하지 않게)
+    for f in db.scalars(select(m.ChatFile).where(m.ChatFile.user_id == user.id, m.ChatFile.message_id.is_not(None))
+                        .order_by(m.ChatFile.created_at)):
+        files.setdefault(f.message_id, []).append(
+            {"id": str(f.id), "name": f.filename, "mime": f.content_type, "size": f.size_bytes})
     concepts = courses.my_concepts(db, user)
     loaded = {c.id for c in concepts}
     # 화면이 받은 코스의 문제만 (다른 코스는 개념이 없어 표시할 수 없다). 풀어 본 문제는 언제나
@@ -51,7 +56,7 @@ def sync(user: CurrentUser, db: DB) -> dict:
             "id": str(s.id), "projectId": str(s.project_id) if s.project_id else None, "title": s.title,
             "createdAt": ms(s.created_at), "updatedAt": ms(s.updated_at),
             "messages": [{"role": x.role, "text": x.text, "problemIds": x.problem_ids, "explanation": x.explanation,
-                          "at": ms(x.created_at)} for x in s.messages],
+                          "files": files.get(x.id, []), "at": ms(x.created_at)} for x in s.messages],
         } for s in sessions],
         "attempts": [{
             "id": str(a.id), "problemId": a.problem_id, "projectId": str(a.project_id) if a.project_id else None,

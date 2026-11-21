@@ -94,6 +94,16 @@
   const home = $("#home");
   const contentEl = $(".content");
 
+  // 스크롤바는 스크롤하는 동안만 보이고, 멈추고 0.8초 뒤 사라진다 (CSS .content.is-scrolling)
+  {
+    let hideTimer;
+    contentEl.addEventListener("scroll", () => {
+      contentEl.classList.add("is-scrolling");
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(() => contentEl.classList.remove("is-scrolling"), 800);
+    }, { passive: true });
+  }
+
 
   // ================= 프로필 사진: 사진 · Eureka 캐릭터 · 이름 첫 글자 =================
   // 캐릭터는 브랜드 색 배경 + 동그란 얼굴(눈·입 조합) + 소품 배지(앱 아이콘과 같은 lucide 아이콘)로 그린다
@@ -629,15 +639,19 @@
     ]);
   });
 
-  prompt.addEventListener("input", () => (send.disabled = !prompt.value.trim()));
+  const syncHomeSend = () => (send.disabled = !(prompt.value.trim() || homeAttach.count) || homeAttach.busy);
+  const homeAttach = bindAttach($("#composer"), { onChange: () => syncHomeSend() });
+  prompt.addEventListener("input", syncHomeSend);
   bindVoice($("#composer"));
   $("#composer").addEventListener("submit", (e) => {
     e.preventDefault();
     const text = prompt.value.trim();
-    if (!text) return;
+    if (homeAttach.busy) return toast("파일을 올리는 중이에요. 잠시만 기다려 주세요");
+    if (!text && !homeAttach.count) return;
+    const files = homeAttach.take();
     prompt.value = "";
     send.disabled = true;
-    ask({ projectId: homeProjectId, text });
+    ask({ projectId: homeProjectId, text, files });
   });
 
   // 아이콘 타일: 메뉴로 이동하거나 예시 요청을 입력창에 채운다
@@ -659,6 +673,229 @@
     send.disabled = false;
     prompt.focus();
   });
+
+  // ================= 입력창 + 첨부: 사진·카메라·파일·Google Drive =================
+  // 고르는 즉시 서버에 올려 id 를 받고(POST /sessions/files), 보낼 때 그 id 를 메시지에 붙인다.
+  // Drive 파일은 브라우저가 사용자의 Google 권한(drive.file — 고른 파일만)으로 내려받아 같은 길로 올린다.
+  const ATTACH_MAX = 5, ATTACH_MAX_BYTES = 20 * 1024 * 1024;
+  const ATTACH_TYPES = ["application/pdf", "image/png", "image/jpeg", "image/webp"];
+  const FILE_ACCEPT = ".pdf,application/pdf,image/png,image/jpeg,image/webp";
+  const isTouch = matchMedia("(pointer: coarse)").matches;
+  const fileKind = (mime) => (mime === "application/pdf" ? "PDF" : "사진");
+
+  // 큰 사진·HEIC 처럼 서버가 받지 않는 사진은 브라우저에서 JPG 로 줄여 보낸다 (긴 변 2400px)
+  async function normalizeImage(file) {
+    const ok = ATTACH_TYPES.includes(file.type);
+    if (ok && (file.type === "application/pdf" || file.size <= 3 * 1048576)) return file;
+    if (!file.type.startsWith("image/")) return file;
+    try {
+      const bmp = await createImageBitmap(file);
+      const k = Math.min(1, 2400 / Math.max(bmp.width, bmp.height));
+      const canvas = Object.assign(document.createElement("canvas"), { width: Math.round(bmp.width * k), height: Math.round(bmp.height * k) });
+      const g = canvas.getContext("2d");
+      g.fillStyle = "#fff"; g.fillRect(0, 0, canvas.width, canvas.height); // 투명 PNG 가 검게 나오지 않게
+      g.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((res) => canvas.toBlob(res, "image/jpeg", 0.88));
+      if (!blob) return file;
+      return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" });
+    } catch {
+      return file; // 못 바꾸면 그대로 — 형식이 안 맞으면 아래 검사에서 알려 준다
+    }
+  }
+
+  // ---------- Google Drive (Google Picker) ----------
+  const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+  const DRIVE_MIMES = [...ATTACH_TYPES, "application/vnd.google-apps.document", "application/vnd.google-apps.presentation"].join(",");
+  const scriptLoads = {};
+  const loadScript = (src) => (scriptLoads[src] ??= new Promise((res, rej) => {
+    const s = Object.assign(document.createElement("script"), { src, async: true });
+    s.onload = res;
+    s.onerror = () => { delete scriptLoads[src]; s.remove(); rej(new Error("Google Drive 를 불러오지 못했어요. 인터넷 연결을 확인해 주세요")); };
+    document.head.append(s);
+  }));
+  let driveReady = null, driveAuth = null; // driveAuth: { token, exp }
+  function prepareDrive() {
+    driveReady ??= Promise.all([loadScript("https://accounts.google.com/gsi/client"), loadScript("https://apis.google.com/js/api.js")])
+      .then(() => new Promise((res, rej) => gapi.load("picker", { callback: res, onerror: () => rej(new Error("Google Drive 를 불러오지 못했어요")) })))
+      .catch((e) => { driveReady = null; throw e; });
+    return driveReady;
+  }
+  // 팝업은 클릭 안에서 바로 열어야 막히지 않는다 — 스크립트는 + 메뉴를 열 때 미리 받아 둔다
+  function driveToken(cfg) {
+    if (driveAuth && driveAuth.exp > Date.now() + 60_000) return Promise.resolve(driveAuth.token);
+    return new Promise((res, rej) => {
+      const client = google.accounts.oauth2.initTokenClient({
+        client_id: cfg.client_id, scope: DRIVE_SCOPE,
+        callback: (r) => {
+          if (r.error || !r.access_token) return rej(new Error("Google Drive 접근을 허용하지 않았어요"));
+          driveAuth = { token: r.access_token, exp: Date.now() + (Number(r.expires_in) || 3600) * 1000 };
+          res(r.access_token);
+        },
+        error_callback: (e) => rej(new Error(e?.type === "popup_failed_to_open"
+          ? "팝업이 막혔어요. 브라우저에서 이 사이트의 팝업을 허용하고 다시 눌러 주세요"
+          : e?.type === "popup_closed" ? "" : "Google 로그인 중 문제가 생겼어요")),
+      });
+      client.requestAccessToken({ prompt: "" });
+    });
+  }
+  async function driveDownload(doc, token) {
+    const native = doc.mimeType?.startsWith("application/vnd.google-apps.");
+    const url = native
+      ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(doc.id)}/export?mimeType=application/pdf`
+      : `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(doc.id)}?alt=media&supportsAllDrives=true`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) throw new Error(r.status === 403 && native ? "문서가 너무 커서 PDF 로 바꾸지 못했어요" : "Drive 에서 파일을 받지 못했어요");
+    const blob = await r.blob();
+    return new File([blob], native ? `${doc.name}.pdf` : doc.name, { type: native ? "application/pdf" : (doc.mimeType || blob.type) });
+  }
+  function openDrivePicker(cfg, left, onPick) {
+    if (!window.google?.accounts?.oauth2 || !window.google?.picker) {
+      prepareDrive().then(() => toast("Google Drive 를 준비했어요. 한 번 더 눌러 주세요"), (e) => toast(e.message));
+      return;
+    }
+    driveToken(cfg).then((token) => {
+      const P = google.picker;
+      const view = new P.DocsView(P.ViewId.DOCS).setMimeTypes(DRIVE_MIMES).setIncludeFolders(true).setSelectFolderEnabled(false);
+      const builder = new P.PickerBuilder().addView(view).addView(new P.DocsUploadView())
+        .setOAuthToken(token).setDeveloperKey(cfg.api_key).setAppId(cfg.app_id)
+        .setLocale("ko").setTitle("첨부할 파일 고르기 (PDF·사진·문서)")
+        .setCallback((data) => {
+          if (data.action !== P.Action.PICKED) return;
+          onPick(data.docs.slice(0, left).map((d) => ({ name: d.name, size: d.sizeBytes, file: driveDownload(d, token) })));
+        });
+      if (left > 1) builder.enableFeature(P.Feature.MULTISELECT_ENABLED).setMaxItems(left);
+      builder.build().setVisible(true);
+    }, (e) => e.message && toast(e.message));
+  }
+
+  // 입력창 하나에 첨부를 붙인다. onChange: 첨부가 바뀔 때(보내기 버튼 상태 갱신)
+  function bindAttach(form, { onChange = () => {} } = {}) {
+    const btn = $("[data-attach]", form), input = $("input:not([type=file])", form);
+    const tray = document.createElement("div");
+    tray.className = "attach-tray";
+    tray.hidden = true;
+    form.prepend(tray);
+    let items = [], seq = 0, driveCfg;
+    Store.driveConfig().then((c) => (driveCfg = c));
+
+    const render = () => {
+      tray.hidden = !items.length;
+      form.classList.toggle("has-files", items.length > 0);
+      btn.disabled = items.length >= ATTACH_MAX;
+      tray.innerHTML = items.map((it) => `
+        <div class="att ${it.status}" data-key="${it.key}" title="${esc(it.error || it.name)}">
+          <span class="att-thumb">${it.preview ? `<img src="${it.preview}" alt="" />` : `<i data-lucide="${it.mime === "application/pdf" ? "file-text" : "file"}"></i>`}
+            ${it.status === "uploading" ? '<span class="att-spin" aria-hidden="true"></span>' : ""}</span>
+          <span class="att-meta"><b>${esc(it.name)}</b><small>${it.status === "error" ? esc(it.error)
+            : it.status === "uploading" ? (it.from === "drive" ? "Drive 에서 가져오는 중…" : "올리는 중…")
+            : `${fileKind(it.mime)} · ${fmtSize(it.size)}`}</small></span>
+          <button type="button" class="att-x" data-remove="${it.key}" aria-label="${esc(it.name)} 첨부 빼기"><i data-lucide="x"></i></button>
+        </div>`).join("");
+      icons();
+      onChange();
+    };
+
+    // source: { name, size?, file: File | Promise<File> } — Drive 는 받는 동안 자리부터 보여 준다
+    function add(sources, from = "device") {
+      const room = ATTACH_MAX - items.length;
+      if (room <= 0) return toast(`한 번에 ${ATTACH_MAX}개까지 첨부할 수 있어요`);
+      if (sources.length > room) toast(`한 번에 ${ATTACH_MAX}개까지라서 ${room}개만 첨부했어요`);
+      for (const src of sources.slice(0, room)) {
+        const it = { key: ++seq, name: src.name, size: src.size ?? 0, mime: "", status: "uploading", from };
+        items.push(it);
+        (async () => {
+          let file = await src.file;
+          file = await normalizeImage(file);
+          Object.assign(it, { name: file.name, size: file.size, mime: file.type });
+          if (!ATTACH_TYPES.includes(file.type)) throw new Error("PDF 또는 사진(PNG·JPG·WEBP)만 첨부할 수 있어요");
+          if (file.size > ATTACH_MAX_BYTES) throw new Error("파일은 20MB 까지 첨부할 수 있어요");
+          if (file.type.startsWith("image/")) { it.preview = URL.createObjectURL(file); render(); }
+          const saved = await Store.uploadChatFile(file);
+          if (!items.includes(it)) return Store.removeChatFile(saved.id); // 올리는 사이에 뺐다
+          Object.assign(it, saved, { status: "done" });
+          if (it.preview) Store.rememberChatFileUrl(saved.id, it.preview);
+        })().catch((e) => Object.assign(it, { status: "error", error: e.message || "첨부하지 못했어요" })).finally(render);
+      }
+      render();
+    }
+    const addFiles = (list) => add([...list].map((f) => ({ name: f.name, size: f.size, file: f })));
+
+    function pick({ accept, capture = false }) {
+      const fi = Object.assign(document.createElement("input"), { type: "file", accept, multiple: !capture });
+      if (capture) fi.setAttribute("capture", "environment");
+      fi.addEventListener("change", () => { if (fi.files.length) addFiles(fi.files); });
+      fi.click();
+    }
+
+    btn.addEventListener("click", (e) => {
+      if (Store.mode !== "api") return toast("체험 모드에서는 파일을 첨부할 수 없어요. 로그인하면 쓸 수 있어요");
+      if (driveCfg) prepareDrive().catch(() => {}); // 고르는 동안 미리 받아 둔다
+      const left = ATTACH_MAX - items.length;
+      openMenu(e.currentTarget, [
+        { label: "사진·PDF 를 올리면 AI 가 읽고 풀어 줘요", header: true },
+        isTouch && { icon: "camera", label: "카메라로 찍기", run: () => pick({ accept: "image/*", capture: true }) },
+        { icon: "image", label: isTouch ? "사진 보관함" : "사진·이미지", run: () => pick({ accept: "image/*" }) },
+        { icon: "paperclip", label: "파일 (PDF·사진)", run: () => pick({ accept: FILE_ACCEPT }) },
+        driveCfg && "-",
+        driveCfg && { icon: "hard-drive", label: "Google Drive 에서 고르기", run: () => openDrivePicker(driveCfg, left, (srcs) => add(srcs, "drive")) },
+      ]);
+    });
+
+    tray.addEventListener("click", (e) => {
+      const x = e.target.closest("[data-remove]");
+      if (!x) return;
+      const it = items.find((i) => String(i.key) === x.dataset.remove);
+      items = items.filter((i) => i !== it);
+      if (it?.id) Store.removeChatFile(it.id);
+      if (it?.preview) URL.revokeObjectURL(it.preview);
+      render();
+      input.focus();
+    });
+
+    // 붙여넣기(캡처 이미지) · 끌어다 놓기
+    input.addEventListener("paste", (e) => {
+      const files = [...(e.clipboardData?.files ?? [])];
+      if (!files.length || Store.mode !== "api") return;
+      e.preventDefault();
+      addFiles(files);
+    });
+    const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes("Files");
+    form.addEventListener("dragover", (e) => { if (!hasFiles(e)) return; e.preventDefault(); form.classList.add("dragging"); });
+    form.addEventListener("dragleave", (e) => { if (!form.contains(e.relatedTarget)) form.classList.remove("dragging"); });
+    form.addEventListener("drop", (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      form.classList.remove("dragging");
+      if (Store.mode !== "api") return toast("체험 모드에서는 파일을 첨부할 수 없어요. 로그인하면 쓸 수 있어요");
+      addFiles(e.dataTransfer.files);
+    });
+
+    return {
+      get busy() { return items.some((i) => i.status === "uploading"); },
+      get count() { return items.filter((i) => i.status === "done").length; },
+      // 보낼 첨부를 꺼내고 입력창을 비운다 (실패한 것은 버림). 미리보기 URL 은 대화 화면에서 계속 쓴다
+      take() {
+        const files = items.filter((i) => i.status === "done").map(({ id, name, mime, size }) => ({ id, name, mime, size }));
+        items = [];
+        render();
+        return files;
+      },
+    };
+  }
+
+  // 보낸 메시지의 첨부 (사진은 썸네일, PDF 는 이름표). 누르면 새 탭에서 연다
+  const messageFilesHTML = (files = []) => (files.length ? `<div class="msg-files">${files.map((f) => f.mime?.startsWith("image/")
+    ? `<button type="button" class="msg-img" data-file-open="${f.id}" aria-label="${esc(f.name)} 크게 보기"><img data-file-img="${f.id}" alt="${esc(f.name)}" /></button>`
+    : `<button type="button" class="msg-file" data-file-open="${f.id}"><i data-lucide="file-text"></i><span><b>${esc(f.name)}</b><small>${fileKind(f.mime)} · ${fmtSize(f.size)}</small></span></button>`).join("")}</div>` : "");
+  function hydrateMessageFiles(root) {
+    $$("img[data-file-img]", root).forEach((img) => Store.chatFileUrl(img.dataset.fileImg)
+      .then((u) => (img.src = u)).catch(() => img.closest(".msg-img")?.classList.add("broken")));
+  }
+  function openMessageFile(id) {
+    const w = window.open("", "_blank"); // 클릭 안에서 먼저 열어야 팝업이 막히지 않는다
+    Store.chatFileUrl(id).then((u) => { if (w) w.location.href = u; else location.href = u; },
+      (e) => { w?.close(); toast(e.message); });
+  }
 
   // ================= 음성 입력: 브라우저 음성 인식 + 마이크 음량 미니 게이지 =================
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -762,14 +999,15 @@
   // 계산·설명 질문인지 (서버 explain.is_explain_request 와 같은 기준의 간단판 — 팝업 문구에만 쓴다)
   const explainLike = (t) => !/\d+\s*(문제|문항|개)|문제\s*(를|좀)?\s*(내|만들|줘)|모의고사|출제/.test(t)
     && /계산|구해|풀어|적분|미분|값은|얼마|증명|왜|설명|어떻게|원리|그래프|극한|∫|√/.test(t);
-  function ask({ sessionId = null, projectId = null, text }) {
-    const { id, done } = Store.sendMessage({ sessionId, projectId, text });
+  function ask({ sessionId = null, projectId = null, text, files = [] }) {
+    const { id, done } = Store.sendMessage({ sessionId, projectId, text, files });
     const ex = explainLike(text);
     withAIProgress({
-      title: ex ? "풀이를 준비하는 중" : "문제를 준비하는 중",
-      steps: ex ? ["질문 이해하기", "단계별로 풀기", "검산하기", "그래프·화면 준비"]
+      title: files.length ? "첨부한 자료를 읽는 중" : ex ? "풀이를 준비하는 중" : "문제를 준비하는 중",
+      steps: files.length ? ["사진·파일 읽기", "문제 이해하기", "단계별로 풀기", "검산하기"]
+        : ex ? ["질문 이해하기", "단계별로 풀기", "검산하기", "그래프·화면 준비"]
         : ["요청 이해하기", "문제 만들기", "다른 AI가 다시 풀어 검산", "화면 준비"],
-      expectMs: Store.mode === "api" ? (ex ? 18000 : 30000) : 900,
+      expectMs: Store.mode === "api" ? (files.length ? 25000 : ex ? 18000 : 30000) : 900,
       run: () => done.catch(() => id), // 실패해도 대화에 '답변을 만들지 못했어요'가 남으니 그 대화를 연다
     }).then((realId = id) => {
       if (location.hash === `#/chat/${realId}`) renderChat(realId);
@@ -1181,7 +1419,7 @@
     const scroll = contentEl.scrollTop;
     const p = s.projectId && Store.project(s.projectId);
     const msgs = s.messages.map((m, mi) => m.role === "user"
-      ? `<div class="msg user"><div class="bubble">${esc(m.text)}</div></div>`
+      ? `<div class="msg user">${messageFilesHTML(m.files)}<div class="bubble">${esc(m.text)}</div></div>`
       : `<div class="msg ai"><span class="ai-avatar"></span><div class="ai-body"><p>${esc(m.text)}</p>
           ${m.explanation ? explanationHTML(m.explanation, `${s.id}-${mi}`) : ""}
           ${problemSetHTML(s, mi, m.problemIds ?? [])}
@@ -1199,6 +1437,7 @@
           ${Store.isPending(id) ? `<div class="msg ai"><span class="ai-avatar"></span><div class="ai-body"><div class="typing"><i></i><i></i><i></i></div></div></div>` : ""}
         </div>
         <form class="composer glass chat-composer" id="chat-form">
+          <button type="button" class="icon-btn" data-attach title="사진·파일 첨부" aria-label="사진·파일 첨부"><i data-lucide="plus"></i></button>
           <input id="chat-input" placeholder="이어서 물어보세요" autocomplete="off" />
           ${voiceMeterHTML}
           <button type="button" class="icon-btn mic-btn" data-mic title="음성 입력" aria-label="음성 입력"><i data-lucide="mic"></i></button>
@@ -1209,12 +1448,15 @@
     icons();
 
     const input = $("#chat-input"), btn = $("#chat-form .send");
-    input.addEventListener("input", () => (btn.disabled = !input.value.trim()));
+    const sync = () => (btn.disabled = !(input.value.trim() || attach.count) || attach.busy);
+    const attach = bindAttach($("#chat-form"), { onChange: () => sync() });
+    input.addEventListener("input", sync);
     $("#chat-form").addEventListener("submit", (e) => {
       e.preventDefault();
       const text = input.value.trim();
-      if (!text) return;
-      ask({ sessionId: id, text });
+      if (attach.busy) return toast("파일을 올리는 중이에요. 잠시만 기다려 주세요");
+      if (!text && !attach.count) return;
+      ask({ sessionId: id, text, files: attach.take() });
       renderChat(id);
       $("#chat-input").focus();
     });
@@ -1223,7 +1465,12 @@
 
     const ctx = { projectId: s.projectId, sessionId: s.id };
     const redraw = () => renderChat(id, { keepScroll: true });
-    view.onclick = (e) => { if (!handleProblemSet(e, redraw) && !handleProblemExtras(e)) handleAnswer(e, ctx, redraw); };
+    view.onclick = (e) => {
+      const f = e.target.closest("[data-file-open]");
+      if (f) return openMessageFile(f.dataset.fileOpen);
+      if (!handleProblemSet(e, redraw) && !handleProblemExtras(e)) handleAnswer(e, ctx, redraw);
+    };
+    hydrateMessageFiles(view);
 
     contentEl.scrollTop = keepScroll ? scroll : contentEl.scrollHeight;
   }

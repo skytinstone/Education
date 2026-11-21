@@ -175,9 +175,15 @@ const Store = (() => {
     s.messages.forEach((msg) => msg.problems.forEach(mergeProblem));
     return {
       id: s.id, projectId: s.project_id, title: s.title, createdAt: Date.parse(s.created_at), updatedAt: Date.parse(s.updated_at),
-      messages: s.messages.map((msg) => ({ role: msg.role, text: msg.text, problemIds: msg.problems.map((p) => p.id), explanation: msg.explanation ?? null, at: Date.parse(msg.created_at) })),
+      messages: s.messages.map(toMessage),
     };
   }
+  const toFile = (f) => ({ id: f.id, name: f.filename, mime: f.content_type, size: f.size_bytes });
+  const toMessage = (msg) => ({ role: msg.role, text: msg.text, problemIds: msg.problems.map((p) => p.id), explanation: msg.explanation ?? null,
+    files: (msg.attachments ?? []).map(toFile), at: Date.parse(msg.created_at) });
+  const FILE_ONLY_TEXT = "첨부한 자료를 보고 풀이해 줘"; // 서버(dto.FILE_ONLY_TEXT)와 같게
+  let drivePromise = null;
+  const fileUrls = new Map(); // 첨부 id → blob URL (인증 헤더가 필요해 <img src> 로 바로 못 불러온다)
   const PROJECT_KEYS = { name: "name", subjectId: "subject_id", unitIds: "unit_ids", goal: "goal", textbook: "textbook", textbookIsbn: "textbook_isbn", examDate: "exam_date", questionType: "question_type", pinned: "pinned" };
   const snake = (patch) => Object.fromEntries(Object.entries(patch).filter(([k]) => PROJECT_KEYS[k]).map(([k, v]) => [PROJECT_KEYS[k], v]));
 
@@ -365,15 +371,19 @@ const Store = (() => {
     },
 
     // 질문 보내기 — 새 대화면 sessionId 없이. 바로 대화 id 를 돌려주고, 답은 나중에 도착한다(Store.isPending)
-    sendMessage({ sessionId = null, projectId = null, text }) {
+    // files: uploadChatFile 로 먼저 올린 첨부 [{ id, name, mime, size }] — 글 없이 첨부만 보내도 된다
+    sendMessage({ sessionId = null, projectId = null, text, files = [] }) {
       const now = Date.now();
+      if (!text && files.length) text = FILE_ONLY_TEXT;
       let s = sessionId && q.session(sessionId);
       if (!s) {
-        s = { id: uid(local ? "s" : "tmp"), projectId, title: text.length > 24 ? `${text.slice(0, 24)}…` : text,
+        const title = text === FILE_ONLY_TEXT && files.length ? files[0].name : text;
+        s = { id: uid(local ? "s" : "tmp"), projectId, title: title.length > 24 ? `${title.slice(0, 24)}…` : title,
           createdAt: now, updatedAt: now, messages: [] };
         state.sessions.push(s);
       }
-      s.messages.push({ role: "user", text, at: now });
+      s.messages.push({ role: "user", text, files, at: now });
+      const attachment_ids = files.map((f) => f.id);
       s.updatedAt = now;
       const id = s.id;
       pending.add(id);
@@ -387,13 +397,13 @@ const Store = (() => {
             resolve(id);
           }, 800))
         : (sessionId
-            ? api(`/sessions/${id}/messages`, { method: "POST", body: { text } }).then((msgs) => {
+            ? api(`/sessions/${id}/messages`, { method: "POST", body: { text, attachment_ids } }).then((msgs) => {
                 msgs.forEach((msg) => msg.problems.forEach(mergeProblem));
-                s.messages.splice(-1, 1, ...msgs.map((msg) => ({ role: msg.role, text: msg.text, problemIds: msg.problems.map((p) => p.id), explanation: msg.explanation ?? null, at: Date.parse(msg.created_at) })));
+                s.messages.splice(-1, 1, ...msgs.map(toMessage));
                 s.updatedAt = Date.now();
                 return id;
               })
-            : api("/sessions", { method: "POST", body: { text, project_id: projectId } }).then((detail) => {
+            : api("/sessions", { method: "POST", body: { text, attachment_ids, project_id: projectId } }).then((detail) => {
                 const real = toSession(detail);
                 state.sessions = state.sessions.map((x) => (x.id === id ? real : x));
                 renamed[id] = real.id;
@@ -553,6 +563,33 @@ const Store = (() => {
         Object.assign(state.user, { avatarType: u.avatar_type, avatarPreset: null, avatarUrl: u.avatar_url });
       }
       commit();
+    },
+    // ---------- 대화 첨부 (입력창 +) — 서버 모드에서만 ----------
+    async uploadChatFile(file) {
+      if (local) throw new Error("체험 모드에서는 파일을 첨부할 수 없어요. 로그인하면 쓸 수 있어요");
+      const form = new FormData();
+      form.append("file", file, file.name);
+      return toFile(await api("/sessions/files", { method: "POST", form }));
+    },
+    removeChatFile(id) {
+      if (!local) api(`/sessions/files/${id}`, { method: "DELETE" }).catch(() => {}); // 못 지워도 서버가 하루 뒤 거둔다
+    },
+    // 첨부 미리보기 주소 (blob URL, 한 번 받으면 재사용)
+    chatFileUrl(id) {
+      if (!fileUrls.has(id)) {
+        fileUrls.set(id, fetch(`/api/sessions/files/${id}`, { headers: { Authorization: `Bearer ${TOKEN}` } })
+          .then((r) => { if (!r.ok) throw new Error("파일을 불러오지 못했어요"); return r.blob(); })
+          .then((b) => URL.createObjectURL(b))
+          .catch((e) => { fileUrls.delete(id); throw e; }));
+      }
+      return fileUrls.get(id);
+    },
+    rememberChatFileUrl(id, url) { fileUrls.set(id, Promise.resolve(url)); },
+    // Google Drive 에서 고르기 설정 (없으면 null)
+    driveConfig() {
+      if (local) return Promise.resolve(null);
+      drivePromise ??= api("/sessions/drive-config").catch(() => null);
+      return drivePromise;
     },
     reset() {
       if (!local) throw new Error("서버 계정은 초기화할 수 없어요");

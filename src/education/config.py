@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     public_base_url: str = "http://localhost:8000"
     google_client_id: str | None = None
     google_client_secret: str | None = None
+    # 대화 첨부의 'Google Drive 에서 고르기' (선택) — 같은 Google Cloud 프로젝트에서 Picker API·Drive API 를 켜고
+    # API 키(HTTP 리퍼러를 사이트 주소로 제한)와 프로젝트 번호를 넣는다. 둘 다 있고 GOOGLE_CLIENT_ID 도 있어야 켜진다
+    google_picker_api_key: str | None = None
+    google_app_id: str | None = None
     kakao_rest_api_key: str | None = None
     kakao_client_secret: str | None = None
 

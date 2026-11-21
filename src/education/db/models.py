@@ -395,8 +395,27 @@ class Message(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp(), nullable=False)
 
     session: Mapped[ChatSession] = relationship(back_populates="messages")
+    attachments: Mapped[list[ChatFile]] = relationship(order_by="ChatFile.created_at", passive_deletes=True)
 
     __table_args__ = (CheckConstraint("role IN ('user', 'ai')", name="message_role"),)
+
+
+class ChatFile(Base):
+    """대화 입력창 + 로 첨부한 사진·PDF (services/chat_files.py).
+
+    먼저 올려 id 를 받고(message_id 없음), 메시지를 보낼 때 그 메시지에 묶인다. 올린 사람만 볼 수 있다.
+    대화를 지우면 행은 함께 지워지고, 디스크 파일은 지우는 쪽(라우터)이 거둔다.
+    """
+    __tablename__ = "chat_files"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    message_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("messages.id", ondelete="CASCADE"), index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(64))
+    size_bytes: Mapped[int] = mapped_column(Integer)
+    storage_path: Mapped[str] = mapped_column(String(512))  # UPLOAD_DIR 기준 상대 경로
+    created_at: Mapped[datetime] = created_at()
 
 
 # ---------- 풀이 기록 · 오답노트 ----------

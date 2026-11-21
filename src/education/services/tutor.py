@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from education.db import models as m
 from education.schemas import Domain, VerificationStatus
 from education.services import explain, generator, learning, quota
-from education.services.llm import LLMError, get_llm
+from education.services.llm import Attachment, LLMError, get_llm
 
 log = logging.getLogger(__name__)
 
@@ -68,9 +68,13 @@ def textbook_label(project: m.Project) -> str | None:
     return f"{project.textbook} (ISBN {project.textbook_isbn})" if project.textbook_isbn else project.textbook
 
 
-def reply_full(db: Session, user: m.User, text: str, project: m.Project | None) -> tuple[str, list[str], dict | None]:
-    """(답변 문장, 문제 id 목록, 풀이). 계산·설명 질문이면 문제 대신 풀이로 답한다."""
+def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
+               files: list[Attachment] | None = None) -> tuple[str, list[str], dict | None]:
+    """(답변 문장, 문제 id 목록, 풀이). 계산·설명 질문이면 문제 대신 풀이로 답한다.
+    사진·PDF 를 첨부했으면 그 자료를 읽고 풀이로 답한다 (AI 가 있어야 함)."""
     llm = get_llm()
+    if files:
+        return _files_reply(db, llm, user, text, files)
     if llm and quota.exceeded(db, user):  # 하루 한도를 넘으면 AI 없이 문제 은행에서
         ids = _from_bank(db, user, text, detect_domain(text), None)
         return (f"오늘 쓸 수 있는 AI 사용량을 다 써서, 문제 은행의 검증된 문제 {len(ids)}개를 보여드려요. 내일 다시 AI 로 만들어 드릴게요."
@@ -82,6 +86,23 @@ def reply_full(db: Session, user: m.User, text: str, project: m.Project | None) 
         except LLMError as e:
             log.warning("AI 풀이 실패: %s", e)
     return (*reply(db, user, text, project), None)
+
+
+def _files_reply(db: Session, llm, user: m.User, text: str, files: list[Attachment]) -> tuple[str, list[str], dict | None]:
+    """첨부한 사진·PDF 를 읽고 풀이로 답한다. AI 가 없거나 한도를 넘었으면 이유를 알린다."""
+    if llm is None:
+        return "사진·파일을 읽으려면 AI 가 켜져 있어야 해요. 지금은 문제를 글로 적어서 물어봐 주세요.", [], None
+    if quota.exceeded(db, user):
+        return quota.MESSAGE, [], None
+    names = ", ".join(f.filename for f in files)
+    prompt = f"학생 질문: {text}\n\n[첨부한 자료] {names}"
+    try:
+        line, payload = explain.explain(db, llm, user, text, prompt=prompt, instructions=explain.FILE_INSTRUCTIONS,
+                                        purpose="explain_file", files=files)
+    except LLMError as e:
+        log.warning("첨부 자료 풀이 실패: %s", e)
+        return "첨부한 자료를 읽지 못했어요. 잠시 후 다시 보내 주거나, 더 선명한 사진으로 올려 주세요.", [], None
+    return line.replace("풀이를 정리", "첨부한 자료를 읽고 풀이를 정리", 1), [], payload
 
 
 def reply(db: Session, user: m.User, text: str, project: m.Project | None) -> tuple[str, list[str]]:

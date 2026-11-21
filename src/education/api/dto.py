@@ -12,7 +12,7 @@ from uuid import UUID
 
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator
+from pydantic import AfterValidator, BaseModel, ConfigDict, EmailStr, Field, computed_field, field_validator, model_validator
 
 from education.schemas import ConceptLevel, ErrorType
 
@@ -344,13 +344,26 @@ class ProjectSummary(BaseModel):
     weak_concepts: list[WeakConcept]
 
 
-class SessionIn(BaseModel):
-    text: str = Field(min_length=1, max_length=2000)
-    project_id: UUID | None = None
+FILE_ONLY_TEXT = "첨부한 자료를 보고 풀이해 줘"
 
 
 class MessageIn(BaseModel):
-    text: str = Field(min_length=1, max_length=2000)
+    """글이나 첨부(POST /sessions/files 로 먼저 올린 id) 중 하나는 있어야 한다. 첨부만 보내면 기본 요청 문장을 쓴다."""
+    text: str = Field(default="", max_length=2000)
+    attachment_ids: list[UUID] = Field(default_factory=list, max_length=5)
+
+    @model_validator(mode="after")
+    def _text_or_files(self):
+        self.text = self.text.strip()
+        if not self.text:
+            if not self.attachment_ids:
+                raise ValueError("질문을 입력하거나 파일을 첨부해 주세요")
+            self.text = FILE_ONLY_TEXT
+        return self
+
+
+class SessionIn(MessageIn):
+    project_id: UUID | None = None
 
 
 class SessionPatch(BaseModel):
@@ -367,10 +380,26 @@ class SessionOut(Out):
     updated_at: datetime
 
 
+class ChatFileOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    filename: str
+    content_type: str
+    size_bytes: int
+
+
+class DriveConfig(BaseModel):
+    """Google Drive 에서 고르기 (Google Picker) — 설정이 없으면 화면에서 메뉴를 숨긴다."""
+    client_id: str
+    api_key: str
+    app_id: str
+
+
 class MessageOut(BaseModel):
     id: UUID
     role: str
     text: str
+    attachments: list[ChatFileOut] = []
     problems: list[ProblemView]
     explanation: dict | None = None  # 계산·설명 질문의 풀이 (services/explain.py)
     created_at: datetime
