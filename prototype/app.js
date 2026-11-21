@@ -81,14 +81,140 @@
   }
   const pct = (x) => (x == null ? "–" : `${Math.round(x * 100)}%`);
 
-  function toast(msg) {
-    $(".toast")?.remove();
+  // 알림: 아래에서 떠오르고 여러 개면 쌓인다. 아이콘은 문구로 고른다 (오류·주의·완료·안내)
+  function toast(msg, kind) {
+    const text = String(msg ?? "");
+    kind ??= /못했|실패|오류|에러|없어요|막혔|만료/.test(text) ? "error"
+      : /해 주세요|필요해요|까지|기다려|잠시만/.test(text) ? "warn"
+      : /했어요|됐어요|완료|저장|보냈|극복|복사/.test(text) ? "ok" : "info";
+    let stack = $(".toasts");
+    if (!stack) { stack = document.createElement("div"); stack.className = "toasts"; stack.setAttribute("aria-live", "polite"); document.body.append(stack); }
+    const icon = { error: "circle-x", warn: "triangle-alert", ok: "circle-check", info: "info" }[kind];
     const t = document.createElement("div");
-    t.className = "toast";
-    t.textContent = msg;
-    document.body.append(t);
-    setTimeout(() => t.remove(), 2200);
+    t.className = `toast ${kind}`;
+    t.innerHTML = `<i data-lucide="${icon}"></i><span></span><em class="toast-bar"></em>`;
+    t.querySelector("span").textContent = text;
+    stack.append(t);
+    lucide.createIcons();
+    while (stack.children.length > 3) stack.firstElementChild.remove();
+    const life = Math.min(5200, 2200 + text.length * 35);
+    t.style.setProperty("--life", `${life}ms`);
+    setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 260); }, life);
   }
+
+  // ================= 움직임·피드백 공통 (동작 줄이기 설정이면 모두 끔) =================
+  const noMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const touchDevice = matchMedia("(pointer: coarse)").matches;
+  // 폰 진동 — 정답·오답·첨부 완료·제출 (지원하는 기기만, 아주 짧게)
+  const buzz = (pattern) => { try { if (touchDevice && !noMotion() && navigator.vibrate) navigator.vibrate(pattern); } catch { /* 무시 */ } };
+
+  // 마지막으로 누른 위치 — 모달이 그 자리에서 열리게
+  let lastPress = { x: 0, y: 0, t: 0 };
+  document.addEventListener("pointerdown", (e) => { lastPress = { x: e.clientX, y: e.clientY, t: Date.now() }; }, true);
+
+  // 버튼을 누른 자리에서 퍼지는 물결
+  const RIPPLE = ".btn-primary, .btn-ghost, .choice, .xt-c, .action .tile, .seg button";
+  document.addEventListener("pointerdown", (e) => {
+    const b = e.target.closest(RIPPLE);
+    if (!b || b.disabled || noMotion()) return;
+    const r = b.getBoundingClientRect(), size = Math.max(r.width, r.height) * 1.2;
+    const w = document.createElement("span");
+    w.className = "ripple";
+    w.style.cssText = `width:${size}px;height:${size}px;left:${e.clientX - r.left - size / 2}px;top:${e.clientY - r.top - size / 2}px`;
+    b.append(w);
+    setTimeout(() => w.remove(), 600);
+  });
+
+  // 숫자가 0 에서 올라가며 바뀐다 (점수·정답률·D-day 등). 글자 맨 앞 숫자만
+  function countUp(root, sel = ".kpi b, .ws-kpis b, .xt-score > b, .exh-stats b, #goal-card .num b, .xt-stats b") {
+    if (noMotion() || !root) return;
+    $$(sel, root).forEach((el) => {
+      const node = [...el.childNodes].find((n) => n.nodeType === 3 && /\d/.test(n.textContent));
+      const m = node && /^(\D*?)(\d[\d,]*)(.*)$/s.exec(node.textContent);
+      if (!m || el.dataset.counted) return;
+      const to = Number(m[2].replace(/,/g, ""));
+      if (!to || to > 100000) return;
+      el.dataset.counted = "1";
+      const t0 = performance.now(), dur = Math.min(900, 380 + to * 12);
+      const step = (now) => {
+        const k = Math.min(1, (now - t0) / dur), v = Math.round(to * (1 - Math.pow(1 - k, 3)));
+        node.textContent = `${m[1]}${m[2].includes(",") ? v.toLocaleString("ko-KR") : v}${m[3]}`;
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  // 작은 축하 (연속 정답) — 요소 위에서 색종이가 터진다
+  function confetti(el) {
+    if (noMotion() || !el) return;
+    const r = el.getBoundingClientRect(), box = document.createElement("div");
+    box.className = "confetti";
+    box.style.cssText = `left:${r.left + r.width / 2}px;top:${r.top + 10}px`;
+    const colors = ["#4fc3ff", "#6b7cff", "#c06bff", "#ff5f6d", "#ffb347", "#5ee7a0"];
+    box.innerHTML = Array.from({ length: 22 }, (_, i) => {
+      const a = (Math.PI * 2 * i) / 22 + Math.random() * 0.4, d = 60 + Math.random() * 70;
+      return `<i style="--x:${Math.cos(a) * d}px;--y:${Math.sin(a) * d - 50}px;--r:${Math.random() * 540 - 270}deg;background:${colors[i % colors.length]}"></i>`;
+    }).join("");
+    document.body.append(box);
+    setTimeout(() => box.remove(), 1100);
+  }
+
+  // 불러오는 동안 회색 틀이 반짝이며 기다린다
+  const skel = (rows = 3) => `<div class="skel" aria-busy="true" aria-label="불러오는 중">${Array.from({ length: rows }, (_, i) => `<span style="width:${[92, 78, 64, 86][i % 4]}%"></span>`).join("")}</div>`;
+
+  // 답변이 빠르게 타이핑되듯 나타난다 (커서 없음). 글은 단어 단위, 수식·그래프·문제 카드는 한 덩어리로
+  const TW_ATOMIC = ".katex, .katex-display, svg, img, button, input, textarea, select, table, .problem, .choices, .ex-plot, .ex-graph, .msg-files, .pset-bar";
+  function typeReveal(root, { onStep = () => {}, onDone = () => {} } = {}) {
+    if (!root || noMotion()) return onDone();
+    const units = [];
+    const walk = (node) => {
+      for (const n of [...node.childNodes]) {
+        if (n.nodeType === 1) {
+          if (n.matches(TW_ATOMIC)) { n.classList.add("tw-h"); units.push({ el: n, w: n.matches(".problem, .ex-plot, .ex-graph") ? 8 : 2 }); }
+          else walk(n);
+        } else if (n.nodeType === 3 && n.textContent.trim()) {
+          const frag = document.createDocumentFragment();
+          n.textContent.split(/(\s+)/).forEach((tok) => {
+            if (!tok) return;
+            if (/^\s+$/.test(tok)) return frag.append(tok);
+            const s = document.createElement("span");
+            s.className = "tw tw-h";
+            s.textContent = tok;
+            frag.append(s);
+            units.push({ el: s, w: 1 });
+          });
+          n.replaceWith(frag);
+        }
+      }
+    };
+    walk(root);
+    if (!units.length) return onDone();
+    // 길이에 맞춰 속도 조절: 짧으면 또박또박, 길어도 3초 안에
+    const words = units.reduce((a, u) => a + u.w, 0);
+    const perWord = Math.max(4, Math.min(28, 3000 / words));
+    let i = 0, acc = 0, last = performance.now(), stopped = false;
+    const finish = () => { units.slice(i).forEach((u) => u.el.classList.remove("tw-h")); i = units.length; stopped = true; onDone(); };
+    const frame = (now) => {
+      if (stopped) return;
+      if (!root.isConnected) return (stopped = true);
+      acc += now - last; last = now;
+      while (i < units.length && acc >= perWord * units[i].w) {
+        acc -= perWord * units[i].w;
+        const el = units[i].el;
+        el.classList.remove("tw-h");
+        if (el.matches(".ex-plot, .ex-graph")) { el.classList.add("draw-in"); $$(".ex-plot", el).forEach((p) => p.classList.add("draw-in")); }
+        i++;
+      }
+      onStep();
+      if (i >= units.length) { stopped = true; onDone(); } else setTimeout(() => frame(performance.now()), 16);
+    };
+    // 탭이 가려져 있으면 기다리지 않고 바로 다 보여 준다
+    if (document.hidden) { finish(); return finish; }
+    setTimeout(() => frame(performance.now()), 16);
+    return finish;
+  }
+
 
   const view = $("#view");
   const home = $("#home");
@@ -210,6 +336,7 @@
     renderSidebar();
     if (page !== "chat") contentEl.scrollTop = 0;
     icons();
+    requestAnimationFrame(() => countUp(page ? view : home));
     $("#app").classList.remove("mobile-open");
   }
   window.addEventListener("hashchange", render);
@@ -783,14 +910,16 @@
       form.classList.toggle("has-files", items.length > 0);
       btn.disabled = items.length >= ATTACH_MAX;
       tray.innerHTML = items.map((it) => `
-        <div class="att ${it.status}" data-key="${it.key}" title="${esc(it.error || it.name)}">
+        <div class="att ${it.status} ${it.shown ? "" : "enter"} ${it.flash ?? ""}" data-key="${it.key}" title="${esc(it.error || it.name)}">
           <span class="att-thumb">${it.preview ? `<img src="${it.preview}" alt="" />` : `<i data-lucide="${it.mime === "application/pdf" ? "file-text" : "file"}"></i>`}
             ${it.status === "uploading" ? '<span class="att-spin" aria-hidden="true"></span>' : ""}</span>
           <span class="att-meta"><b>${esc(it.name)}</b><small>${it.status === "error" ? esc(it.error)
             : it.status === "uploading" ? (it.from === "drive" ? "Drive 에서 가져오는 중…" : "올리는 중…")
             : `${fileKind(it.mime)} · ${fmtSize(it.size)}`}</small></span>
+          ${it.status === "done" ? '<span class="att-ok" aria-hidden="true"><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg></span>' : ""}
           <button type="button" class="att-x" data-remove="${it.key}" aria-label="${esc(it.name)} 첨부 빼기"><i data-lucide="x"></i></button>
         </div>`).join("");
+      items.forEach((it) => { it.shown = true; it.flash = ""; });
       icons();
       onChange();
     };
@@ -812,9 +941,10 @@
           if (file.type.startsWith("image/")) { it.preview = URL.createObjectURL(file); render(); }
           const saved = await Store.uploadChatFile(file);
           if (!items.includes(it)) return Store.removeChatFile(saved.id); // 올리는 사이에 뺐다
-          Object.assign(it, saved, { status: "done" });
+          Object.assign(it, saved, { status: "done", flash: "just-done" });
+          buzz(8);
           if (it.preview) Store.rememberChatFileUrl(saved.id, it.preview);
-        })().catch((e) => Object.assign(it, { status: "error", error: e.message || "첨부하지 못했어요" })).finally(render);
+        })().catch((e) => { Object.assign(it, { status: "error", error: e.message || "첨부하지 못했어요", flash: "just-err" }); buzz([20, 30, 20]); }).finally(render);
       }
       render();
     }
@@ -845,11 +975,17 @@
       const x = e.target.closest("[data-remove]");
       if (!x) return;
       const it = items.find((i) => String(i.key) === x.dataset.remove);
-      items = items.filter((i) => i !== it);
-      if (it?.id) Store.removeChatFile(it.id);
-      if (it?.preview) URL.revokeObjectURL(it.preview);
-      render();
-      input.focus();
+      const card = x.closest(".att");
+      const drop = () => {
+        items = items.filter((i) => i !== it);
+        if (it?.id) Store.removeChatFile(it.id);
+        if (it?.preview) URL.revokeObjectURL(it.preview);
+        render();
+        input.focus();
+      };
+      if (noMotion() || !card) return drop();
+      card.classList.add("leaving");
+      setTimeout(drop, 180);
     });
 
     // 붙여넣기(캡처 이미지) · 끌어다 놓기
@@ -860,6 +996,7 @@
       addFiles(files);
     });
     const hasFiles = (e) => [...(e.dataTransfer?.types ?? [])].includes("Files");
+    form.dataset.dropLabel = "여기에 놓으면 첨부돼요";
     form.addEventListener("dragover", (e) => { if (!hasFiles(e)) return; e.preventDefault(); form.classList.add("dragging"); });
     form.addEventListener("dragleave", (e) => { if (!form.contains(e.relatedTarget)) form.classList.remove("dragging"); });
     form.addEventListener("drop", (e) => {
@@ -877,7 +1014,8 @@
       take() {
         const files = items.filter((i) => i.status === "done").map(({ id, name, mime, size }) => ({ id, name, mime, size }));
         items = [];
-        render();
+        if (files.length && !noMotion()) { tray.classList.add("sending"); setTimeout(() => { tray.classList.remove("sending"); render(); }, 240); }
+        else render();
         return files;
       },
     };
@@ -1010,6 +1148,7 @@
       expectMs: Store.mode === "api" ? (files.length ? 25000 : ex ? 18000 : 30000) : 900,
       run: () => done.catch(() => id), // 실패해도 대화에 '답변을 만들지 못했어요'가 남으니 그 대화를 연다
     }).then((realId = id) => {
+      typeNext = realId;
       if (location.hash === `#/chat/${realId}`) renderChat(realId);
       else go(`/chat/${realId}`);
     });
@@ -1323,6 +1462,7 @@
             run: () => Store.answer({ problemId: box.dataset.problem, answer, ...ctx }) })
         : await Store.answer({ problemId: box.dataset.problem, answer, ...ctx });
       redraw(box, { answer, correct: r.correct, score: r.score, feedback: r.feedback });
+      answerReaction(box.dataset.problem, r.correct);
       if (r.resolved) toast("오답을 극복했어요");
     } catch (err) {
       toast(err.message);
@@ -1331,6 +1471,21 @@
       if (sb && ptype(Store.problem(box.dataset.problem)) === "essay") { sb.innerHTML = '<i data-lucide="send"></i>제출하고 채점받기'; lucide.createIcons(); }
     }
     return true;
+  }
+
+  // 맞히면 초록이 차오르고 체크, 틀리면 흔들리고 정답이 빛난다. 3연속 정답부터 작은 축하
+  let correctRun = 0;
+  function answerReaction(pid, correct) {
+    const card = $(`[data-problem="${CSS.escape(pid)}"]`);
+    if (!card) return;
+    card.classList.add("just", correct ? "just-ok" : "just-bad");
+    setTimeout(() => card.classList.remove("just", "just-ok", "just-bad"), 1400);
+    buzz(correct ? 12 : [25, 40, 25]);
+    correctRun = correct ? correctRun + 1 : 0;
+    if (correct && correctRun >= 3) {
+      confetti($(".result", card) ?? card);
+      if (correctRun === 3 || correctRun % 5 === 0) toast(`${correctRun}문제 연속 정답이에요!`, "ok");
+    }
   }
 
   const whyHTML = (note) => `
@@ -1411,6 +1566,9 @@
     return true;
   }
 
+  const THINK_STEPS = ["질문 읽는 중", "풀이 방법 고르는 중", "단계별로 푸는 중", "한 번 더 검산하는 중", "답변 정리하는 중"];
+  const pendingAt = {};   // 대화 id → 답을 기다리기 시작한 시각 (다시 그려도 단계가 이어지게)
+  let typeNext = null;    // 다음에 그릴 때 마지막 답변을 타이핑 효과로 보여 줄 대화 id
   function renderChat(id, { keepScroll = false } = {}) {
     if (voice && !document.body.contains(voice.btn)) voice.stop();
     if (voice?.btn.closest("#chat-form")) voice.stop(); // 입력창을 새로 그리기 전에 듣기를 멈춘다
@@ -1434,7 +1592,7 @@
         </div>
         <div class="thread">
           ${msgs}
-          ${Store.isPending(id) ? `<div class="msg ai"><span class="ai-avatar"></span><div class="ai-body"><div class="typing"><i></i><i></i><i></i></div></div></div>` : ""}
+          ${Store.isPending(id) ? `<div class="msg ai pending"><span class="ai-avatar"></span><div class="ai-body"><div class="typing"><span class="dots"><i></i><i></i><i></i></span><span class="think" id="think-step">${THINK_STEPS[0]}</span></div></div></div>` : ""}
         </div>
         <form class="composer glass chat-composer" id="chat-form">
           <button type="button" class="icon-btn" data-attach title="사진·파일 첨부" aria-label="사진·파일 첨부"><i data-lucide="plus"></i></button>
@@ -1458,6 +1616,7 @@
       if (!text && !attach.count) return;
       ask({ sessionId: id, text, files: attach.take() });
       renderChat(id);
+      [...$$(".thread .msg.user")].at(-1)?.classList.add("sent");
       $("#chat-input").focus();
     });
     $("#chat-more").addEventListener("click", (e) => chatMenu(e.currentTarget, id));
@@ -1473,6 +1632,46 @@
     hydrateMessageFiles(view);
 
     contentEl.scrollTop = keepScroll ? scroll : contentEl.scrollHeight;
+
+    // 생각 중: 단계 글자가 차례로 바뀐다
+    if (Store.isPending(id)) {
+      const started = (pendingAt[id] ??= Date.now());
+      const el = $("#think-step");
+      const tickThink = () => {
+        if (!el.isConnected || !Store.isPending(id)) return;
+        const k = Math.min(THINK_STEPS.length - 1, Math.floor((Date.now() - started) / 2200));
+        if (el.textContent !== THINK_STEPS[k]) { el.textContent = THINK_STEPS[k]; el.classList.remove("swap"); void el.offsetWidth; el.classList.add("swap"); }
+        setTimeout(tickThink, 400);
+      };
+      tickThink();
+    } else delete pendingAt[id];
+
+    // 방금 받은 답변은 빠르게 타이핑되듯 (커서 없음) — 읽는 중이면 따라 내려가고, 위로 올려 보면 '새 답변' 버튼
+    if (!keepScroll && typeNext === id) {
+      typeNext = null;
+      const last = [...$$(".thread .msg.ai:not(.pending)")].at(-1);
+      const bodyEl = last && $(".ai-body", last);
+      if (bodyEl) {
+        let follow = true;
+        const atBottom = () => contentEl.scrollHeight - contentEl.scrollTop - contentEl.clientHeight < 80;
+        const onScroll = () => { follow = atBottom(); pill.hidden = follow || !typing; };
+        const pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "new-answer";
+        pill.hidden = true;
+        pill.innerHTML = '<i data-lucide="arrow-down"></i>답변 계속 보기';
+        pill.onclick = () => { contentEl.scrollTo({ top: contentEl.scrollHeight, behavior: "smooth" }); follow = true; pill.hidden = true; };
+        $(".chat-view").append(pill);
+        icons();
+        let typing = true;
+        contentEl.addEventListener("scroll", onScroll, { passive: true });
+        last.classList.add("arrive");
+        typeReveal(bodyEl, {
+          onStep: () => { if (follow) contentEl.scrollTop = contentEl.scrollHeight; },
+          onDone: () => { typing = false; pill.remove(); contentEl.removeEventListener("scroll", onScroll); },
+        });
+      }
+    }
   }
 
   // ================= 계산·설명 풀이 (요약 · 원리 · 단계 · 답 · 검산 · 그래프) =================
@@ -1565,7 +1764,7 @@
         d += `${prev == null ? "M" : "L"}${X(g.xs[i]).toFixed(1)},${Y(y).toFixed(1)}`;
         prev = y;
       });
-      return `<path d="${d}" fill="none" stroke="${SERIES[s.slot % 3]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" clip-path="url(#clip-${el.dataset.graph.replace(/\W/g, "")})"/>`;
+      return `<path class="curve" pathLength="1" d="${d}" fill="none" stroke="${SERIES[s.slot % 3]}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" clip-path="url(#clip-${el.dataset.graph.replace(/\W/g, "")})"/>`;
     }).join("");
 
     // 선 끝 직접 라벨 (글자는 본문 색, 겹치면 아래로 비킨다)
@@ -1683,11 +1882,11 @@
         <section class="panel ws-col ws-files">
           <div class="ws-col-head"><h3><i data-lucide="layers"></i>올린 문제</h3>
             <button class="icon-btn" data-ws-upload title="기출·교재 올리기" aria-label="기출 올리기"><i data-lucide="plus"></i></button></div>
-          <div id="ws-files"><p class="mini">불러오는 중…</p></div>
+          <div id="ws-files">${skel(4)}</div>
         </section>
-        <section class="panel ws-col ws-sheet"><div id="ws-sheet"><p class="mini">불러오는 중…</p></div></section>
+        <section class="panel ws-col ws-sheet"><div id="ws-sheet">${skel(6)}</div></section>
         <aside class="panel ws-col ws-report">
-          <div id="ws-report"><p class="mini">분석하는 중…</p></div>
+          <div id="ws-report">${skel(5)}</div>
           <div class="ws-gen">
             <h4><i data-lucide="sparkles"></i>기출을 닮은 새 문제</h4>
             <div class="seg small" id="gen-level">${[["easier", "쉽게"], ["same", "비슷하게"], ["harder", "어렵게"]].map(([k, v]) => `<button type="button" data-level="${k}" class="${k === "same" ? "on" : ""}">${v}</button>`).join("")}</div>
@@ -1717,7 +1916,7 @@
         <div data-ws-pane="units" hidden>
           <div class="unit-list">${units.map((u) => `<span class="pill" style="--c:${COLOR[d]}">${esc(concept(u)?.name ?? "")}</span>`).join("")}</div>
         </div>
-        ${api ? '<div data-ws-pane="exams" hidden><p class="mini">시험 기록을 불러오는 중…</p></div>' : ""}
+        ${api ? `<div data-ws-pane="exams" hidden>${skel(3)}</div>` : ""}
         <div data-ws-pane="chats" hidden>
           ${sessions.length ? `<div class="list">${sessions.slice(0, 8).map((s) => `
             <a href="#/chat/${s.id}"><i data-lucide="message-circle"></i>${esc(s.title)}<span>${relTime(s.updatedAt)}</span></a>`).join("")}</div>`
@@ -2078,7 +2277,7 @@
   async function renderExamPaper(projectId, params) {
     const p = Store.project(projectId);
     if (!p) { toast("프로젝트를 찾을 수 없어요"); return go("/"); }
-    view.innerHTML = '<p class="mini">시험지를 준비하는 중…</p>';
+    view.innerHTML = `<div class="panel">${skel(6)}</div>`;
     let w;
     try { w = await Store.workspace(projectId); } catch (e) { view.innerHTML = `<p class="mini">${esc(e.message)}</p>`; return; }
     if (route().parts[0] !== "exam") return;
@@ -2197,10 +2396,11 @@
           <i data-lucide="chevron-right" class="go"></i>
         </a>`).join("")}</div>`;
     icons();
+    countUp(el);
   }
 
   async function renderExamRecord(id) {
-    view.innerHTML = '<p class="mini">시험 기록을 불러오는 중…</p>';
+    view.innerHTML = `<div class="panel">${skel(5)}</div>`;
     let r;
     try { r = await Store.exam(id); } catch (err) { view.innerHTML = `<div class="empty"><i data-lucide="file-x"></i><b>${esc(err.message)}</b></div>`; icons(); return; }
     if (route().parts[0] !== "exam-record") return;
@@ -2378,6 +2578,7 @@
       s.done = true;
       save();
       const usedMs = Date.now() - s.startedAt;
+      buzz(20);
       view.innerHTML = '<div class="xt-grading"><i data-lucide="loader" class="spin"></i><b>채점하는 중…</b></div>';
       icons();
       Store.ensureProblems(list.map((q) => ({ ...q })));
@@ -2462,6 +2663,7 @@
         }
         if (e.target.closest("[data-xt-again]")) return renderExamTake({ p, list, params, pts, subject, scopeName });
       };
+      countUp(view);
     }
 
     draw();
@@ -2650,7 +2852,7 @@
 
   async function renderAnswerKey(materialId) {
     clearTimeout(akTimer);
-    view.innerHTML = '<p class="mini">정답지를 불러오는 중…</p>';
+    view.innerHTML = `<div class="panel">${skel(6)}</div>`;
     let key;
     try { key = await Store.answerKey(materialId); } catch (e) { view.innerHTML = `<div class="empty"><i data-lucide="file-x"></i><b>${esc(e.message)}</b></div>`; icons(); return; }
     if (route().parts[0] !== "answer-key" || route().parts[1] !== materialId) return;
@@ -3251,7 +3453,7 @@
   }
   let deckKeys = null;
   document.addEventListener("keydown", (e) => {
-    if (document.querySelector(".backdrop, .menu") || e.target.closest?.("input, textarea, select")) return;
+    if (document.querySelector(".backdrop:not(.closing), .menu") || e.target.closest?.("input, textarea, select")) return;
     deckKeys?.(e);
   });
 
@@ -3479,7 +3681,7 @@
 
       ${Store.mode === "api" ? `<section class="glass-card settings-card" style="--c:#22c55e">
         <h3><i data-lucide="key-round"></i>로그인 방법</h3>
-        <div id="login-methods"><p class="mini">불러오는 중…</p></div>
+        <div id="login-methods">${skel(2)}</div>
       </section>` : ""}
 
       <section class="glass-card settings-card" style="--c:#94a3b8">
@@ -3673,7 +3875,7 @@
     closeMenu();
     notifyPanel = document.createElement("div");
     notifyPanel.className = "notify-panel";
-    notifyPanel.innerHTML = '<p class="np-empty">불러오는 중…</p>';
+    notifyPanel.innerHTML = skel(3);
     document.body.append(notifyPanel);
     const r = bell.getBoundingClientRect();
     notifyPanel.style.top = `${r.bottom + 8}px`;
@@ -3729,16 +3931,67 @@
       </form>`;
     document.body.append(bd);
     const form = $("form", bd);
+    sheetMotion(form);
     bd.addEventListener("mousedown", (e) => { if (e.target === bd) closeOverlays(); });
     $$("[data-close]", bd).forEach((b) => (b.onclick = closeOverlays));
     form.addEventListener("submit", (e) => {
       e.preventDefault();
+      const hold = $(".btn-primary.danger", form);
+      if (hold && !form.dataset.held) { hold.classList.remove("nudge"); void hold.offsetWidth; hold.classList.add("nudge"); return; }
       if (onSubmit && onSubmit(form) !== false) closeOverlays();
     });
     onMount?.(form);
     icons();
+    holdToConfirm(form);
     setTimeout(() => form.querySelector(".modal-body input, .modal-body select")?.focus(), 30);
     return form;
+  }
+
+  // 열릴 때: 방금 누른 자리에서 커지며 나타난다. 폰에서는 아래에서 올라오는 시트 — 손잡이를 끌어내리면 닫힌다
+  function sheetMotion(form) {
+    const bottomSheet = innerWidth <= 640;
+    form.classList.toggle("sheet", bottomSheet);
+    if (!bottomSheet && Date.now() - lastPress.t < 900) {
+      const r = form.getBoundingClientRect();
+      form.style.transformOrigin = `${Math.round(lastPress.x - r.left)}px ${Math.round(lastPress.y - r.top)}px`;
+      form.classList.add("from-point");
+    }
+    if (!bottomSheet) return;
+    const head = $(".modal-head", form);
+    head.insertAdjacentHTML("afterbegin", '<span class="sheet-grip" aria-hidden="true"></span>');
+    let y0 = null, dy = 0;
+    head.addEventListener("touchstart", (e) => { y0 = e.touches[0].clientY; dy = 0; form.style.transition = "none"; }, { passive: true });
+    head.addEventListener("touchmove", (e) => { if (y0 == null) return; dy = Math.max(0, e.touches[0].clientY - y0); form.style.transform = `translateY(${dy}px)`; }, { passive: true });
+    head.addEventListener("touchend", () => {
+      form.style.transition = "";
+      if (dy > 90) closeOverlays(); else form.style.transform = "";
+      y0 = null;
+    });
+  }
+  // 되돌릴 수 없는 동작(삭제 등)은 버튼을 0.7초 눌러야 실행 — 누르는 동안 버튼이 차오른다
+  function holdToConfirm(form) {
+    const b = $(".btn-primary.danger", form);
+    if (!b) return;
+    const label = b.textContent;
+    b.classList.add("hold");
+    b.innerHTML = `<span class="hold-fill"></span><span class="hold-label">${esc(label)}</span>`;
+    b.title = "길게 눌러서 실행";
+    let timer = null;
+    const start = (e) => {
+      if (e.type === "keydown" && !(e.key === "Enter" || e.key === " ")) return;
+      if (e.type === "keydown") { if (e.repeat) return; e.preventDefault(); }
+      b.classList.add("holding");
+      timer = setTimeout(() => { b.classList.remove("holding"); buzz(15); form.dataset.held = "1"; form.requestSubmit(); }, 700);
+    };
+    const stop = () => { clearTimeout(timer); b.classList.remove("holding"); };
+    b.addEventListener("pointerdown", start);
+    b.addEventListener("keydown", start);
+    ["pointerup", "pointerleave", "pointercancel", "keyup", "blur"].forEach((ev) => b.addEventListener(ev, stop));
+    b.addEventListener("click", (e) => e.preventDefault()); // 실행은 길게 누른 뒤 requestSubmit 으로 한 번만
+    const hint = document.createElement("p");
+    hint.className = "hold-hint";
+    hint.textContent = "버튼을 길게 눌러 주세요";
+    b.closest(".modal-foot")?.prepend(hint);
   }
 
   const formModal = ({ title, body, submit = "확인", danger = false, onSubmit, onMount }) => openSheet({
@@ -4290,6 +4543,8 @@
     const below = r.bottom + 6 + m.offsetHeight < innerHeight;
     m.style.left = `${left}px`;
     m.style.top = `${below ? r.bottom + 6 : Math.max(8, r.top - m.offsetHeight - 6)}px`;
+    m.style.transformOrigin = `${Math.round(r.left + r.width / 2 - left)}px ${below ? "0" : "100%"}`;
+    $$(":scope > *", m).forEach((el, i) => el.style.setProperty("--i", i));
     m.addEventListener("click", (e) => {
       const b = e.target.closest("button[data-i]");
       if (!b) return;
@@ -4305,7 +4560,13 @@
 
   function closeOverlays() {
     closeMenu();
-    $$(".backdrop").forEach((b) => b.remove());
+    $$(".backdrop:not(.closing)").forEach((b) => {
+      if (noMotion()) return b.remove();
+      b.classList.add("closing");
+      b.inert = true;
+      $$("[id]", b).forEach((el) => el.removeAttribute("id"));
+      setTimeout(() => b.remove(), 200);
+    });
   }
 
   // ================= ⌘K 검색 =================
