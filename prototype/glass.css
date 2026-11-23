@@ -498,3 +498,41 @@
 .send.stop { background: var(--ink, #0f172a) !important; color: #fff; opacity: 1 !important; animation: none; }
 .send.stop:hover { transform: scale(1.06); }
 .msg.ai.stopped .ai-text { color: var(--ink-3); font-size: 13.5px; }
+
+/* ---------- AI 아바타: 반짝임 별 ---------- */
+.ai-avatar {
+  position: relative; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(140deg, #4c86ff, #2a5fe6) !important; box-shadow: 0 2px 8px rgba(47, 107, 255, .28) !important;
+  transition: background .4s, box-shadow .4s;
+}
+.ai-avatar svg { width: 17px; height: 17px; fill: #fff; overflow: visible; }
+.ai-avatar .star { transform-origin: 11px 10.5px; }
+.ai-avatar .star2 { transform-origin: 18px 5.1px; opacity: .85; }
+/* 생각 중: 테두리에 파란 원이 돌고, 별이 반짝인다 */
+.msg.ai.pending .ai-avatar::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 50%;
+  background: conic-gradient(from 0deg, transparent 0 55%, rgba(47, 107, 255, .9) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+          mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  animation: av-spin 1s linear infinite;
+}
+.msg.ai.pending .ai-avatar .star { animation: av-twinkle 1.6s ease-in-out infinite; }
+.msg.ai.pending .ai-avatar .star2 { animation: av-twinkle2 1.6s ease-in-out infinite; }
+@keyframes av-spin { to { transform: rotate(1turn); } }
+@keyframes av-twinkle { 50% { transform: scale(.78) rotate(45deg); } }
+@keyframes av-twinkle2 { 0%, 100% { opacity: .2; transform: scale(.5); } 50% { opacity: 1; transform: scale(1.15); } }
+/* 답 도착: 통통 튀며 별이 한 바퀴 */
+.msg.ai.arrive .ai-avatar .star { animation: av-arrive .6s cubic-bezier(.34, 1.56, .64, 1) both; }
+@keyframes av-arrive { from { transform: scale(.3) rotate(-90deg); } }
+/* 정답을 맞혔을 때: 잠깐 초록빛 */
+.ai-avatar.ok { background: linear-gradient(140deg, #34d399, #10b981) !important; box-shadow: 0 0 0 4px rgba(16, 185, 129, .18), 0 2px 8px rgba(16, 185, 129, .35) !important; }
+.ai-avatar.ok .star { animation: av-arrive .6s cubic-bezier(.34, 1.56, .64, 1) both; }
+/* 멈춘 답: 회색 */
+.msg.ai.stopped .ai-avatar { background: #cbd5e1 !important; box-shadow: none !important; }
+@media (prefers-reduced-motion: reduce) {
+  .msg.ai.pending .ai-avatar::after, .ai-avatar .star, .ai-avatar .star2 { animation: none !important; }
+}
+
+/* 대화 화면: 배경 도트를 멈추고 옅게 (app.js calmBg, dots.js still) */
+#dots { transition: opacity .9s ease; }
+body.calm-bg #dots { opacity: .3; }

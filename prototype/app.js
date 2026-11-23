@@ -1585,6 +1585,8 @@
     const card = $(`[data-problem="${CSS.escape(pid)}"]`);
     if (!card) return;
     card.classList.add("just", correct ? "just-ok" : "just-bad");
+    const av = card.closest(".msg.ai")?.querySelector(".ai-avatar");
+    if (av && correct) { av.classList.remove("ok"); void av.offsetWidth; av.classList.add("ok"); setTimeout(() => av.classList.remove("ok"), 1600); }
     setTimeout(() => card.classList.remove("just", "just-ok", "just-bad"), 1400);
     buzz(correct ? 12 : [25, 40, 25]);
     correctRun = correct ? correctRun + 1 : 0;
@@ -1678,6 +1680,10 @@
   const pendingAt = {};   // 대화 id → 답을 기다리기 시작한 시각 (다시 그려도 단계가 이어지게)
   const pendingMeta = {}; // 대화 id → { at, steps, expectMs } (질문 종류에 맞는 단계 글자)
   const stoppedIds = new Set(); // '답변 멈추기' 를 누른 대화 id (답이 도착하면 조용히 바꾼다)
+  // AI 아바타: 파란 원 안의 반짝임 별 — 상태(생각 중·도착·정답·멈춤)에 따라 움직임과 색이 바뀐다 (glass.css .ai-avatar)
+  const AI_AVATAR = `<span class="ai-avatar" aria-hidden="true"><svg viewBox="0 0 24 24">
+    <path class="star" d="M11 3.5c.5 4.3 2.7 6.5 7 7-4.3.5-6.5 2.7-7 7-.5-4.3-2.7-6.5-7-7 4.3-.5 6.5-2.7 7-7z"/>
+    <path class="star2" d="M18 2.5c.2 1.6 1 2.4 2.6 2.6-1.6.2-2.4 1-2.6 2.6-.2-1.6-1-2.4-2.6-2.6 1.6-.2 2.4-1 2.6-2.6z"/></svg></span>`;
   const STOP_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"/></svg>';
   let typeNext = null;
   let editingAt = null;               // 고치는 중인 질문 { sid, index }
@@ -1707,7 +1713,7 @@
               <button type="button" class="icon-btn" data-copy="${mi}" title="복사" aria-label="질문 복사"><i data-lucide="copy"></i></button>
               ${canEdit(m) ? `<button type="button" class="icon-btn" data-edit="${mi}" title="고치기" aria-label="질문 고치기"><i data-lucide="pencil"></i></button>` : ""}
             </div></div>`)
-      : `<div class="msg ai ${m.intent === "stopped" ? "stopped" : ""}"><span class="ai-avatar"></span><div class="ai-body"><p class="ai-text" ${TEXT_INTENTS.has(m.intent) ? "data-math" : ""}>${esc(m.text)}</p>
+      : `<div class="msg ai ${m.intent === "stopped" ? "stopped" : ""}">${AI_AVATAR}<div class="ai-body"><p class="ai-text" ${TEXT_INTENTS.has(m.intent) ? "data-math" : ""}>${esc(m.text)}</p>
           ${m.explanation ? explanationHTML(m.explanation, `${s.id}-${mi}`) : ""}
           ${problemSetHTML(s, mi, m.problemIds ?? [])}
           ${mi === lastAi && m.suggestions?.length ? `<div class="suggest">${m.suggestions.map((t) =>
@@ -1723,7 +1729,7 @@
         </div>
         <div class="thread">
           ${msgs}
-          ${Store.isPending(id) ? `<div class="msg ai pending"><span class="ai-avatar"></span><div class="ai-body">
+          ${Store.isPending(id) ? `<div class="msg ai pending">${AI_AVATAR}<div class="ai-body">
             <div class="think-card"><span class="think-ring" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" class="trk"/><circle cx="12" cy="12" r="9.5" class="bar" pathLength="100" id="think-bar"/></svg></span>
               <span class="think" id="think-step" role="status">${esc((pendingMeta[id]?.steps ?? THINK_STEPS)[0])}</span></div>
             <div class="think-lines" aria-hidden="true"><i></i><i></i><i></i></div></div></div>` : ""}
@@ -4881,7 +4887,13 @@
   // 무지개 도트: 홈에서는 입력창 중심, 다른 화면에서는 화면 위쪽 가운데
   const composerEl = $("#composer");
   const homeText = [".hero h1", ".hero p", ".action"].flatMap((s) => $$(s));
+  // 대화 화면에서는 글을 읽기 쉽게 배경을 멈추고 옅게 (나가면 다시 흐르고 밝아진다)
+  const calmBg = () => location.hash.startsWith("#/chat/");
+  const syncCalm = () => document.body.classList.toggle("calm-bg", calmBg());
+  window.addEventListener("hashchange", syncCalm);
+  syncCalm();
   dotField($("#dots"), {
+    still: calmBg,
     gap: 18, baseR: 1, peakR: 2.4, baseAlpha: 0.1, peakAlpha: 0.55, light: 60,
     wavelength: 90, speed: 1.1, hueSpeed: 25, reach: 0.62, introSec: 1.3,
     focus: (W, H) => {

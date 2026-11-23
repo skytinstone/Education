@@ -82,8 +82,20 @@ function dotField(canvas, o) {
   // 화면 밖에 있는 캔버스는 그리지 않는다 (한 페이지에 여러 개일 때 CPU 절약)
   let visible = true;
   new IntersectionObserver(([e]) => { visible = e.isIntersecting; }).observe(canvas);
+  // o.still() 이 참이면(예: 대화 화면) 물결이 1초쯤에 걸쳐 천천히 멈추고, 멈춘 동안은 크기·스크롤이 바뀔 때만 다시 그린다.
+  // 다시 움직일 때는 멈췄던 자리에서 이어서 흐른다
+  let clock = (performance.now() - t0) / 1000, last = performance.now(), rate = 1, drawn = "";
   function frame(now) {
-    if (visible) draw((now - t0) / 1000);
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    const stop = o.still?.() && clock > o.introSec; // 처음 쓸려 나타나는 움직임은 끝까지 보여 준 뒤에 멈춘다
+    rate += ((stop ? 0 : 1) - rate) * Math.min(1, dt * 3);
+    if (rate < 0.002) rate = 0;
+    clock += dt * rate;
+    if (visible) {
+      const key = rate ? "" : `${W}x${H}:${o.scrollY?.() ?? 0}:${clock}`;
+      if (!key || key !== drawn) { draw(clock); drawn = key; }
+    }
     requestAnimationFrame(frame);
   }
   if (reduceMotion) { draw(o.introSec + 2); new ResizeObserver(() => draw(o.introSec + 2)).observe(canvas); }
