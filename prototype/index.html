@@ -196,8 +196,6 @@
   .search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink); }
   .search input::placeholder { color: var(--ink-3); transition: opacity .2s; }
   .search:focus-within input::placeholder { opacity: .6; }
-  .search .keys { display: flex; gap: 3px; transition: opacity .2s; }
-  .search:focus-within .keys { opacity: 0; }
   kbd { font-family: inherit; font-size: 10.5px; color: var(--ink-3); min-width: 18px; height: 18px; display: grid; place-items: center; border-radius: 5px; background: rgba(15,23,42,.05); }
   .pill-btn { height: 34px; padding: 0 14px; border-radius: 999px; font-size: 13.5px; font-weight: 500; }
   .topbar .icon-btn.soft { width: 34px; height: 34px; border-radius: 50%; }
@@ -436,7 +434,8 @@
       <span class="brand-name">Eureka</span>
     </div>
 
-    <a class="nav-item" href="#/" data-key="home"><i data-lucide="square-pen"></i><span class="label">새 학습</span></a>
+    <a class="nav-item" href="#/" data-key="home"><i data-lucide="house"></i><span class="label">홈</span></a>
+    <a class="nav-item" href="#/" id="nav-new"><i data-lucide="square-pen"></i><span class="label">새 학습</span></a>
     <button class="nav-item" id="nav-search"><i data-lucide="search"></i><span class="label">검색</span><kbd>⌘K</kbd></button>
     <a class="nav-item" href="#/notes" data-key="notes"><i data-lucide="circle-x"></i><span class="label">오답노트</span><span class="badge" id="notes-badge" hidden></span></a>
     <a class="nav-item" href="#/library" data-key="library"><i data-lucide="library"></i><span class="label">라이브러리</span></a>
@@ -463,7 +462,6 @@
       <label class="search soft">
         <i data-lucide="search"></i>
         <input placeholder="대화, 문제, 개념 검색" />
-        <span class="keys"><kbd>⌘</kbd><kbd>K</kbd></span>
       </label>
       <button class="pill-btn soft" id="feedback-btn">피드백</button>
       <button class="icon-btn soft" id="notify-btn" title="알림"><i data-lucide="bell"></i><span class="dot" hidden></span></button>

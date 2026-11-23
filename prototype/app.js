@@ -462,6 +462,8 @@
   });
   $("#new-project").addEventListener("click", () => projectWizard());
   $("#nav-search").addEventListener("click", openPalette);
+  // 새 학습: 홈으로 가서 입력창에 바로 쓸 수 있게
+  $("#nav-new").addEventListener("click", () => setTimeout(() => { contentEl.scrollTop = 0; $("#prompt")?.focus(); }, 60));
   $("#profile").addEventListener("click", (e) => profileMenu(e.currentTarget));
 
   function projectMenu(anchor, id, onClose) {
@@ -4912,13 +4914,11 @@
   // 무지개 도트: 홈에서는 입력창 중심, 다른 화면에서는 화면 위쪽 가운데
   const composerEl = $("#composer");
   const homeText = [".hero h1", ".hero p", ".action"].flatMap((s) => $$(s));
-  // 대화 화면에서는 글을 읽기 쉽게 배경을 멈추고 옅게 (나가면 다시 흐르고 밝아진다)
-  const calmBg = () => location.hash.startsWith("#/chat/");
-  const syncCalm = () => document.body.classList.toggle("calm-bg", calmBg());
-  window.addEventListener("hashchange", syncCalm);
-  syncCalm();
+  // 대화 화면: 움직이는 배경 위에 사이드바 같은 흰색 컨테이너를 깔고 그 위에 글 (glass.css body.chat-panel)
+  const syncPanel = () => document.body.classList.toggle("chat-panel", location.hash.startsWith("#/chat/"));
+  window.addEventListener("hashchange", syncPanel);
+  syncPanel();
   dotField($("#dots"), {
-    still: calmBg,
     gap: 18, baseR: 1, peakR: 2.4, baseAlpha: 0.1, peakAlpha: 0.55, light: 60,
     wavelength: 90, speed: 1.1, hueSpeed: 25, reach: 0.62, introSec: 1.3,
     focus: (W, H) => {
