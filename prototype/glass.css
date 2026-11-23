@@ -598,3 +598,71 @@ body.embed .sidebar, body.embed .topbar, body.embed #dots, body.embed .chat-comp
 body.embed .app { padding: 0; gap: 0; }
 body.embed .main { border-radius: 0 !important; box-shadow: none !important; background: #fff !important; }
 body.embed .main .content { margin: 0; padding: 16px 18px 28px !important; }
+
+/* ---------- 시험 모드 다듬기 (app.js renderExamTake) ---------- */
+/* 상단바·번호판·문제·아래 바를 같은 폭으로 맞추고, 아래 바는 화면 아래에 붙인다 */
+.xt.one { max-width: 860px; }
+.xt { display: flex; flex-direction: column; min-height: calc(100dvh - 140px); }
+body.embed .xt { min-height: calc(100dvh - 44px); }
+.xt-body.one { max-width: none; width: 100%; }
+.xt-bar { gap: 12px; }
+.xt-bar .xt-title { flex: 1; }
+.xt-prog { margin-left: 0; }
+.xt-clock b { font-size: 16px; }
+
+/* 번호판: 기본은 한 줄(가로 스크롤), '전체 번호' 로 펼친다 */
+.xt-omr-wrap { margin-bottom: 14px; }
+.xt-omr { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding: 3px 14px 6px; margin: 0 -14px; scroll-behavior: smooth; scrollbar-width: none;
+  -webkit-mask: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%);
+          mask: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 14px), transparent 100%); }
+.xt-omr::-webkit-scrollbar { display: none; }
+.xt-omr-wrap.all .xt-omr { flex-wrap: wrap; overflow: visible; margin: 0; padding: 3px 2px 6px; -webkit-mask: none; mask: none; }
+.xt-omr button { position: relative; flex: 0 0 auto; width: 34px; height: 30px; font-variant-numeric: tabular-nums; transition: background .15s, box-shadow .15s; }
+.xt-omr button:hover { background: var(--fill-hover) !important; }
+.xt-omr button.done { color: #3b4fd8; font-weight: 600; }
+.xt-omr button.cur { background: var(--ink, #0f172a) !important; color: #fff !important; box-shadow: none !important; font-weight: 700; }
+.xt-omr button.flag::after { content: ""; position: absolute; top: 2px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: #f59e0b; box-shadow: 0 0 0 1.5px #fff; }
+.xt-omr-foot { display: flex; align-items: center; gap: 10px; padding: 2px 4px 0; font-size: 12px; color: var(--ink-3); }
+.xt-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.xt-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.xt-legend b { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.xt-legend .d { width: 8px; height: 8px; border-radius: 50%; background: rgba(15, 23, 42, .12); }
+.xt-legend .d.done { background: rgba(79, 107, 255, .55); }
+.xt-legend .d.flag { background: #f59e0b; }
+.xt-omr-all { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; padding: 4px 8px; border: 0; border-radius: var(--r-pill); background: none;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.xt-omr-all:hover { background: var(--fill-hover); }
+.xt-omr-all svg { width: 14px; height: 14px; }
+
+/* 문제 카드 */
+.xt-qh { margin-bottom: 14px; }
+.xt-pts { padding: 3px 9px; border-radius: var(--r-pill); background: var(--fill); font-weight: 600; color: var(--ink-2); }
+.xt-qtools { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.xt-qtools .xt-orig { margin-left: 0; }
+.xt-flag { display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border: 0; border-radius: var(--r-pill); background: none;
+  font: inherit; font-size: 12px; font-weight: 600; color: var(--ink-3); cursor: pointer; transition: background .15s, color .15s; }
+.xt-flag:hover { background: var(--fill-hover); color: var(--ink-2); }
+.xt-flag svg { width: 13px; height: 13px; }
+.xt-flag.on { background: rgba(245, 158, 11, .14); color: #b45309; }
+.xt-flag.on svg { fill: currentColor; }
+.xt-q.flagged { box-shadow: inset 3px 0 0 #f59e0b, var(--lg-edge), var(--lg-shadow) !important; }
+.xt-body.one .xt-stem { line-height: 1.85; margin-bottom: 20px; }
+.xt-short { position: relative; gap: 12px; }
+.xt-short-l { font-size: 13px; font-weight: 700; color: var(--ink-2); }
+.xt-short input { height: 48px !important; font-size: 16px !important; padding: 0 86px 0 16px !important; }
+.xt-short kbd { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); padding: 3px 7px; border-radius: 7px; background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .1); font: inherit; font-size: 11px; color: var(--ink-3); pointer-events: none; }
+
+/* 아래 바: 화면 아래에 붙어 있다 */
+.xt-nav { position: sticky; bottom: 0; z-index: 4; max-width: none; width: 100%; margin: auto 0 0; padding: 14px 0 6px;
+  background: linear-gradient(to top, #fff 70%, rgba(255, 255, 255, 0)); }
+body.panel-view:not(.embed) .xt-nav { background: linear-gradient(to top, rgba(255,255,255,.95) 70%, rgba(255, 255, 255, 0)); }
+.xt-body { margin-bottom: 18px; }
+.xt-where { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.xt-where b { color: var(--ink); }
+.xt-where small { font-size: 11px; color: var(--ink-3); opacity: .8; }
+@media (max-width: 760px), (hover: none) { .xt-where small, .xt-short kbd { display: none; } .xt-short input { padding-right: 16px !important; } }
+@media (max-width: 560px) {
+  .xt-flag span { display: none; }
+  .xt-legend > span:last-child { display: none; }
+}

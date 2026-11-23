@@ -2857,22 +2857,39 @@
     const pages = Math.ceil(list.length / per);
     const answered = () => list.filter((q) => (s.answers[q.id] ?? "") !== "").length;
     const left = () => Math.max(0, s.startedAt + limit - Date.now());
-    const clock = (ms) => { const t = Math.ceil(ms / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
+    // 1시간이 넘으면 시:분:초 (99:19 처럼 분이 두 자리를 넘지 않게)
+    const clock = (ms) => {
+      const t = Math.ceil(ms / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = String(t % 60).padStart(2, "0");
+      return h ? `${h}:${String(m).padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+    };
     const totalPts = list.reduce((a, q) => a + pts(q), 0);
+    s.flags ??= {}; // '나중에 다시 보기' 표시한 문항
+    const flagged = () => list.filter((q) => s.flags[q.id]).length;
+    const isDone = (q) => (s.answers[q.id] ?? "") !== "";
 
+    const flagBtn = (q) => `<button type="button" class="xt-flag ${s.flags[q.id] ? "on" : ""}" data-flag aria-pressed="${Boolean(s.flags[q.id])}" title="나중에 다시 보기 (F)">
+      <i data-lucide="flag"></i><span>${s.flags[q.id] ? "다시 볼 문항" : "나중에 보기"}</span></button>`;
     const qHTML = (q, i) => {
       const my = s.answers[q.id] ?? "";
       return `
-      <section class="xt-q" data-q="${q.id}">
+      <section class="xt-q ${s.flags[q.id] ? "flagged" : ""}" data-q="${q.id}">
         <div class="xt-qh"><b>${i + 1}</b><span class="xt-pts">${pts(q)}점</span>
-          ${q.needs_figure ? `<button class="xt-orig" data-orig="${q.material_id}" data-page="${q.page ?? ""}"><i data-lucide="file-image"></i>원본 보기${q.page ? ` (${q.page}쪽)` : ""}</button>` : ""}</div>
+          <span class="xt-qtools">
+            ${q.needs_figure ? `<button class="xt-orig" data-orig="${q.material_id}" data-page="${q.page ?? ""}"><i data-lucide="file-image"></i>원본 보기${q.page ? ` (${q.page}쪽)` : ""}</button>` : ""}
+            ${flagBtn(q)}
+          </span></div>
         <p class="xt-stem" data-math>${esc(q.stem)}</p>
         ${q.needs_figure ? '<p class="exam-note">※ 그림이 필요한 문항이에요. 원본을 함께 보세요.</p>' : ""}
         ${q.choices ? `<div class="xt-choices">${q.choices.map((c, k) => `
           <button type="button" class="xt-c ${my === String(k + 1) ? "on" : ""}" data-pick="${k + 1}" aria-pressed="${my === String(k + 1)}"><span class="c">${CIRC[k]}</span><span data-math>${esc(c)}</span></button>`).join("")}</div>`
-          : `<label class="xt-short"><span>답</span><input data-short value="${esc(my)}" maxlength="200" placeholder="답을 적어 주세요" autocomplete="off" /></label>`}
+          : `<label class="xt-short"><span class="xt-short-l">답</span><input data-short value="${esc(my)}" maxlength="200" placeholder="답을 적어 주세요" autocomplete="off" />
+              ${per === 1 ? '<kbd title="Enter 를 누르면 다음 문항">Enter ↵</kbd>' : ""}</label>`}
       </section>`;
     };
+    const omrHTML = (from) => list.map((q, i) => {
+      const cls = [isDone(q) && "done", s.flags[q.id] && "flag", i >= from && i < from + per && "cur"].filter(Boolean).join(" ");
+      return `<button type="button" class="${cls}" data-jump="${i}" aria-label="${i + 1}번${isDone(q) ? " · 답함" : ""}${s.flags[q.id] ? " · 다시 볼 문항" : ""}">${i + 1}</button>`;
+    }).join("");
 
     // 문항별 시간: 한 화면에 머문 시간을 그 화면의 문항들에 나눠 더한다 (한 문제씩이면 그 문항의 시간)
     s.secs ??= {};
@@ -2884,30 +2901,58 @@
     };
     function draw() {
       const from = s.page * per, shown = list.slice(from, from + per);
+      // 오른쪽 패널(삽입 모드)에서는 패널 머리의 닫기(✕)가 있으니 '나가기' 를 두지 않는다
       view.innerHTML = `
-        <div class="xt">
+        <div class="xt ${per === 4 ? "four" : "one"}">
           <div class="xt-bar">
-            <a class="ak-back" href="${back}" data-xt-leave><i data-lucide="x"></i>나가기</a>
+            ${EMBED ? "" : `<a class="ak-back" href="${back}" data-xt-leave><i data-lucide="x"></i>나가기</a>`}
             <div class="xt-title"><b>${esc(subject || p.name)}</b><span>${list.length}문항 · ${totalPts}점${scopeName ? ` · ${esc(scopeName)}` : ""}</span></div>
             <div class="xt-prog"><span>답한 문항 <b id="xt-done">${answered()}</b>/${list.length}</span><i><em style="width:${(answered() / list.length) * 100}%"></em></i></div>
-            ${limit ? `<div class="xt-clock" id="xt-clock"><i data-lucide="timer"></i><b>${clock(left())}</b></div>` : `<div class="xt-clock off" id="xt-clock"><i data-lucide="clock"></i><b>${clock(Date.now() - s.startedAt)}</b></div>`}
+            ${limit ? `<div class="xt-clock" id="xt-clock" title="남은 시간"><i data-lucide="timer"></i><b>${clock(left())}</b></div>` : `<div class="xt-clock off" id="xt-clock" title="지난 시간"><i data-lucide="clock"></i><b>${clock(Date.now() - s.startedAt)}</b></div>`}
             <button class="btn-primary" data-xt-submit><i data-lucide="send"></i>제출</button>
           </div>
-          <div class="xt-omr" aria-label="문항 바로 가기">${list.map((q, i) => `<button class="${(s.answers[q.id] ?? "") !== "" ? "done" : ""} ${i >= from && i < from + per ? "cur" : ""}" data-jump="${i}">${i + 1}</button>`).join("")}</div>
+          <div class="xt-omr-wrap ${s.omrAll ? "all" : ""}">
+            <div class="xt-omr" aria-label="문항 바로 가기">${omrHTML(from)}</div>
+            <div class="xt-omr-foot">
+              <span class="xt-legend"><span><i class="d done"></i>답함 <b id="xt-n-done">${answered()}</b></span><span><i class="d flag"></i>다시 볼 문항 <b id="xt-n-flag">${flagged()}</b></span><span><i class="d"></i>남음 <b id="xt-n-left">${list.length - answered()}</b></span></span>
+              ${list.length > 12 ? `<button type="button" class="xt-omr-all" data-omr-all aria-expanded="${Boolean(s.omrAll)}">${s.omrAll ? "번호 접기" : "전체 번호"}<i data-lucide="${s.omrAll ? "chevron-up" : "chevron-down"}"></i></button>` : ""}
+            </div>
+          </div>
           <div class="xt-body ${per === 4 ? "four" : "one"}">${shown.map((q, k) => qHTML(q, from + k)).join("")}</div>
           <div class="xt-nav">
             <button class="btn-ghost" data-xt-prev ${s.page === 0 ? "disabled" : ""}><i data-lucide="chevron-left"></i>이전</button>
-            <span class="mini">${s.page + 1} / ${pages}</span>
+            <span class="xt-where"><span><b>${s.page + 1}</b> / ${pages}</span><small>← → 이동${per === 1 ? " · 1~5 고르기 · F 나중에 보기" : ""}</small></span>
             ${s.page < pages - 1 ? '<button class="btn-ghost" data-xt-next>다음<i data-lucide="chevron-right"></i></button>'
               : '<button class="btn-primary" data-xt-submit><i data-lucide="send"></i>제출하기</button>'}
           </div>
         </div>`;
       icons();
+      // 한 줄 번호판은 지금 문항이 가운데 오게
+      const strip = $(".xt-omr"), cur = $(".xt-omr .cur");
+      if (strip && cur && !s.omrAll) strip.scrollLeft = cur.offsetLeft - strip.clientWidth / 2 + cur.offsetWidth / 2;
     }
     const refreshProgress = () => {
-      $("#xt-done").textContent = answered();
-      $(".xt-prog em").style.width = `${(answered() / list.length) * 100}%`;
-      list.forEach((q, i) => $(`.xt-omr [data-jump="${i}"]`)?.classList.toggle("done", (s.answers[q.id] ?? "") !== ""));
+      const n = answered();
+      $("#xt-done").textContent = n;
+      $("#xt-n-done").textContent = n;
+      $("#xt-n-left").textContent = list.length - n;
+      $("#xt-n-flag").textContent = flagged();
+      $(".xt-prog em").style.width = `${(n / list.length) * 100}%`;
+      list.forEach((q, i) => {
+        const b = $(`.xt-omr [data-jump="${i}"]`);
+        b?.classList.toggle("done", isDone(q));
+        b?.classList.toggle("flag", Boolean(s.flags[q.id]));
+      });
+    };
+    const toggleFlag = (id) => {
+      s.flags[id] = !s.flags[id];
+      if (!s.flags[id]) delete s.flags[id];
+      save();
+      const sec = $(`[data-q="${CSS.escape(id)}"]`);
+      sec?.classList.toggle("flagged", Boolean(s.flags[id]));
+      const b = sec && $("[data-flag]", sec);
+      if (b) { b.outerHTML = flagBtn(list.find((q) => q.id === id)); icons(); }
+      refreshProgress();
     };
     const goPage = (n) => { tick(); s.page = Math.max(0, Math.min(pages - 1, n)); save(); draw(); view.scrollIntoView?.({ block: "start" }); };
 
@@ -3033,6 +3078,8 @@
         if (per === 1 && s.answers[id] && s.page < pages - 1) setTimeout(() => goPage(s.page + 1), 260);
         return;
       }
+      if ((x = e.target.closest("[data-flag]"))) return toggleFlag(x.closest("[data-q]").dataset.q);
+      if (e.target.closest("[data-omr-all]")) { s.omrAll = !s.omrAll; save(); return draw(); }
       if ((x = e.target.closest("[data-jump]"))) return goPage(Math.floor(Number(x.dataset.jump) / per));
       if (e.target.closest("[data-xt-prev]")) return goPage(s.page - 1);
       if (e.target.closest("[data-xt-next]")) return goPage(s.page + 1);
@@ -3042,10 +3089,11 @@
           run: () => { clearInterval(takeTimer); go(`/project/${p.id}`); } });
       }
       if (e.target.closest("[data-xt-submit]")) {
-        const miss = list.length - answered();
-        if (!miss) return submit();
-        return confirmModal({ title: "제출할까요?", text: `아직 답하지 않은 문항이 ${miss}개 있어요. 안 푼 문항은 틀린 것으로 계산해요.`, action: "제출",
-          run: () => submit() });
+        const miss = list.length - answered(), fl = flagged();
+        if (!miss && !fl) return submit();
+        const why = [miss && `아직 답하지 않은 문항이 ${miss}개 있어요. 안 푼 문항은 틀린 것으로 계산해요.`,
+          fl && `'나중에 보기' 로 표시한 문항이 ${fl}개 있어요.`].filter(Boolean).join(" ");
+        return confirmModal({ title: "제출할까요?", text: why, action: "제출", run: () => submit() });
       }
     };
     view.oninput = (e) => {
@@ -3061,6 +3109,10 @@
       if (e.key === "ArrowRight") goPage(s.page + 1);
       else if (e.key === "ArrowLeft") goPage(s.page - 1);
       else if (per === 1 && /^[1-5]$/.test(e.key)) $(`.xt-q [data-pick="${e.key}"]`)?.click();
+      else if (per === 1 && (e.key === "f" || e.key === "F" || e.key === "ㄹ") && !e.metaKey && !e.ctrlKey) {
+        const id = $(".xt-q")?.dataset.q;
+        if (id) toggleFlag(id);
+      }
     };
   }
 
