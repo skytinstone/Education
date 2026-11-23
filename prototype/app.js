@@ -9,7 +9,11 @@
   const MATH_OPTS = { delimiters: [{ left: "$$", right: "$$", display: true }, { left: "$", right: "$", display: false }], throwOnError: false };
   const icons = () => {
     lucide.createIcons();
-    if (window.renderMathInElement) $$("[data-math]").forEach((el) => renderMathInElement(el, MATH_OPTS));
+    if (window.renderMathInElement) $$("[data-math]").forEach((el) => {
+      // $ 없이 LaTeX 명령만 적힌 짧은 글(예: 보기의 \infty)은 수식으로 감싸서 보여 준다
+      if (!el.children.length && !el.textContent.includes("$") && /^[^가-힣]*\\[a-zA-Z]+/.test(el.textContent) && el.textContent.length < 120) el.textContent = `$${el.textContent}$`;
+      renderMathInElement(el, MATH_OPTS);
+    });
     mountWorkCanvases();
     mountGraphs();
   };
@@ -1901,7 +1905,7 @@
     const units = p.unitIds.length ? p.unitIds : childrenOf(p.subjectId).map((u) => u.id);
     const api = Store.mode === "api";
     wsState[id] ??= { sel: "all", view: "list", open: new Set() };
-    const chip = (icon, text) => `<span class="ws-chip"><i data-lucide="${icon}"></i>${esc(text)}</span>`;
+    const chip = (_icon, text) => `<span class="ws-chip">${esc(text)}</span>`;
 
     view.innerHTML = `
       <section class="ws-head">
@@ -1935,7 +1939,7 @@
       ${api ? `
       <div class="ws-grid">
         <section class="panel ws-col ws-files">
-          <div class="ws-col-head"><h3><i data-lucide="layers"></i>올린 문제</h3>
+          <div class="ws-col-head"><h3>올린 문제</h3>
             <button class="icon-btn" data-ws-upload title="기출·교재 올리기" aria-label="기출 올리기"><i data-lucide="plus"></i></button></div>
           <div id="ws-files">${skel(4)}</div>
         </section>
@@ -1943,7 +1947,7 @@
         <aside class="panel ws-col ws-report">
           <div id="ws-report">${skel(5)}</div>
           <div class="ws-gen">
-            <h4><i data-lucide="sparkles"></i>기출을 닮은 새 문제</h4>
+            <h4>기출을 닮은 새 문제</h4>
             <div class="seg small" id="gen-level">${[["easier", "쉽게"], ["same", "비슷하게"], ["harder", "어렵게"]].map(([k, v]) => `<button type="button" data-level="${k}" class="${k === "same" ? "on" : ""}">${v}</button>`).join("")}</div>
             <div class="ws-gen-row">
               <select class="select" id="gen-count" aria-label="문항 수">${[1, 2, 3, 4, 5].map((k) => `<option value="${k}" ${k === 3 ? "selected" : ""}>${k}문제</option>`).join("")}</select>
@@ -1956,10 +1960,10 @@
 
       <section class="panel ws-extra" id="ws-more">
         <div class="seg small ws-tabs">
-          <button data-ws-tab="weak" class="on"><i data-lucide="target"></i>약점 TOP 3</button>
-          <button data-ws-tab="units"><i data-lucide="list-tree"></i>학습 범위</button>
-          <button data-ws-tab="chats"><i data-lucide="messages-square"></i>대화 ${sessions.length}</button>
-          ${api ? '<button data-ws-tab="exams"><i data-lucide="trending-up"></i>시험 기록</button>' : ""}
+          <button data-ws-tab="weak" class="on">약점 TOP 3</button>
+          <button data-ws-tab="units">학습 범위</button>
+          <button data-ws-tab="chats">대화 ${sessions.length}</button>
+          ${api ? '<button data-ws-tab="exams">시험 기록</button>' : ""}
         </div>
         <div data-ws-pane="weak">
           ${weak.length ? `<ul class="weak-list">${weak.map((w) => `
@@ -2059,9 +2063,9 @@
           : `<button class="btn-ghost" data-ak-make="${mat.id}"><i data-lucide="file-pen-line"></i>정답지 만들기</button>`) : "";
       $("#ws-sheet").innerHTML = `
         <div class="ws-col-head">
-          <div><h3><i data-lucide="table-2"></i>${mat ? esc(mat.filename) : "모든 문제"}</h3><small>${qs.length}문항 · 정답 있음 ${ok}/${qs.length}</small></div>
+          <div><h3>${mat ? esc(mat.filename) : "모든 문제"}</h3><small>${qs.length}문항 · 정답 있음 ${ok}/${qs.length}</small></div>
           <div class="ws-sheet-actions">
-            <div class="seg small"><button data-ws-view="list" class="${st.view === "list" ? "on" : ""}"><i data-lucide="rows-3"></i>문제·정답</button><button data-ws-view="erd" class="${st.view === "erd" ? "on" : ""}"><i data-lucide="network"></i>정답 연결 보기</button></div>
+            <div class="seg small"><button data-ws-view="list" class="${st.view === "list" ? "on" : ""}">문제·정답</button><button data-ws-view="erd" class="${st.view === "erd" ? "on" : ""}">정답 연결 보기</button></div>
             ${keyBtn}
           </div>
         </div>
@@ -2162,7 +2166,7 @@
       const P = data.problems, total = P.length;
       const host = $("#ws-report");
       if (!total) {
-        host.innerHTML = `<div class="ws-col-head"><h3><i data-lucide="chart-pie"></i>분석 리포트</h3></div>
+        host.innerHTML = `<div class="ws-col-head"><h3>분석 리포트</h3></div>
           <div class="ws-empty small"><i data-lucide="chart-no-axes-column"></i><b>아직 분석할 문제가 없어요</b><span>기출을 올리면 출제 유형·난이도·정답 비율을 정리해 드려요</span></div>
           <button class="btn-primary ws-exam" disabled><i data-lucide="file-text"></i>시험 준비하기</button>`;
         return;
@@ -2179,12 +2183,12 @@
       const maxC = Math.max(...topC.map(([, n]) => n)), maxD = Math.max(1, ...byDiff);
       const pctOf = (n) => `${Math.round((n / total) * 100)}%`;
       host.innerHTML = `
-        <div class="ws-col-head"><div><h3><i data-lucide="chart-pie"></i>분석 리포트</h3><small>올린 문항 ${total}개 기준</small></div></div>
+        <div class="ws-col-head"><div><h3>분석 리포트</h3><small>올린 문항 ${total}개 기준</small></div></div>
         <ul class="ws-insights">
-          <li><i data-lucide="target"></i><span>가장 많이 나온 유형은 <b>${esc(topC[0][0])}</b> (${topC[0][1]}문항, ${pctOf(topC[0][1])})</span></li>
-          <li><i data-lucide="gauge"></i><span>평균 난이도 <b>${avg.toFixed(1)}</b> · ${avg >= 3.5 ? "어려운 문항 비중이 높아요" : avg >= 2.5 ? "중간 난도 중심이에요" : "기본 문항 위주예요"}</span></li>
-          <li><i data-lucide="${noneN || warnN ? "circle-alert" : "badge-check"}"></i><span>정답 있음 <b>${okN}/${total}</b>${noneN + warnN ? ` · ${noneN + warnN}문항은 정답 파일 연결이나 정답지로 채워 주세요` : " · 모든 문항의 정답이 있어요"}</span></li>
-          ${fig ? `<li><i data-lucide="image"></i><span>그림이 필요한 문항 <b>${fig}개</b> — 시험지에서는 원본을 함께 보세요</span></li>` : ""}
+          <li><span>가장 많이 나온 유형은 <b>${esc(topC[0][0])}</b> (${topC[0][1]}문항, ${pctOf(topC[0][1])})</span></li>
+          <li><span>평균 난이도 <b>${avg.toFixed(1)}</b> · ${avg >= 3.5 ? "어려운 문항 비중이 높아요" : avg >= 2.5 ? "중간 난도 중심이에요" : "기본 문항 위주예요"}</span></li>
+          <li class="${noneN || warnN ? "warn" : ""}"><span>정답 있음 <b>${okN}/${total}</b>${noneN + warnN ? ` · ${noneN + warnN}문항은 정답 파일 연결이나 정답지로 채워 주세요` : " · 모든 문항의 정답이 있어요"}</span></li>
+          ${fig ? `<li><span>그림이 필요한 문항 <b>${fig}개</b> — 시험지에서는 원본을 함께 보세요</span></li>` : ""}
         </ul>
         <h4 class="ws-h4">출제 유형</h4>
         <div class="ws-bars">${topC.map(([name, k]) => `
@@ -2255,8 +2259,8 @@
             ${[["all", "전체"], ["10", "10문항"], ["20", "20문항"], ["30", "30문항"]].map(([v, t]) => `<option value="${v}">${t}</option>`).join("")}</select></div>
           <label class="check"><input type="checkbox" id="ex-shuffle" /> 문항 순서 섞기</label>
           <div class="field"><label>어떻게 볼까요?</label><div class="seg ex-mode">
-            <button type="button" data-ex-mode="take" class="on"><i data-lucide="timer"></i>화면에서 시험 보기</button>
-            <button type="button" data-ex-mode="print"><i data-lucide="printer"></i>인쇄용 시험지</button></div></div>
+            <button type="button" data-ex-mode="take" class="on">화면에서 시험 보기</button>
+            <button type="button" data-ex-mode="print">인쇄용 시험지</button></div></div>
           <div data-ex-pane="take">${takeFields()}</div>
           <div data-ex-pane="print" hidden><label class="check"><input type="checkbox" id="ex-key" checked /> 마지막 장에 정답표 넣기</label></div>`,
         onMount: (f) => bindModeSeg(f),
@@ -2480,9 +2484,9 @@
             <button class="btn-ghost danger-text" data-er-del><i data-lucide="trash-2"></i>기록 삭제</button>
           </div>
         </div>
-        <div class="panel xt-slow"><h3><i data-lucide="hourglass"></i>시간이 오래 걸린 문항</h3>
+        <div class="panel xt-slow"><h3>시간이 오래 걸린 문항</h3>
           <div class="xt-slow-list">${slow.map((it) => `<div><b>${it.k + 1}번</b><span>${mmss(it.sec)}</span><small>${it.correct ? "맞음" : !it.my ? "안 풂" : it.correct === false ? "틀림" : "채점 못 함"}</small></div>`).join("")}</div></div>
-        <div class="panel xt-table"><h3><i data-lucide="list-checks"></i>문항별 결과 · 걸린 시간</h3>
+        <div class="panel xt-table"><h3>문항별 결과 · 걸린 시간</h3>
           ${r.items.map((it, k) => `<div class="xt-row ${it.correct ? "ok" : it.correct === false ? "bad" : ""}">
             <b>${k + 1}</b><span class="xt-st"><i data-lucide="${it.correct ? "circle-check" : it.correct === false ? "circle-x" : "circle-help"}"></i>${it.correct ? "맞음" : !it.my ? "안 풂" : it.correct === false ? "틀림" : "채점 못 함"}</span>
             <span class="xt-stem1" data-math>${esc((it.stem || "").slice(0, 80))}</span>
@@ -2696,10 +2700,10 @@
               <a class="btn-ghost" href="#/project/${p.id}"><i data-lucide="folder"></i>프로젝트로</a>
             </div>
           </div>
-          ${slow.length ? `<div class="panel xt-slow"><h3><i data-lucide="hourglass"></i>시간이 오래 걸린 문항</h3>
+          ${slow.length ? `<div class="panel xt-slow"><h3>시간이 오래 걸린 문항</h3>
             <div class="xt-slow-list">${slow.map((r) => `<div><b>${rows.indexOf(r) + 1}번</b><span>${mmss(r.sec)}</span><small>${r.correct ? "맞음" : r.skipped ? "안 풂" : r.correct === false ? "틀림" : "채점 못 함"}</small></div>`).join("")}</div>
             <p class="mini">평균 ${mmss(Math.round(rows.reduce((a, r) => a + r.sec, 0) / rows.length))} · 오래 걸렸는데 틀린 문항부터 다시 보면 좋아요</p></div>` : ""}
-          <div class="panel xt-table"><h3><i data-lucide="list-checks"></i>문항별 결과</h3>
+          <div class="panel xt-table"><h3>문항별 결과</h3>
             ${rows.map((r, i) => `<div class="xt-row ${r.correct ? "ok" : r.correct === false ? "bad" : ""}">
               <b>${i + 1}</b><span class="xt-st"><i data-lucide="${r.correct ? "circle-check" : r.correct === false ? "circle-x" : "circle-help"}"></i>${r.correct ? "맞음" : r.skipped ? "안 풂" : r.correct === false ? "틀림" : "채점 못 함"}</span>
               <span class="xt-stem1" data-math>${esc(r.q.stem.slice(0, 80))}</span>
@@ -2921,7 +2925,7 @@
       <div class="page-head ak-head">
         <div>
           <a class="ak-back" href="#/project/${mat.project_id}"><i data-lucide="arrow-left"></i>프로젝트로</a>
-          <h1><i data-lucide="file-check-2"></i>정답지</h1>
+          <h1>정답지</h1>
           <p>${esc(mat.filename)} · ${key.items.length}문항${mat.answer_key_at ? ` · ${relTime(Date.parse(mat.answer_key_at))} 만듦` : ""}</p>
           ${key.answer_file ? `<p class="ak-file"><i data-lucide="link-2"></i>정답 파일 <b>${esc(key.answer_file.filename)}</b>${key.answer_file.map ? ` · ${key.answer_file.map.matched}/${key.answer_file.map.total}문항 1:1 연결` : ""}</p>` : ""}
         </div>
@@ -2946,7 +2950,7 @@
         <button class="btn-primary" data-ak-start><i data-lucide="sparkles"></i>정답지 만들기</button></div>` : ""}
       ${has ? `
         <section class="panel ak-quick">
-          <h3><i data-lucide="table-2"></i>빠른 정답</h3>
+          <h3>빠른 정답</h3>
           <div class="ak-grid">${key.items.map((it, n) => `
             <a href="#ak-${it.id}" class="ak-cell ${AK_STATUS[it.status][2]}" data-ak-jump="${it.id}" title="${esc(AK_STATUS[it.status][0])}">
               <span>${it.number ?? n + 1}</span><b data-math>${esc(akLabel(it))}</b></a>`).join("")}</div>
@@ -3173,7 +3177,7 @@
     view.innerHTML = `
       <div class="page-head">
         <div>
-          <h1><i data-lucide="circle-x"></i>오답노트</h1>
+          <h1>오답노트</h1>
           <p>${proj ? `${esc(proj.name)}의 오답 · <a href="#/notes" style="color:inherit">전체 보기</a>` : "틀린 문제를 다시 풀어 맞히면 극복으로 표시돼요"}</p>
         </div>
         <div class="page-actions print-hide"><button class="btn-ghost" data-print-notes title="지금 보이는 오답을 인쇄하거나 PDF로 저장"><i data-lucide="printer"></i>인쇄 · PDF 저장</button></div>
@@ -3226,9 +3230,9 @@
     open.filter((w) => w.errorType !== "unknown").forEach((w) => (counts[w.errorType] = (counts[w.errorType] ?? 0) + 1));
     const [topType, topN] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] ?? [];
     $("#note-stats").innerHTML = `
-      <div class="glass-tile"><span><i data-lucide="target"></i>남은 오답</span><b>${open.length}<small>문제</small></b></div>
-      <div class="glass-tile"><span><i data-lucide="trophy"></i>이번 주 극복</span><b>${week}<small>문제</small></b></div>
-      <div class="glass-tile"><span><i data-lucide="search-check"></i>가장 많이 틀린 이유</span>
+      <div class="glass-tile"><span>남은 오답</span><b>${open.length}<small>문제</small></b></div>
+      <div class="glass-tile"><span>이번 주 극복</span><b>${week}<small>문제</small></b></div>
+      <div class="glass-tile"><span>가장 많이 틀린 이유</span>
         <b class="text">${topType ? `${ERROR_TYPES[topType]}<small>${topN}문제</small>` : "<small>아직 분류 전이에요</small>"}</b></div>`;
   }
 
@@ -3250,7 +3254,7 @@
         <article class="note glass-card ${w.resolvedAt ? "resolved" : ""}" style="--c:${COLOR[p.domain]}">
           <header class="note-top">
             <span class="subject-pill"><span class="sw"></span>${esc(subjectOf(c.id)?.name ?? DOMAIN_NAME[p.domain])}</span>
-            <a class="concept-link" href="#/library/concept/${c.id}">${esc(c.name)}</a>
+            ${c.id ? `<a class="concept-link" href="#/library/concept/${c.id}">${esc(c.name)}</a>` : ""}
             <span class="stars" title="난이도 ${p.difficulty}">${"★".repeat(p.difficulty)}${"☆".repeat(5 - p.difficulty)}</span>
             ${w.resolvedAt ? '<span class="pill done-pill"><i data-lucide="check"></i>극복</span>' : ""}
             <time>${relTime(w.createdAt)}</time>
@@ -3306,10 +3310,10 @@
     const tabs = [["concepts", "book-open", "개념 노트"], ["cards", "layers", "암기 카드"], ["saved", "bookmark", "저장한 문제"]];
     view.innerHTML = `
       <div class="page-head">
-        <div><h1><i data-lucide="library"></i>라이브러리</h1><p>개념, 암기 카드, 저장한 문제를 한곳에서</p></div>
+        <div><h1>라이브러리</h1><p>개념, 암기 카드, 저장한 문제를 한곳에서</p></div>
       </div>
       <div class="toolbar">
-        <nav class="seg">${tabs.map(([k, ic, label]) => `<a href="#/library/${k}" class="${tab === k ? "on" : ""}"><i data-lucide="${ic}"></i>${label}</a>`).join("")}</nav>
+        <nav class="seg">${tabs.map(([k, ic, label]) => `<a href="#/library/${k}" class="${tab === k ? "on" : ""}">${label}</a>`).join("")}</nav>
         ${tab === "concepts" ? `<label class="lib-search"><i data-lucide="search"></i><input id="lib-q" placeholder="개념 검색 (예: 치환적분, 몰)" value="${esc(libQuery)}" /></label>` : ""}
       </div>
       <div id="lib-body"></div>`;
@@ -3347,7 +3351,7 @@
     // 아직 받지 않은 공개 코스 (다른 사람이 만든 코스) — 누르면 개념 트리를 받아 온다
     const others = COURSES.filter((c) => !conceptMap[c.id] && (!qy || `${c.title} ${c.exam} ${c.category}`.toLowerCase().includes(qy)));
     const browse = others.length ? `
-      <section class="tree-domain other-courses"><h2><i data-lucide="compass"></i>다른 코스 둘러보기 <small>다른 사람들이 출제 범위로 만든 코스예요</small></h2>
+      <section class="tree-domain other-courses"><h2>다른 코스 둘러보기 <small>다른 사람들이 출제 범위로 만든 코스예요</small></h2>
         <div class="course-list">${others.slice(0, 30).map((c) => `
           <button type="button" class="course-item" data-load-course="${esc(c.id)}" style="--c:${COLOR[c.domain]}">
             <b><span class="sw"></span>${esc(c.title)}</b><small>${esc([c.exam, c.category, c.level, `${c.units}개 단원`].filter(Boolean).join(" · "))}</small></button>`).join("")}</div>
@@ -3381,12 +3385,12 @@
       </div>
       <div id="note-slot"></div>
       <div class="cols">
-        <section class="panel"><h3><i data-lucide="corner-left-up"></i>먼저 알아야 할 개념</h3>
+        <section class="panel"><h3>먼저 알아야 할 개념</h3>
           ${c.prerequisites.length ? `<div class="links">${c.prerequisites.map((p) => link(concept(p))).join("")}</div>` : '<p class="mini">선수 개념이 없어요. 여기서 시작하면 돼요</p>'}</section>
-        <section class="panel"><h3><i data-lucide="corner-right-down"></i>이어서 배울 개념</h3>
+        <section class="panel"><h3>이어서 배울 개념</h3>
           ${next.length ? `<div class="links">${next.map(link).join("")}</div>` : '<p class="mini">이 개념이 이 단원의 마무리예요</p>'}</section>
       </div>
-      ${cards.length ? `<section class="panel" style="margin-top:12px"><h3><i data-lucide="layers"></i>암기 카드 ${cards.length}장</h3>
+      ${cards.length ? `<section class="panel" style="margin-top:12px"><h3>암기 카드 ${cards.length}장</h3>
         <div class="list">${cards.map((k) => `<a href="#/library/cards"><i data-lucide="${k.known ? "check" : "circle-dashed"}"></i><span class="card-front" data-math>${esc(k.front)}</span><span>${k.known ? "외움" : "아직"}</span></a>`).join("")}</div></section>` : ""}
       <section style="margin-top:12px">
         <h3 style="font-size:14.5px;font-weight:600">관련 문제 ${problems.length}개</h3>
@@ -3442,7 +3446,7 @@
     const date = new Date(n.created_at).toLocaleDateString("ko-KR", { month: "long", day: "numeric" });
     return `
       <section class="panel concept-note">
-        <div class="note-head"><h3><i data-lucide="notebook-pen"></i>내 맞춤 개념 정리</h3>
+        <div class="note-head"><h3>내 맞춤 개념 정리</h3>
           <span class="verified"><i data-lucide="shield-check"></i>검증 완료 · ${date}</span>
           <button class="btn-ghost" data-make-note title="내 최근 기록으로 다시 만들기"><i data-lucide="refresh-cw"></i>다시 만들기</button></div>
         ${c.personal_tip ? `<p class="tip" data-math><i data-lucide="target"></i>${esc(c.personal_tip)}</p>` : ""}
@@ -3685,10 +3689,10 @@
     }
     const u = Store.state.user;
     view.innerHTML = `
-      <div class="page-head"><div><h1><i data-lucide="user-round-cog"></i>계정 설정</h1><p>프로필 사진과 내 정보를 관리해요</p></div></div>
+      <div class="page-head"><div><h1>계정 설정</h1><p>프로필 사진과 내 정보를 관리해요</p></div></div>
 
       <section class="glass-card settings-card" style="--c:var(--accent)">
-        <h3><i data-lucide="image"></i>프로필 사진</h3>
+        <h3>프로필 사진</h3>
         <div class="avatar-current">
           <span class="avatar xl ${u.avatarType && u.avatarType !== "initial" ? "has-image" : ""}" id="avatar-big">${avatarInner(u)}</span>
           <div class="avatar-actions">
@@ -3704,7 +3708,7 @@
       </section>
 
       <form class="glass-card settings-card" id="profile-form" novalidate style="--c:var(--accent)">
-        <h3><i data-lucide="id-card"></i>내 정보</h3>
+        <h3>내 정보</h3>
         <div class="two">
           <div class="field"><label for="s-name">이름</label><input id="s-name" value="${esc(u.name)}" maxlength="40" autocomplete="name" /></div>
           <div class="field"><label for="s-email">이메일</label><input id="s-email" value="${esc(u.email ?? "로컬 모드")}" disabled /></div>
@@ -3735,12 +3739,12 @@
       </form>
 
       ${Store.mode === "api" ? `<section class="glass-card settings-card" style="--c:#22c55e">
-        <h3><i data-lucide="key-round"></i>로그인 방법</h3>
+        <h3>로그인 방법</h3>
         <div id="login-methods">${skel(2)}</div>
       </section>` : ""}
 
       <section class="glass-card settings-card" style="--c:#94a3b8">
-        <h3><i data-lucide="shield"></i>계정</h3>
+        <h3>계정</h3>
         <div class="settings-row"><span>${Store.mode === "api" ? `${esc(u.email)}로 로그인했어요` : "로컬 모드 (브라우저에만 저장)"}</span>
           <button class="btn-ghost glassy" id="s-logout"><i data-lucide="log-out"></i>로그아웃</button></div>
         ${Store.mode === "api" ? `<details class="leave">
@@ -4300,7 +4304,7 @@
               <p class="mini">목록에서 고르면 책 정보가 함께 저장돼요. 이름만 적어도 괜찮아요</p></div>
           </div>
           <div class="np-newcourse" data-newcourse hidden>
-            <h4><i data-lucide="sparkles"></i>새 코스 만들기 <small>출제 범위를 붙여넣으면 AI가 단원·개념으로 정리해요 · 만든 코스는 모두에게 공개돼요</small></h4>
+            <h4>새 코스 만들기 <small>출제 범위를 붙여넣으면 AI가 단원·개념으로 정리해요 · 만든 코스는 모두에게 공개돼요</small></h4>
             <div class="two">
               <div class="field"><label for="nc-title">코스 이름</label><input id="nc-title" maxlength="120" placeholder="예: 편입 수학 (미적분학)" /></div>
               <div class="field"><label for="nc-exam">시험 <small>· 선택</small></label><input id="nc-exam" maxlength="120" placeholder="예: 편입, CPA 1차, 토익" /></div>

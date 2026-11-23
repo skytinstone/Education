@@ -178,7 +178,7 @@
     const [, title, icon] = ADMIN_TABS.find(([k]) => k === tab);
     $$(".side-nav a").forEach((el) => el.classList.toggle("on", el.dataset.tab === tab));
     view.innerHTML = `
-      <div class="page-head"><div><h1><i data-lucide="${icon}"></i>${title}</h1><p>${TAB_DESC[tab]}</p></div></div>
+      <div class="page-head"><div><h1>${title}</h1><p>${TAB_DESC[tab]}</p></div></div>
       <div class="admin-body" id="admin-body"><p class="mini">불러오는 중…</p></div>`;
     icons();
     const body = $("#admin-body");
@@ -218,12 +218,12 @@
       </div>
       <div class="admin-grid">
         <section class="panel">
-          <div class="panel-row"><h3><i data-lucide="user-plus"></i>일별 가입자</h3>
+          <div class="panel-row"><h3>일별 가입자</h3>
             <div class="seg small">${[7, 30, 90].map((d) => `<button data-days="${d}" class="${adminState.days === d ? "on" : ""}">${d}일</button>`).join("")}</div></div>
           ${dayBars(o.signups_by_day, "count")}
         </section>
         <section class="panel">
-          <h3><i data-lucide="key-round"></i>로그인 방법</h3>
+          <h3>로그인 방법</h3>
           <div class="hbars">${Object.entries(sm).map(([k, n]) => `
             <div class="hbar"><span>${METHOD_NAME[k]}</span><span class="track"><i class="m-${k}" style="width:${(n / methodsTotal) * 100}%"></i></span><b>${num(n)}</b></div>`).join("")}</div>
           <p class="mini">한 사람이 여러 방법을 연결할 수 있어 합이 가입자 수보다 클 수 있어요</p>
@@ -235,18 +235,18 @@
         </section>
       </div>
       <div class="admin-grid">
-        <section class="panel"><h3><i data-lucide="filter"></i>가입 전환 (최근 30일)</h3>${funnelHTML(fn.steps)}</section>
-        <section class="panel"><h3><i data-lucide="repeat-2"></i>주간 재방문</h3>
+        <section class="panel"><h3>가입 전환 (최근 30일)</h3>${funnelHTML(fn.steps)}</section>
+        <section class="panel"><h3>주간 재방문</h3>
           <p class="mini" style="margin-top:-6px">가입한 주의 다음 주에도 문제를 풀거나 로그인한 비율</p>
           ${table(["가입 주", "#가입", "#다음 주에도 씀"], fn.cohorts.slice(-8).reverse().map((c) => `
             <tr><td class="nowrap">${c.week.slice(5).replace("-", "/")} 주</td><td class="n">${num(c.size)}</td>
               <td class="n"><b>${c.rate == null ? "–" : `${Math.round(c.rate * 100)}%`}</b> <small>${num(c.week1)}명</small></td></tr>`), "아직 가입 기록이 없어요")}</section>
       </div>
       <div class="admin-grid">
-        <section class="panel"><div class="panel-row"><h3><i data-lucide="user-round-plus"></i>최근 가입자</h3><a class="mini" href="#/users">전체 보기</a></div>
+        <section class="panel"><div class="panel-row"><h3>최근 가입자</h3><a class="mini" href="#/users">전체 보기</a></div>
           ${table(["회원", "로그인 방법", "가입"], recentUsers.items.map((x) => `
             <tr class="row-link" data-href="#/users/${x.id}"><td>${userLink(x.id, x.name)}<small>${esc(x.email)}</small></td><td>${methodChips(x.methods)}</td><td class="nowrap">${ago(x.created_at)}</td></tr>`), "아직 가입자가 없어요")}</section>
-        <section class="panel"><div class="panel-row"><h3><i data-lucide="inbox"></i>처리할 문의</h3><a class="mini" href="#/voc">VOC 열기</a></div>
+        <section class="panel"><div class="panel-row"><h3>처리할 문의</h3><a class="mini" href="#/voc">VOC 열기</a></div>
           ${recentVoc.length ? `<ul class="mini-list voc-peek">${recentVoc.slice(0, 6).map((f) => `<li><span class="fb-status ${f.status}">${FB_STATUS[f.status]}</span> <b>${esc(FEEDBACK_KINDS[f.kind])}</b> · ${esc(f.message.slice(0, 80))}<small>${esc(f.user_name)} · ${ago(f.created_at)}</small></li>`).join("")}</ul>` : '<p class="mini">처리할 문의가 없어요</p>'}</section>
       </div>`;
   }
@@ -278,16 +278,16 @@
         ${kpi("정답지 문항", num(keyTotal), `확인 필요 ${num((k.conflict ?? 0) + (k.uncertain ?? 0))}`)}
         ${kpi("문제 신고", num(q.reports), "문제·해설 오류 신고")}
       </div>
-      <section class="panel"><h3><i data-lucide="chart-column"></i>일별 통과율</h3>
+      <section class="panel"><h3>일별 통과율</h3>
         ${dayBars(q.by_day.map((d) => ({ ...d, rate: d.total ? d.passed / d.total * 100 : 0 })), "rate", (v) => `${Math.round(v)}%`)}</section>
       <div class="admin-grid">
-        <section class="panel"><h3><i data-lucide="list-x"></i>탈락 이유</h3>
+        <section class="panel"><h3>탈락 이유</h3>
           ${table(["이유", "#문제 수"], q.reasons.map((r) => `<tr><td>${esc(r.reason)}</td><td class="n">${num(r.count)}</td></tr>`), "떨어진 문제가 없어요")}</section>
-        <section class="panel"><h3><i data-lucide="target"></i>통과율이 낮은 개념</h3>
+        <section class="panel"><h3>통과율이 낮은 개념</h3>
           ${table(["개념", "#만든 문제", "#통과율"], q.weak_concepts.map((c) => `<tr><td>${esc(c.name)}<small>${esc(c.concept_id)}</small></td>
             <td class="n">${num(c.total)}</td><td class="n ${c.rate < 0.5 ? "bad" : ""}"><b>${Math.round(c.rate * 100)}%</b></td></tr>`), "3문제 이상 만든 개념이 아직 없어요")}</section>
       </div>
-      <section class="panel"><h3><i data-lucide="file-check-2"></i>정답지 문항 상태</h3>
+      <section class="panel"><h3>정답지 문항 상태</h3>
         <div class="hbars">${Object.entries(KEY_NAME).map(([key, name]) => `
           <div class="hbar"><span>${name}</span><span class="track"><i class="${["conflict", "uncertain", "failed"].includes(key) ? "m-kakao" : "m-google"}" style="width:${keyTotal ? ((k[key] ?? 0) / keyTotal) * 100 : 0}%"></i></span><b>${num(k[key] ?? 0)}</b></div>`).join("")}</div></section>`;
     icons();
@@ -311,15 +311,15 @@
         ${kpi("토큰 (입력 / 출력)", `${compact(t.input_tokens)} / ${compact(t.output_tokens)}`, `캐시 ${compact(t.cached_tokens)} · 추론 ${compact(t.reasoning_tokens)}`)}
         ${kpi("평균 응답 시간", `${(t.avg_latency_ms / 1000).toFixed(1)}초`, "성공한 호출 기준")}
       </div>
-      ${r.days > 1 ? `<section class="panel"><h3><i data-lucide="chart-column"></i>일별 비용</h3>${dayBars(r.by_day, "cost_usd", usd)}</section>` : ""}
+      ${r.days > 1 ? `<section class="panel"><h3>일별 비용</h3>${dayBars(r.by_day, "cost_usd", usd)}</section>` : ""}
       <div class="admin-grid">
-        <section class="panel"><h3><i data-lucide="list"></i>용도별</h3>${table(gHead, groupRows(r.by_purpose, (k) => PURPOSE_NAME[k] ?? k), "기록이 없어요")}</section>
-        <section class="panel"><h3><i data-lucide="cpu"></i>모델별</h3>${table(gHead, groupRows(r.by_model), "기록이 없어요")}</section>
+        <section class="panel"><h3>용도별</h3>${table(gHead, groupRows(r.by_purpose, (k) => PURPOSE_NAME[k] ?? k), "기록이 없어요")}</section>
+        <section class="panel"><h3>모델별</h3>${table(gHead, groupRows(r.by_model), "기록이 없어요")}</section>
       </div>
       <div class="admin-grid">
-        <section class="panel"><h3><i data-lucide="trophy"></i>비용이 많은 사용자</h3>${table(["사용자", "#호출", "#비용"], r.top_users.map((x) => `
+        <section class="panel"><h3>비용이 많은 사용자</h3>${table(["사용자", "#호출", "#비용"], r.top_users.map((x) => `
           <tr><td>${userLink(x.user_id, x.name)}<small>${esc(x.email)}</small></td><td class="n">${num(x.calls)}</td><td class="n"><b>${usd(x.cost_usd)}</b></td></tr>`), "기록이 없어요")}</section>
-        <section class="panel"><h3><i data-lucide="triangle-alert"></i>최근 실패</h3>${table(["시각", "용도", "오류"], r.recent_errors.map((x) => `
+        <section class="panel"><h3>최근 실패</h3>${table(["시각", "용도", "오류"], r.recent_errors.map((x) => `
           <tr><td class="nowrap">${when(x.at)}</td><td>${esc(PURPOSE_NAME[x.purpose] ?? x.purpose)}<small>${esc(x.model)}${x.email ? ` · ${esc(x.email)}` : ""}</small></td><td class="err-text">${esc(x.error)}</td></tr>`), "실패한 호출이 없어요")}</section>
       </div>`;
   }
@@ -442,17 +442,17 @@
         ${kpi("AI 사용", usd(d.ai.cost_usd), `${num(d.ai.calls)}회 호출`)}
       </div>
       <div class="admin-grid">
-        <section class="panel"><h3><i data-lucide="id-card"></i>정보</h3><dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl></section>
-        <section class="panel"><div class="panel-row"><h3><i data-lucide="inbox"></i>보낸 문의</h3>${d.feedback.length ? `<a class="mini" href="#/voc" data-voc-user="${u.id}">VOC에서 보기</a>` : ""}</div>
+        <section class="panel"><h3>정보</h3><dl class="facts">${facts.map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("")}</dl></section>
+        <section class="panel"><div class="panel-row"><h3>보낸 문의</h3>${d.feedback.length ? `<a class="mini" href="#/voc" data-voc-user="${u.id}">VOC에서 보기</a>` : ""}</div>
           ${d.feedback.length ? `<ul class="mini-list">${d.feedback.map((f) => `<li><span class="fb-status ${f.status}">${FB_STATUS[f.status]}</span> ${esc(FEEDBACK_KINDS[f.kind])} · ${esc(f.message)}<small>${when(f.created_at)}</small></li>`).join("")}</ul>` : '<p class="mini">보낸 문의가 없어요</p>'}</section>
       </div>
-      ${d.actions.length ? `<section class="panel"><h3><i data-lucide="scroll-text"></i>이 회원에 대한 조치</h3>${table(["시각", "조치", "운영자", "내용"], d.actions.map((a) => `
+      ${d.actions.length ? `<section class="panel"><h3>이 회원에 대한 조치</h3>${table(["시각", "조치", "운영자", "내용"], d.actions.map((a) => `
         <tr><td class="nowrap">${when(a.at)}</td><td>${actionChip(a.action)}</td><td>${esc(a.admin_email)}</td><td>${esc(a.detail ?? "–")}</td></tr>`), "")}</section>` : ""}
-      <section class="panel"><h3><i data-lucide="network"></i>접속한 IP</h3>${table(["IP", "#로그인", "#실패", "마지막"], d.ips.map((x) => `
+      <section class="panel"><h3>접속한 IP</h3>${table(["IP", "#로그인", "#실패", "마지막"], d.ips.map((x) => `
         <tr><td class="mono">${esc(x.ip)}${x.ip === u.last_seen_ip ? ' <span class="upill ok">최근</span>' : ""}</td><td class="n">${num(x.logins)}</td>
           <td class="n ${x.failed ? "bad" : ""}">${num(x.failed)}</td><td class="nowrap">${when(x.last_at)} · ${ago(x.last_at)}</td></tr>`), "최근 90일 로그인 기록이 없어요")}
         <p class="mini">로그인 기록 기준 (90일 보관). 여러 IP에서 실패가 많으면 계정 도용 시도일 수 있어요</p></section>
-      <section class="panel"><h3><i data-lucide="log-in"></i>최근 로그인 기록</h3>${table(["시각", "방법", "결과", "IP", "기기"], d.logins.map((e) => `
+      <section class="panel"><h3>최근 로그인 기록</h3>${table(["시각", "방법", "결과", "IP", "기기"], d.logins.map((e) => `
         <tr class="${e.ok ? "" : "fail"}"><td class="nowrap">${when(e.at)}</td><td>${methodChips([e.method])}${e.kind === "signup" ? '<span class="mchip new">가입</span>' : ""}</td>
           <td>${e.ok ? '<span class="ok">성공</span>' : `<span class="bad">실패</span><small>${FAIL_REASON[e.reason] ?? ""}</small>`}</td><td class="mono">${esc(e.ip ?? "–")}</td><td>${device(e.user_agent ?? "")}</td></tr>`), "최근 90일 기록이 없어요")}</section>`;
     icons();

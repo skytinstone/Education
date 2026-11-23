@@ -445,3 +445,6 @@
   .draw-in path.curve { stroke-dasharray: none; stroke-dashoffset: 0; }
   .btn-primary.hold.holding .hold-fill { transition: none; }
 }
+
+/* 아이콘을 뺀 자리: 확인이 필요한 분석 줄은 색으로 알린다 */
+.ws-insights li.warn { background: rgba(249,115,22,.08) !important; color: #9a3412; }
