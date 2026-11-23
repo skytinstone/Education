@@ -1231,14 +1231,15 @@
     files: [["사진·파일 읽는 중", "문제 이해하는 중", "단계별로 푸는 중", "한 번 더 검산하는 중", "답변 정리하는 중"], 25000],
     explain: [["질문 읽는 중", "풀이 방법 고르는 중", "단계별로 푸는 중", "한 번 더 검산하는 중", "그래프·화면 준비하는 중"], 18000],
     problems: [["요청 읽는 중", "문제 만드는 중", "다른 AI가 다시 풀어 검산하는 중", "해설 다듬는 중", "화면 준비하는 중"], 30000],
+    deep: [["고른 부분 읽는 중", "이전 대화와 연결하는 중", "더 깊게 풀어 쓰는 중", "한 번 더 검산하는 중", "답변 정리하는 중"], 22000],
     general: [["질문 이해하는 중", "이전 대화 살펴보는 중", "학습 현황 확인하는 중", "답변 정리하는 중"], 9000],
   };
   // editIndex: 보낸 질문 고치기 — 그 질문부터 뒤를 지우고 고친 글로 다시 묻는다
-  function ask({ sessionId = null, projectId = null, text, files = [], editIndex = null }) {
-    const r = editIndex != null ? Store.editMessage({ sessionId, index: editIndex, text }) : Store.sendMessage({ sessionId, projectId, text, files });
+  function ask({ sessionId = null, projectId = null, text, files = [], editIndex = null, quote = null }) {
+    const r = editIndex != null ? Store.editMessage({ sessionId, index: editIndex, text }) : Store.sendMessage({ sessionId, projectId, text, files, quote });
     if (!r) { toast("방금 보낸 질문은 답이 저장된 뒤에 고칠 수 있어요"); return null; }
     const { id, done } = r;
-    const kind = files.length ? "files" : problemLike(text) && !(sessionId && /아까|방금|다시|비슷|(^|\s)더(\s|$)/.test(text)) ? "problems"
+    const kind = files.length ? "files" : quote ? "deep" : problemLike(text) && !(sessionId && /아까|방금|다시|비슷|(^|\s)더(\s|$)/.test(text)) ? "problems"
       : explainLike(text) ? "explain" : "general";
     // 기다리는 동안은 대화 안에 '생각 중' 카드 — 단계 글자와 원형 진행률 (화면을 가리지 않는다)
     const [steps, expectMs] = THINK_BY_KIND[kind];
@@ -1680,13 +1681,12 @@
   const pendingAt = {};   // 대화 id → 답을 기다리기 시작한 시각 (다시 그려도 단계가 이어지게)
   const pendingMeta = {}; // 대화 id → { at, steps, expectMs } (질문 종류에 맞는 단계 글자)
   const stoppedIds = new Set(); // '답변 멈추기' 를 누른 대화 id (답이 도착하면 조용히 바꾼다)
-  // AI 아바타: 파란 원 안의 반짝임 별 — 상태(생각 중·도착·정답·멈춤)에 따라 움직임과 색이 바뀐다 (glass.css .ai-avatar)
-  const AI_AVATAR = `<span class="ai-avatar" aria-hidden="true"><svg viewBox="0 0 24 24">
-    <path class="star" d="M11 3.5c.5 4.3 2.7 6.5 7 7-4.3.5-6.5 2.7-7 7-.5-4.3-2.7-6.5-7-7 4.3-.5 6.5-2.7 7-7z"/>
-    <path class="star2" d="M18 2.5c.2 1.6 1 2.4 2.6 2.6-1.6.2-2.4 1-2.6 2.6-.2-1.6-1-2.4-2.6-2.6 1.6-.2 2.4-1 2.6-2.6z"/></svg></span>`;
+  // AI 아바타: 무지개 반짝임 별 — 상태(생각 중·도착·정답·멈춤)에 따라 움직임과 색이 바뀐다 (glass.css .ai-avatar)
+  const AI_AVATAR = '<span class="ai-avatar" aria-hidden="true"><i class="s1"></i><i class="s2"></i></span>';
   const STOP_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"/></svg>';
   let typeNext = null;
   let editingAt = null;               // 고치는 중인 질문 { sid, index }
+  let chatQuote = null;               // 답글: 입력창에 붙인 인용 { sid, text }
   let draft = { sid: null, text: "" }; // 대화 입력창에 쓰던 글 (답이 도착해 다시 그려도 남긴다)    // 다음에 그릴 때 마지막 답변을 타이핑 효과로 보여 줄 대화 id
   function renderChat(id, { keepScroll = false } = {}) {
     if (voice && !document.body.contains(voice.btn)) voice.stop();
@@ -1700,6 +1700,7 @@
     // 마지막 답변 아래에만 '이어서 보낼 요청' 버튼 (기다리는 중이면 숨김)
     const lastAi = Store.isPending(id) ? -1 : s.messages.findLastIndex((m) => m.role === "ai");
     const busy = Store.isPending(id);
+    const quoted = chatQuote?.sid === id ? chatQuote.text : "";
     const canEdit = (m) => !busy && (Store.mode !== "api" || m.id);
     const msgs = s.messages.map((m, mi) => m.role === "user"
       ? (editingAt?.sid === id && editingAt.index === mi
@@ -1708,7 +1709,7 @@
             <div class="edit-actions"><span class="mini">고친 질문으로 다시 물어보고, 이 뒤의 대화는 지워져요</span>
               <button type="button" class="btn-ghost" data-edit-cancel>취소</button><button type="submit" class="btn-primary">보내기</button></div>
           </form></div>`
-        : `<div class="msg user">${messageFilesHTML(m.files)}<div class="bubble">${esc(m.text)}</div>
+        : `<div class="msg user">${m.quote ? `<div class="msg-quote"><i data-lucide="corner-down-right"></i><span data-math>${esc(m.quote)}</span></div>` : ""}${messageFilesHTML(m.files)}<div class="bubble">${esc(m.text)}</div>
             <div class="msg-tools">
               <button type="button" class="icon-btn" data-copy="${mi}" title="복사" aria-label="질문 복사"><i data-lucide="copy"></i></button>
               ${canEdit(m) ? `<button type="button" class="icon-btn" data-edit="${mi}" title="고치기" aria-label="질문 고치기"><i data-lucide="pencil"></i></button>` : ""}
@@ -1734,9 +1735,11 @@
               <span class="think" id="think-step" role="status">${esc((pendingMeta[id]?.steps ?? THINK_STEPS)[0])}</span></div>
             <div class="think-lines" aria-hidden="true"><i></i><i></i><i></i></div></div></div>` : ""}
         </div>
-        <form class="composer glass chat-composer" id="chat-form">
+        <form class="composer glass chat-composer ${quoted ? "has-quote" : ""}" id="chat-form">
+          ${quoted ? `<div class="ask-quote cq"><i data-lucide="corner-down-right"></i><span data-math>${esc(quoted)}</span>
+            <button type="button" data-unquote aria-label="인용 빼기"><i data-lucide="x"></i></button></div>` : ""}
           <button type="button" class="icon-btn" data-attach title="사진·파일 첨부" aria-label="사진·파일 첨부"><i data-lucide="plus"></i></button>
-          <textarea id="chat-input" class="cin" rows="1" maxlength="2000" placeholder="이어서 물어보세요" aria-label="메시지"></textarea>
+          <textarea id="chat-input" class="cin" rows="1" maxlength="2000" placeholder="${quoted ? "고른 부분에 대해 물어보세요 (비워 두면 더 자세히 설명해요)" : "이어서 물어보세요"}" aria-label="메시지"></textarea>
           ${voiceMeterHTML}
           <button type="button" class="icon-btn mic-btn" data-mic title="음성 입력" aria-label="음성 입력"><i data-lucide="mic"></i></button>
           ${busy ? `<button type="submit" class="send stop" aria-label="답변 멈추기" title="답변 멈추기">${STOP_SVG}</button>`
@@ -1749,7 +1752,7 @@
     const input = $("#chat-input"), btn = $("#chat-form .send");
     if (draft.sid === id && draft.text) input.value = draft.text; // 다시 그려도 쓰던 글은 남긴다
     input.addEventListener("input", () => (draft = { sid: id, text: input.value }));
-    const sync = () => (btn.disabled = !busy && (!(input.value.trim() || attach.count) || attach.busy));
+    const sync = () => (btn.disabled = !busy && (!(input.value.trim() || attach.count || quoted) || attach.busy));
     const attach = bindAttach($("#chat-form"), { onChange: () => sync() });
     growInput(input);
     input.addEventListener("input", sync);
@@ -1762,9 +1765,10 @@
       if (id.startsWith("tmp")) return toast("대화를 저장하는 중이에요. 잠시만 기다려 주세요");
       const text = input.value.trim();
       if (attach.busy) return toast("파일을 올리는 중이에요. 잠시만 기다려 주세요");
-      if (!text && !attach.count) return;
+      if (!text && !attach.count && !quoted) return;
       draft = { sid: null, text: "" };
-      ask({ sessionId: id, text, files: attach.take() });
+      chatQuote = null;
+      ask({ sessionId: id, text, files: attach.take(), quote: quoted || null });
       renderChat(id);
       [...$$(".thread .msg.user")].at(-1)?.classList.add("sent");
       $("#chat-input").focus();
@@ -1777,6 +1781,7 @@
     view.onclick = (e) => {
       const f = e.target.closest("[data-file-open]");
       if (f) return openMessageFile(f.dataset.fileOpen);
+      if (e.target.closest("[data-unquote]")) { chatQuote = null; renderChat(id, { keepScroll: true }); return $("#chat-input").focus(); }
       const cp = e.target.closest("[data-copy]");
       if (cp) {
         navigator.clipboard?.writeText(s.messages[Number(cp.dataset.copy)]?.text ?? "").then(() => toast("질문을 복사했어요"), () => toast("복사하지 못했어요"));
@@ -3132,13 +3137,13 @@
   let askPop = null;
 
   // 고른 글 → 문항 + 인용 글. KaTeX 수식은 화면 글자 대신 원래 LaTeX($…$)로 바꿔 AI 가 식을 정확히 읽게 한다
-  function selectedQuote() {
+  function selectedQuote(itemSel = ".ak-item") {
     const sel = getSelection();
     if (!sel || sel.isCollapsed || !sel.rangeCount) return null;
     const range = sel.getRangeAt(0).cloneRange();
     const el = (n) => (n.nodeType === 1 ? n : n.parentElement);
-    const item = el(range.startContainer)?.closest(".ak-item");
-    if (!item || item !== el(range.endContainer)?.closest(".ak-item")) return null;
+    const item = el(range.startContainer)?.closest(itemSel);
+    if (!item || item !== el(range.endContainer)?.closest(itemSel)) return null;
     const k0 = el(range.startContainer).closest(".katex"), k1 = el(range.endContainer).closest(".katex");
     if (k0) range.setStartBefore(k0);
     if (k1) range.setEndAfter(k1);
@@ -3154,22 +3159,42 @@
   }
 
   function hideAskPop() { askPop?.remove(); askPop = null; }
+  // 고른 글 바로 위(자리가 없으면 아래) 가운데에 띄운다
+  function placePop(pop, rect) {
+    const w = pop.offsetWidth, h = pop.offsetHeight;
+    pop.style.left = `${Math.min(innerWidth - w - 8, Math.max(8, rect.left + rect.width / 2 - w / 2))}px`;
+    pop.style.top = `${rect.top - h - 10 > 8 ? rect.top - h - 10 : rect.bottom + 10}px`;
+  }
   function showAskPop() {
     hideAskPop();
-    if (route().parts[0] !== "answer-key") return;
-    const q = selectedQuote();
+    const [page, pageId] = route().parts;
+    const inChat = page === "chat";
+    if (page !== "answer-key" && !inChat) return;
+    // 대화에서는 AI 답변의 글을 고르면 '답글' — 그 부분을 인용해 더 깊게 묻는다
+    const q = selectedQuote(inChat ? ".msg.ai:not(.pending) .ai-body" : ".ak-item");
     if (!q) return;
     askPop = document.createElement("button");
     askPop.type = "button";
     askPop.className = "ask-pop";
-    askPop.innerHTML = '<i data-lucide="message-square-quote"></i>답변';
+    askPop.innerHTML = inChat ? '답글<i data-lucide="reply"></i>' : '<i data-lucide="message-square-quote"></i>답변';
+    if (inChat) {
+      document.body.append(askPop);
+      lucide.createIcons();
+      placePop(askPop, q.rect);
+      askPop.onmousedown = (e) => e.preventDefault();
+      askPop.onclick = () => {
+        hideAskPop();
+        getSelection().removeAllRanges();
+        if (Store.isPending(pageId)) return toast("답이 끝난 뒤에 답글을 달 수 있어요");
+        chatQuote = { sid: pageId, text: q.text };
+        renderChat(pageId, { keepScroll: true });
+        $("#chat-input")?.focus();
+      };
+      return;
+    }
     document.body.append(askPop);
     lucide.createIcons();
-    const w = askPop.offsetWidth, h = askPop.offsetHeight;
-    const left = Math.min(innerWidth - w - 8, Math.max(8, q.rect.left + q.rect.width / 2 - w / 2));
-    const top = q.rect.top - h - 10 > 8 ? q.rect.top - h - 10 : q.rect.bottom + 10;
-    askPop.style.left = `${left}px`;
-    askPop.style.top = `${top}px`;
+    placePop(askPop, q.rect);
     askPop.onmousedown = (e) => e.preventDefault(); // 누르는 순간 선택이 풀리지 않게
     askPop.onclick = () => {
       hideAskPop();

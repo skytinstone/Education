@@ -149,3 +149,30 @@ def test_edit_question_replaces_it_and_drops_later_turns(client, auth, monkeypat
     # AI 답변이나 남의 대화는 고칠 수 없다
     ai_id = msgs[1]["id"]
     assert client.post(f"/api/sessions/{s['id']}/messages/{ai_id}/edit", json={"text": "x"}, headers=auth).status_code == 404
+
+
+# ---------- 답글: 고른 부분을 더 깊게 ----------
+def test_quote_reply_explains_deeper_with_context(client, auth, db, monkeypatch):
+    pid = client.post("/api/projects", json={"name": "편입 수학", "subject_id": "math.calculus"}, headers=auth).json()["id"]
+    monkeypatch.setattr(tutor, "get_llm", lambda: None)
+    s = client.post("/api/sessions", json={"text": "치환적분 1문제", "project_id": pid}, headers=auth).json()
+
+    llm = FakeLLM([], [integral()])  # 판단(Route) 없이 바로 풀이
+    monkeypatch.setattr(tutor, "get_llm", lambda: llm)
+    quote = "학습 범위: 과목 전체"
+    out = client.post(f"/api/sessions/{s['id']}/messages", json={"text": "", "quote": quote}, headers=auth).json()
+    user, ai = out
+    assert user["quote"] == quote and user["text"] == "이 부분을 더 자세히 설명해 줘"
+    assert ai["intent"] == "deep" and ai["explanation"] and "고른 부분을 더 자세히" in ai["text"]
+    prompt = llm.prompts[Explanation][0]
+    assert f"[인용한 부분]\n{quote}" in prompt and "[이전 대화]" in prompt and "학습 범위: 과목 전체 (단원:" in prompt
+    assert not llm.prompts[Route]
+    assert db.scalar(select(m.LLMCall.purpose).where(m.LLMCall.purpose == "deep")) == "deep"
+    assert client.get("/api/sync", headers=auth).json()["sessions"][0]["messages"][2]["quote"] == quote
+
+
+def test_quote_needs_ai(client, auth, monkeypatch):
+    monkeypatch.setattr(tutor, "get_llm", lambda: None)
+    s = client.post("/api/sessions", json={"text": "치환적분 1문제"}, headers=auth).json()
+    ai = client.post(f"/api/sessions/{s['id']}/messages", json={"text": "왜?", "quote": "부분적분"}, headers=auth).json()[1]
+    assert ai["intent"] == "deep" and "AI" in ai["text"] and ai["problems"] == []

@@ -36,17 +36,17 @@ def _stopped(db: Session, ref: UUID | None) -> bool:
 
 
 def _converse(db: Session, user: m.User, s: m.ChatSession, text: str, files: list[m.ChatFile],
-              ref: UUID | None = None) -> list[m.Message]:
+              ref: UUID | None = None, quote: str | None = None) -> list[m.Message]:
     """학생 메시지(와 첨부)를 남기고 답변을 만든다. 도중에 '멈추기'(ref)가 오면 질문만 남기고 '중단했어요' 로 답한다."""
     project = db.get(m.Project, s.project_id) if s.project_id else None
     try:
         r = tutor.reply_full(db, user, text, project, files=chat_files.attachments(files) if files else None, session=s,
-                             should_stop=lambda: _stopped(db, ref))
+                             quote=quote, should_stop=lambda: _stopped(db, ref))
         if _stopped(db, ref):  # 답을 다 만든 뒤에 멈췄어도 학생이 멈춘 쪽을 따른다
             raise tutor.Stopped
     except tutor.Stopped:
         r = tutor.Reply(STOPPED_TEXT, intent="stopped")
-    msgs = [m.Message(session_id=s.id, role="user", text=text),
+    msgs = [m.Message(session_id=s.id, role="user", text=text, quote=quote),
             m.Message(session_id=s.id, role="ai", text=r.text, problem_ids=r.problem_ids, explanation=r.explanation,
                       intent=r.intent, suggestions=r.suggestions)]
     db.add_all(msgs)
@@ -60,7 +60,7 @@ def _converse(db: Session, user: m.User, s: m.ChatSession, text: str, files: lis
 
 
 def _message_out(db: Session, user: m.User, msg: m.Message) -> MessageOut:
-    return MessageOut(id=msg.id, role=msg.role, text=msg.text, created_at=msg.created_at, explanation=msg.explanation,
+    return MessageOut(id=msg.id, role=msg.role, text=msg.text, quote=msg.quote, created_at=msg.created_at, explanation=msg.explanation,
                       intent=msg.intent, suggestions=msg.suggestions or [],
                       attachments=[ChatFileOut.model_validate(f) for f in msg.attachments],
                       problems=learning.problem_views(db, user, msg.problem_ids, session_id=msg.session_id))
@@ -141,7 +141,7 @@ def create_session(body: SessionIn, user: CurrentUser, db: DB) -> SessionDetail:
     s = m.ChatSession(user_id=user.id, project_id=body.project_id, title=title if len(title) <= 24 else f"{title[:24]}…")
     db.add(s)
     db.flush()
-    _converse(db, user, s, body.text, files, body.ref)
+    _converse(db, user, s, body.text, files, body.ref, body.quote)
     return session_detail(db, user, s)
 
 
@@ -163,7 +163,7 @@ def get_session(session_id: UUID, user: CurrentUser, db: DB) -> SessionDetail:
 def send_message(session_id: UUID, body: MessageIn, user: CurrentUser, db: DB) -> list[MessageOut]:
     s = owned(db, m.ChatSession, session_id, user)
     files = _claim(db, user, body.attachment_ids)
-    return [_message_out(db, user, msg) for msg in _converse(db, user, s, body.text, files, body.ref)]
+    return [_message_out(db, user, msg) for msg in _converse(db, user, s, body.text, files, body.ref, body.quote)]
 
 
 @router.post("/{session_id}/messages/{message_id}/edit")
@@ -174,7 +174,7 @@ def edit_message(session_id: UUID, message_id: UUID, body: MessageEdit, user: Cu
     if target is None or target.session_id != s.id or target.role != "user":
         raise HTTPException(status.HTTP_404_NOT_FOUND, "고칠 질문을 찾을 수 없어요")
     later = list(db.scalars(select(m.Message).where(m.Message.session_id == s.id, m.Message.created_at >= target.created_at)))
-    keep = list(target.attachments)
+    keep, quote = list(target.attachments), target.quote
     for f in keep:  # 고친 질문의 첨부는 지우지 않고 새 질문에 다시 붙인다
         f.message_id = None
     db.flush()
@@ -183,7 +183,7 @@ def edit_message(session_id: UUID, message_id: UUID, body: MessageEdit, user: Cu
         db.delete(x)
     db.flush()
     db.expire(s, ["messages"])
-    _converse(db, user, s, body.text, keep, body.ref)
+    _converse(db, user, s, body.text, keep, body.ref, quote)
     chat_files.remove_disk(dropped)
     return session_detail(db, user, s)
 

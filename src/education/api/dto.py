@@ -347,19 +347,27 @@ class ProjectSummary(BaseModel):
 FILE_ONLY_TEXT = "첨부한 자료를 보고 풀이해 줘"
 
 
+QUOTE_ONLY_TEXT = "이 부분을 더 자세히 설명해 줘"  # 답글에 글 없이 보냈을 때 (화면 store.js 와 같게)
+
+
 class MessageIn(BaseModel):
     """글이나 첨부(POST /sessions/files 로 먼저 올린 id) 중 하나는 있어야 한다. 첨부만 보내면 기본 요청 문장을 쓴다."""
     text: str = Field(default="", max_length=2000)
     attachment_ids: list[UUID] = Field(default_factory=list, max_length=5)
     ref: UUID | None = None  # 화면이 붙인 요청 표시 — '답변 멈추기'(POST /sessions/stop)가 이걸로 가리킨다
+    quote: str | None = Field(default=None, max_length=1500)  # 답글: 앞 답변에서 고른 부분
 
     @model_validator(mode="after")
     def _text_or_files(self):
         self.text = self.text.strip()
+        self.quote = (self.quote or "").strip() or None
         if not self.text:
-            if not self.attachment_ids:
+            if self.quote:
+                self.text = QUOTE_ONLY_TEXT
+            elif not self.attachment_ids:
                 raise ValueError("질문을 입력하거나 파일을 첨부해 주세요")
-            self.text = FILE_ONLY_TEXT
+            else:
+                self.text = FILE_ONLY_TEXT
         return self
 
 
@@ -410,6 +418,7 @@ class MessageOut(BaseModel):
     id: UUID
     role: str
     text: str
+    quote: str | None = None  # 답글이 인용한 부분
     attachments: list[ChatFileOut] = []
     problems: list[ProblemView]
     explanation: dict | None = None  # 계산·설명 질문의 풀이 (services/explain.py)

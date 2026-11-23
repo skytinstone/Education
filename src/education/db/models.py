@@ -389,6 +389,8 @@ class Message(Base):
     session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True)
     role: Mapped[str] = mapped_column(String(8))  # user | ai
     text: Mapped[str] = mapped_column(Text)
+    # 답글: 학생이 앞 답변에서 드래그해 고른 부분 — 그 부분을 더 깊게 묻는 질문이다 (학생 메시지에만)
+    quote: Mapped[str | None] = mapped_column(Text)
     problem_ids: Mapped[list[str]] = mapped_column(ARRAY(String(64)), server_default="{}")
     # 계산·설명 질문의 풀이 (결과·원리·단계·그래프·검산, services/explain.py). 문제를 낸 답변이면 비어 있다
     explanation: Mapped[dict | None] = mapped_column(JSONB)

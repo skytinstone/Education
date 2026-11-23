@@ -181,9 +181,10 @@ const Store = (() => {
     };
   }
   const toFile = (f) => ({ id: f.id, name: f.filename, mime: f.content_type, size: f.size_bytes });
-  const toMessage = (msg) => ({ id: msg.id, role: msg.role, text: msg.text, problemIds: msg.problems.map((p) => p.id), explanation: msg.explanation ?? null,
+  const toMessage = (msg) => ({ id: msg.id, role: msg.role, text: msg.text, quote: msg.quote ?? null, problemIds: msg.problems.map((p) => p.id), explanation: msg.explanation ?? null,
     intent: msg.intent ?? null, suggestions: msg.suggestions ?? [], files: (msg.attachments ?? []).map(toFile), at: Date.parse(msg.created_at) });
   const FILE_ONLY_TEXT = "첨부한 자료를 보고 풀이해 줘"; // 서버(dto.FILE_ONLY_TEXT)와 같게
+  const QUOTE_ONLY_TEXT = "이 부분을 더 자세히 설명해 줘"; // 서버(dto.QUOTE_ONLY_TEXT)와 같게
   let drivePromise = null;
   const fileUrls = new Map(); // 첨부 id → blob URL (인증 헤더가 필요해 <img src> 로 바로 못 불러온다)
   const PROJECT_KEYS = { name: "name", subjectId: "subject_id", unitIds: "unit_ids", goal: "goal", textbook: "textbook", textbookIsbn: "textbook_isbn", examDate: "exam_date", questionType: "question_type", pinned: "pinned" };
@@ -415,9 +416,10 @@ const Store = (() => {
 
     // 질문 보내기 — 새 대화면 sessionId 없이. 바로 대화 id 를 돌려주고, 답은 나중에 도착한다(Store.isPending)
     // files: uploadChatFile 로 먼저 올린 첨부 [{ id, name, mime, size }] — 글 없이 첨부만 보내도 된다
-    sendMessage({ sessionId = null, projectId = null, text, files = [] }) {
+    sendMessage({ sessionId = null, projectId = null, text, files = [], quote = null }) {
       const now = Date.now();
-      if (!text && files.length) text = FILE_ONLY_TEXT;
+      if (!text && quote) text = QUOTE_ONLY_TEXT;
+      else if (!text && files.length) text = FILE_ONLY_TEXT;
       let s = sessionId && q.session(sessionId);
       if (!s) {
         const title = text === FILE_ONLY_TEXT && files.length ? files[0].name : text;
@@ -425,19 +427,19 @@ const Store = (() => {
           createdAt: now, updatedAt: now, messages: [] };
         state.sessions.push(s);
       }
-      const um = { role: "user", text, files, at: now };
+      const um = { role: "user", text, quote, files, at: now };
       s.messages.push(um);
       const attachment_ids = files.map((f) => f.id);
       const isNew = !sessionId;
       return track(s, um, local ? null : (ref) => (isNew
-        ? api("/sessions", { method: "POST", body: { text, attachment_ids, project_id: projectId, ref } })
-        : api(`/sessions/${s.id}/messages`, { method: "POST", body: { text, attachment_ids, ref } })));
+        ? api("/sessions", { method: "POST", body: { text, attachment_ids, project_id: projectId, ref, quote } })
+        : api(`/sessions/${s.id}/messages`, { method: "POST", body: { text, attachment_ids, ref, quote } })));
     },
     // 보낸 질문 고치기 — 그 질문부터 뒤를 지우고 고친 글로 다시 묻는다 (첨부는 그대로). index: 대화 안 메시지 위치
     editMessage({ sessionId, index, text }) {
       const s = q.session(sessionId), old = s?.messages[index];
       if (!old || old.role !== "user" || (!local && !old.id)) return null;
-      const um = { role: "user", text, files: old.files ?? [], at: Date.now() };
+      const um = { role: "user", text, quote: old.quote ?? null, files: old.files ?? [], at: Date.now() };
       s.messages.splice(index, s.messages.length - index, um);
       return track(s, um, local ? null : (ref) =>
         api(`/sessions/${s.id}/messages/${old.id}/edit`, { method: "POST", body: { text, ref } }));

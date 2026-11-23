@@ -165,8 +165,12 @@ def facts_text(db: Session, user: m.User, project: m.Project | None) -> str:
 
     subject = db.get(m.Concept, project.subject_id)
     units = [c.name for c in db.scalars(select(m.Concept).where(m.Concept.id.in_(project.unit_ids)))] if project.unit_ids else []
-    lines += [f"프로젝트: {project.name}", f"과목: {subject.name if subject else project.subject_id}",
-              f"학습 범위: {', '.join(units) if units else '과목 전체'}"]
+    if units:
+        scope = ", ".join(units)
+    else:  # 과목 전체 — 어떤 단원이 들어 있는지도 알려 준다
+        all_units = list(db.scalars(select(m.Concept.name).where(m.Concept.parent_id == project.subject_id).limit(30)))
+        scope = f"과목 전체 (단원: {', '.join(all_units)})" if all_units else "과목 전체"
+    lines += [f"프로젝트: {project.name}", f"과목: {subject.name if subject else project.subject_id}", f"학습 범위: {scope}"]
     if project.goal:
         lines.append(f"목표: {project.goal}")
     if project.textbook:
@@ -196,3 +200,16 @@ def facts_text(db: Session, user: m.User, project: m.Project | None) -> str:
     else:
         lines.append("최근 시험: 아직 없음")
     return "\n".join(lines)
+
+
+def deep_prompt(db: Session, user: m.User, *, text: str, quote: str, session: m.ChatSession | None,
+                project: m.Project | None) -> str:
+    """답글(인용해서 더 깊게 묻기)에 넘길 자료 — 학습 현황·이전 대화·인용한 부분·질문."""
+    nl = "\n"
+    parts = []
+    if project is not None:
+        parts.append(f"[학습 현황]{nl}{facts_text(db, user, project)}")
+    if hist := history_text(db, user, session):
+        parts.append(f"[이전 대화]{nl}{hist}")
+    parts += [f"[인용한 부분]{nl}{quote}", f"[학생 질문]{nl}{text}"]
+    return (nl * 2).join(parts)

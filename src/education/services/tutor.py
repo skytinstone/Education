@@ -85,7 +85,7 @@ class Reply:
 
 def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
                files: list[Attachment] | None = None, session: m.ChatSession | None = None,
-               should_stop=lambda: False) -> Reply:
+               quote: str | None = None, should_stop=lambda: False) -> Reply:
     """대화 답변 하나. 무엇을 할지는 이전 대화·학습 현황과 함께 판단한다 (services/intent.py).
     - 문제 요청 → 새 문제 (실패하면 문제 은행) · 계산·설명 → 풀이 · 현황 보고·일반 질문·되묻기 → 글로 답
     - 사진·PDF 를 첨부했으면 그 자료를 읽고 풀이로 답한다 (AI 가 있어야 함).
@@ -98,6 +98,9 @@ def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
     if files:
         checkpoint()
         return _files_reply(db, llm, user, text, files)
+    if quote:
+        checkpoint()
+        return _deep_reply(db, llm, user, text, quote, session, project)
     if llm and quota.exceeded(db, user):  # 하루 한도를 넘으면 AI 없이 문제 은행에서
         ids = _from_bank(db, user, text, detect_domain(text), None)
         return Reply((f"오늘 쓸 수 있는 AI 사용량을 다 써서, 문제 은행의 검증된 문제 {len(ids)}개를 보여드려요. 내일 다시 AI 로 만들어 드릴게요."
@@ -128,6 +131,22 @@ def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
         except LLMError as e:
             log.warning("AI 풀이 실패: %s", e)
     return Reply(*reply(db, user, request, project), intent="make_problems")
+
+
+def _deep_reply(db: Session, llm, user: m.User, text: str, quote: str, session: m.ChatSession | None,
+                project: m.Project | None) -> Reply:
+    """답글: 앞 답변에서 고른 부분을 이전 대화·학습 현황과 함께 더 깊고 자세하게 풀어 준다 (판단 없이 바로 풀이 모델)."""
+    if llm is None:
+        return Reply("고른 부분을 자세히 풀어 드리려면 AI 가 켜져 있어야 해요.", intent="deep")
+    if quota.exceeded(db, user):
+        return Reply(quota.MESSAGE, intent="quota")
+    prompt = intent.deep_prompt(db, user, text=text, quote=quote, session=session, project=project)
+    try:
+        line, payload = explain.explain(db, llm, user, text, prompt=prompt, instructions=explain.DEEP_INSTRUCTIONS, purpose="deep")
+    except LLMError as e:
+        log.warning("답글 풀이 실패: %s", e)
+        return Reply("고른 부분을 풀어 드리지 못했어요. 잠시 후 다시 보내 주세요.", intent="deep")
+    return Reply(line.replace("풀이를 정리", "고른 부분을 더 자세히 정리", 1), explanation=payload, intent="deep")
 
 
 def _files_reply(db: Session, llm, user: m.User, text: str, files: list[Attachment]) -> Reply:
