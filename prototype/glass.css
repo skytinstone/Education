@@ -176,7 +176,7 @@
 .send:not(:disabled):hover, .ask-send:not(:disabled):hover { background: linear-gradient(180deg, #3f76ff, var(--blue-2)) !important; transform: scale(1.06); }
 .send:not(:disabled):active, .ask-send:not(:disabled):active { transform: scale(0.94); }
 /* 글자를 쓰기 시작하면 입력창 테두리도 파랑으로 */
-.composer { transition: box-shadow .25s; }
+.composer { transition: box-shadow .25s, width .28s cubic-bezier(.2,.8,.2,1); }
 .composer:focus-within { box-shadow: 0 12px 40px rgba(31, 41, 80, 0.1), inset 0 1px 0 #fff, 0 0 0 1.5px rgba(47, 107, 255, 0.35) !important; }
 .composer:has(input:not(:placeholder-shown)), .composer:has(textarea:not(:placeholder-shown)) {
   box-shadow: 0 12px 40px rgba(47, 107, 255, 0.16), inset 0 1px 0 #fff, 0 0 0 1.5px var(--blue) !important;
@@ -448,3 +448,53 @@
 
 /* 아이콘을 뺀 자리: 확인이 필요한 분석 줄은 색으로 알린다 */
 .ws-insights li.warn { background: rgba(249,115,22,.08) !important; color: #9a3412; }
+
+/* 대화 입력창: 쓰는 만큼 아래로 늘어난다 (app.js growInput) */
+.composer .cin {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; resize: none;
+  font: inherit; font-size: 15px; line-height: 22px; padding: 8px 4px; color: inherit;
+  height: 38px; max-height: 40vh; overflow-y: hidden; scrollbar-width: thin;
+  transition: height .14s cubic-bezier(.2,.8,.2,1);
+}
+.composer .cin::placeholder { color: var(--ink-3); }
+/* 대화 화면 아래 입력창은 대화 폭만큼 (홈 입력창의 margin:auto 때문에 글자 폭으로 줄어들던 것) */
+.chat-view .chat-composer { margin: 0 auto; width: 600px; max-width: 100%; }
+/* 쓰는 만큼 옆으로 넓어지는 폭 (app.js growInput) — 끝까지 넓어지면 아래로 늘어난다 */
+#composer { --grow-min: 650; --grow-max: 880; }
+.chat-composer { --grow-min: 600; --grow-max: 760; }
+/* 여러 줄: 글이 위 줄 전체를 쓰고, 첨부·프로젝트·마이크·보내기는 아래 줄 (첨부 미리보기는 그보다 위) */
+.composer.multiline { flex-wrap: wrap; border-radius: 24px; row-gap: 2px; }
+.composer.multiline .cin { order: -1; flex-basis: 100%; padding: 8px 8px 4px; }
+.composer.multiline .attach-tray { order: -2; }
+.composer.multiline .mic-btn { margin-left: auto; }
+@media (prefers-reduced-motion: reduce) { .composer .cin { transition: none; } }
+
+/* AI 답변: 줄바꿈을 살리고, 마지막 답 아래에 '이어서 보낼 요청' 버튼 */
+.ai-text { white-space: pre-line; }
+.suggest { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.suggest-chip {
+  border: 1px solid rgba(47, 107, 255, .22); background: #fff; color: #1d4fe0; border-radius: 999px;
+  padding: 7px 14px; font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;
+  transition: background .15s, border-color .15s, transform .15s;
+}
+.suggest-chip:hover { background: #eef3ff; border-color: rgba(47, 107, 255, .45); }
+.suggest-chip:active { transform: scale(.97); }
+
+/* 보낸 질문: 마우스를 올리면 복사·고치기 (터치 화면에선 늘 흐리게 보임) */
+.msg-tools { display: flex; justify-content: flex-end; gap: 2px; margin: 2px 0 -12px; opacity: 0; transition: opacity .15s; }
+.msg.user:hover .msg-tools, .msg-tools:focus-within { opacity: 1; }
+@media (hover: none) { .msg-tools { opacity: .6; } }
+.msg-tools .icon-btn { width: 28px; height: 28px; }
+.msg-tools .icon-btn svg { width: 14px; height: 14px; }
+/* 질문 고치기 */
+.msg.user.editing { align-self: stretch; max-width: 100%; }
+.edit-box { width: 100%; background: #fff; border-radius: 18px; padding: 12px 14px 10px;
+  box-shadow: 0 0 0 1.5px var(--blue, #2f6bff), 0 10px 30px rgba(47,107,255,.12); animation: riseUp .25s ease both; }
+.edit-input { width: 100%; border: 0; outline: 0; resize: none; background: transparent; font: inherit; font-size: 15px; line-height: 22px; color: inherit; }
+.edit-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.edit-actions .mini { margin-right: auto; color: var(--ink-3); font-size: 12px; }
+.edit-actions button { padding: 7px 14px; border-radius: 999px; font-size: 13px; }
+/* 답변 멈추기 버튼 · 멈춘 답 */
+.send.stop { background: var(--ink, #0f172a) !important; color: #fff; opacity: 1 !important; animation: none; }
+.send.stop:hover { transform: scale(1.06); }
+.msg.ai.stopped .ai-text { color: var(--ink-3); font-size: 13.5px; }

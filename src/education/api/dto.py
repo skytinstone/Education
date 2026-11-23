@@ -351,6 +351,7 @@ class MessageIn(BaseModel):
     """글이나 첨부(POST /sessions/files 로 먼저 올린 id) 중 하나는 있어야 한다. 첨부만 보내면 기본 요청 문장을 쓴다."""
     text: str = Field(default="", max_length=2000)
     attachment_ids: list[UUID] = Field(default_factory=list, max_length=5)
+    ref: UUID | None = None  # 화면이 붙인 요청 표시 — '답변 멈추기'(POST /sessions/stop)가 이걸로 가리킨다
 
     @model_validator(mode="after")
     def _text_or_files(self):
@@ -364,6 +365,16 @@ class MessageIn(BaseModel):
 
 class SessionIn(MessageIn):
     project_id: UUID | None = None
+
+
+class MessageEdit(BaseModel):
+    """보낸 질문 고치기 — 그 질문부터 뒤의 대화를 지우고 고친 글로 다시 묻는다 (첨부는 그대로)."""
+    text: str = Field(min_length=1, max_length=2000)
+    ref: UUID | None = None
+
+
+class StopIn(BaseModel):
+    ref: UUID
 
 
 class SessionPatch(BaseModel):
@@ -402,6 +413,8 @@ class MessageOut(BaseModel):
     attachments: list[ChatFileOut] = []
     problems: list[ProblemView]
     explanation: dict | None = None  # 계산·설명 질문의 풀이 (services/explain.py)
+    intent: str | None = None  # 어떤 요청으로 판단했는지 (services/intent.py) · stopped = 학생이 멈춤
+    suggestions: list[str] = []  # 답 아래 '이어서 보낼 요청' 버튼
     created_at: datetime
 
 

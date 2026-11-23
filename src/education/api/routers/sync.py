@@ -55,8 +55,8 @@ def sync(user: CurrentUser, db: DB) -> dict:
         "sessions": [{
             "id": str(s.id), "projectId": str(s.project_id) if s.project_id else None, "title": s.title,
             "createdAt": ms(s.created_at), "updatedAt": ms(s.updated_at),
-            "messages": [{"role": x.role, "text": x.text, "problemIds": x.problem_ids, "explanation": x.explanation,
-                          "files": files.get(x.id, []), "at": ms(x.created_at)} for x in s.messages],
+            "messages": [{"id": str(x.id), "role": x.role, "text": x.text, "problemIds": x.problem_ids, "explanation": x.explanation,
+                          "intent": x.intent, "suggestions": x.suggestions or [], "files": files.get(x.id, []), "at": ms(x.created_at)} for x in s.messages],
         } for s in sessions],
         "attempts": [{
             "id": str(a.id), "problemId": a.problem_id, "projectId": str(a.project_id) if a.project_id else None,

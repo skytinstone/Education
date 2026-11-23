@@ -98,6 +98,8 @@ const Store = (() => {
   let state = null;
   let bank = {};              // 문제 id → 문제 (서버 모드에선 정답·해설은 푼 문제만)
   const pending = new Set();  // 답변을 기다리는 대화 id
+  const inflight = {};        // 대화 id → { ref, stub } — '답변 멈추기' 에 쓴다 (ref: 서버에 보낸 요청 표시)
+  const STOPPED_TEXT = "답변을 중단했어요."; // 서버(sessions.STOPPED_TEXT)와 같게
   const renamed = {};         // 임시 대화 id → 서버가 준 id
   let onError = () => {};
 
@@ -179,8 +181,8 @@ const Store = (() => {
     };
   }
   const toFile = (f) => ({ id: f.id, name: f.filename, mime: f.content_type, size: f.size_bytes });
-  const toMessage = (msg) => ({ role: msg.role, text: msg.text, problemIds: msg.problems.map((p) => p.id), explanation: msg.explanation ?? null,
-    files: (msg.attachments ?? []).map(toFile), at: Date.parse(msg.created_at) });
+  const toMessage = (msg) => ({ id: msg.id, role: msg.role, text: msg.text, problemIds: msg.problems.map((p) => p.id), explanation: msg.explanation ?? null,
+    intent: msg.intent ?? null, suggestions: msg.suggestions ?? [], files: (msg.attachments ?? []).map(toFile), at: Date.parse(msg.created_at) });
   const FILE_ONLY_TEXT = "첨부한 자료를 보고 풀이해 줘"; // 서버(dto.FILE_ONLY_TEXT)와 같게
   let drivePromise = null;
   const fileUrls = new Map(); // 첨부 id → blob URL (인증 헤더가 필요해 <img src> 로 바로 못 불러온다)
@@ -343,6 +345,47 @@ const Store = (() => {
 
   // ================= 변경 =================
   const local = MODE === "local";
+  // 질문을 보내고 답을 기다리는 공통 부분 — 바로 대화 id 를 돌려주고, 답은 나중에 도착한다(Store.isPending).
+  // request(ref): 서버 요청 (새 대화·고치기면 대화 전체, 이어 묻기면 [질문, 답]). 로컬 모드면 null
+  const uuid4 = () => crypto.randomUUID?.() ?? "10000000-1000-4000-8000-100000000000".replace(/[018]/g, (c) =>
+    (c ^ (crypto.getRandomValues(new Uint8Array(1))[0] & (15 >> (c / 4)))).toString(16));
+  function track(s, um, request) {
+    const id = s.id;
+    s.updatedAt = Date.now();
+    pending.add(id);
+    const f = (inflight[id] = { ref: local ? null : uuid4(), stub: null });
+    commit();
+    // 화면에 먼저 넣은 질문(과 멈췄으면 '중단했어요')을 서버가 돌려준 것으로 바꾼다
+    const replace = (msgs) => {
+      const i = s.messages.indexOf(um);
+      if (i >= 0) s.messages.splice(i, f.stub && s.messages[i + 1] === f.stub ? 2 : 1, ...msgs);
+    };
+    const done = local
+      ? new Promise((resolve) => setTimeout(() => {
+          if (f.stub) return resolve(id);
+          const domain = CONCEPTS.find((c) => c.id === q.project(s.projectId)?.subjectId)?.domain;
+          s.messages.push({ ...localReply(um.text, domain), at: Date.now() });
+          s.updatedAt = Date.now();
+          resolve(id);
+        }, 800))
+      : request(f.ref).then((res) => {
+          if (Array.isArray(res)) { // 이어 묻기: [질문, 답]
+            res.forEach((msg) => msg.problems.forEach(mergeProblem));
+            replace(res.map(toMessage));
+            s.updatedAt = Date.now();
+            return id;
+          }
+          const real = toSession(res); // 새 대화·고치기: 대화 전체
+          if (real.id === id) { s.messages = real.messages; s.updatedAt = real.updatedAt; return id; }
+          state.sessions = state.sessions.map((x) => (x.id === id ? real : x));
+          renamed[id] = real.id;
+          return real.id;
+        });
+    done.catch((e) => {
+      if (!f.stub) s.messages.push({ role: "ai", text: `답변을 만들지 못했어요: ${e.message}`, problemIds: [], at: Date.now() });
+    }).finally(() => { if (inflight[id] === f) delete inflight[id]; pending.delete(id); commit(); });
+    return { id, done };
+  }
   const ops = {
     async createProject({ name, subjectId, unitIds = [], goal = "", textbook = "", textbookIsbn = null, examDate = null, questionType = "auto" }) {
       if (local) {
@@ -382,37 +425,33 @@ const Store = (() => {
           createdAt: now, updatedAt: now, messages: [] };
         state.sessions.push(s);
       }
-      s.messages.push({ role: "user", text, files, at: now });
+      const um = { role: "user", text, files, at: now };
+      s.messages.push(um);
       const attachment_ids = files.map((f) => f.id);
-      s.updatedAt = now;
-      const id = s.id;
-      pending.add(id);
+      const isNew = !sessionId;
+      return track(s, um, local ? null : (ref) => (isNew
+        ? api("/sessions", { method: "POST", body: { text, attachment_ids, project_id: projectId, ref } })
+        : api(`/sessions/${s.id}/messages`, { method: "POST", body: { text, attachment_ids, ref } })));
+    },
+    // 보낸 질문 고치기 — 그 질문부터 뒤를 지우고 고친 글로 다시 묻는다 (첨부는 그대로). index: 대화 안 메시지 위치
+    editMessage({ sessionId, index, text }) {
+      const s = q.session(sessionId), old = s?.messages[index];
+      if (!old || old.role !== "user" || (!local && !old.id)) return null;
+      const um = { role: "user", text, files: old.files ?? [], at: Date.now() };
+      s.messages.splice(index, s.messages.length - index, um);
+      return track(s, um, local ? null : (ref) =>
+        api(`/sessions/${s.id}/messages/${old.id}/edit`, { method: "POST", body: { text, ref } }));
+    },
+    // 답변 멈추기 — 화면에서는 바로 멈추고, 서버에는 다음 단계 전에 멈추라고 알린다 (도착한 결과는 서버 기록을 따른다)
+    stopMessage(id) {
+      const f = inflight[id];
+      if (!f || !pending.has(id)) return;
+      const s = q.session(id);
+      f.stub = { role: "ai", text: STOPPED_TEXT, intent: "stopped", problemIds: [], suggestions: [], at: Date.now() };
+      s?.messages.push(f.stub);
+      pending.delete(id);
       commit();
-
-      const done = local
-        ? new Promise((resolve) => setTimeout(() => {
-            const domain = CONCEPTS.find((c) => c.id === q.project(s.projectId)?.subjectId)?.domain;
-            s.messages.push({ ...localReply(text, domain), at: Date.now() });
-            s.updatedAt = Date.now();
-            resolve(id);
-          }, 800))
-        : (sessionId
-            ? api(`/sessions/${id}/messages`, { method: "POST", body: { text, attachment_ids } }).then((msgs) => {
-                msgs.forEach((msg) => msg.problems.forEach(mergeProblem));
-                s.messages.splice(-1, 1, ...msgs.map(toMessage));
-                s.updatedAt = Date.now();
-                return id;
-              })
-            : api("/sessions", { method: "POST", body: { text, attachment_ids, project_id: projectId } }).then((detail) => {
-                const real = toSession(detail);
-                state.sessions = state.sessions.map((x) => (x.id === id ? real : x));
-                renamed[id] = real.id;
-                return real.id;
-              }));
-      done.catch((e) => {
-        s.messages.push({ role: "ai", text: `답변을 만들지 못했어요: ${e.message}`, problemIds: [], at: Date.now() });
-      }).finally(() => { pending.delete(id); commit(); });
-      return { id, done };
+      if (f.ref) api("/sessions/stop", { method: "POST", body: { ref: f.ref } }).catch(() => {});
     },
     updateSession(id, patch) {
       Object.assign(q.session(id), patch);

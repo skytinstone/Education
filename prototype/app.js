@@ -513,6 +513,58 @@
   // ================= 홈 (새 학습) =================
   let homeProjectId = null;
   const prompt = $("#prompt"), send = $("#send");
+  // 입력창에 글을 채우고(예시 타일·추천) 높이와 보내기 버튼을 맞춘다
+  const setPrompt = (text, focus = true) => {
+    prompt.value = text;
+    prompt.dispatchEvent(new Event("input", { bubbles: true }));
+    if (focus) { prompt.focus(); prompt.setSelectionRange(text.length, text.length); }
+  };
+
+  // 대화 입력창: 쓰는 만큼 먼저 옆으로 넓어지고(--grow-min → --grow-max, 부모 폭까지), 끝까지 넓어지면 아래로 늘어난다
+  // (최대 화면의 40%, 그 뒤로는 안에서 스크롤). 한 줄에 들어가면 버튼과 같은 줄, 넘치면 글이 위 줄 전체를 쓰고 버튼은 아래 줄로.
+  // Enter 는 보내기, Shift+Enter 는 줄바꿈 — 한글 조합 중의 Enter 는 글자 확정이라 보내지 않는다
+  const measureCtx = document.createElement("canvas").getContext("2d");
+  function growInput(el) {
+    const form = el.closest("form");
+    const wide = form.classList.contains("composer");
+    const LINE = 40, SLACK = 16; // 한 줄 높이 기준 · 글 끝과 버튼 사이 여유
+    const measure = () => { el.style.height = "auto"; return el.scrollHeight; };
+    const textWidth = () => {
+      const cs = getComputedStyle(el);
+      measureCtx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+      return Math.max(0, ...el.value.split("\n").map((line) => measureCtx.measureText(line).width));
+    };
+    const fit = () => {
+      form.classList.remove("multiline");
+      let multi;
+      if (wide) {
+        const cs = getComputedStyle(form), parentW = form.parentElement.clientWidth;
+        const minW = Math.min(parseFloat(cs.getPropertyValue("--grow-min")) || 600, parentW);
+        const maxW = Math.min(parseFloat(cs.getPropertyValue("--grow-max")) || parentW, parentW);
+        // 입력창을 뺀 나머지(버튼·여백) 폭은 입력창 폭과 상관없이 일정하다 — 넓어지는 도중에 재도 된다
+        const padX = parseFloat(getComputedStyle(el).paddingLeft) + parseFloat(getComputedStyle(el).paddingRight);
+        const chrome = form.getBoundingClientRect().width - el.clientWidth + padX;
+        const need = textWidth() + chrome + SLACK;
+        multi = el.value.includes("\n") || need > maxW;
+        form.style.maxWidth = "none";
+        form.style.width = `${Math.round(multi ? maxW : Math.max(minW, need))}px`;
+      }
+      if (multi || (!wide && el.value && measure() > LINE)) form.classList.add("multiline");
+      const max = Math.round(window.innerHeight * 0.4), full = measure(), h = Math.min(full, max);
+      el.style.height = `${h}px`;
+      el.style.overflowY = full > max ? "auto" : "hidden";
+    };
+    el.addEventListener("input", fit);
+    // 넓어지는 움직임이 끝나면 높이를 다시 잰다 (도중의 폭으로 잰 높이를 바로잡는다)
+    if (wide) form.addEventListener("transitionend", (e) => { if (e.target === form && e.propertyName === "width") fit(); });
+    el.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || e.shiftKey || e.isComposing || e.keyCode === 229) return;
+      e.preventDefault();
+      form.requestSubmit();
+    });
+    requestAnimationFrame(fit);
+  }
+  window.addEventListener("resize", () => $$(".cin").forEach((el) => el.dispatchEvent(new Event("input"))), { passive: true });
 
   function renderHome(params) {
     if (params.has("project")) homeProjectId = Store.project(params.get("project")) ? params.get("project") : null;
@@ -594,7 +646,7 @@
       }
       const act = e.target.closest("[data-onboard]")?.dataset.onboard;
       if (act === "wizard") projectWizard();
-      else if (act === "try") { prompt.value = "로그 성질 3점짜리 2문제 내줘"; send.disabled = false; prompt.focus(); }
+      else if (act === "try") { setPrompt("로그 성질 3점짜리 2문제 내줘"); }
       else if (act === "upload") st.projects.length ? go(`/project/${st.projects[0].id}`) : projectWizard();
     };
   }
@@ -769,9 +821,7 @@
   $("#home").addEventListener("click", (e) => {
     const fill = e.target.closest("[data-fill]");
     if (fill) {
-      prompt.value = fill.dataset.fill;
-      send.disabled = false;
-      prompt.focus();
+      setPrompt(fill.dataset.fill);
       contentEl.scrollTo({ top: 0, behavior: "smooth" });
       return;
     }
@@ -808,6 +858,7 @@
   const syncHomeSend = () => (send.disabled = !(prompt.value.trim() || homeAttach.count) || homeAttach.busy);
   const homeAttach = bindAttach($("#composer"), { onChange: () => syncHomeSend() });
   prompt.addEventListener("input", syncHomeSend);
+  growInput(prompt);
   bindVoice($("#composer"));
   $("#composer").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -815,8 +866,7 @@
     if (homeAttach.busy) return toast("파일을 올리는 중이에요. 잠시만 기다려 주세요");
     if (!text && !homeAttach.count) return;
     const files = homeAttach.take();
-    prompt.value = "";
-    send.disabled = true;
+    setPrompt("", false);
     ask({ projectId: homeProjectId, text, files });
   });
 
@@ -835,9 +885,7 @@
         ...ps.map((p) => ({ icon: "folder", label: p.name, run: () => go(`/project/${p.id}?exam=1`) }))]);
     }
     if (!tile.dataset.prompt) return openPalette();
-    prompt.value = tile.dataset.prompt;
-    send.disabled = false;
-    prompt.focus();
+    setPrompt(tile.dataset.prompt);
   });
 
   // ================= 입력창 + 첨부: 사진·카메라·파일·Google Drive =================
@@ -936,7 +984,7 @@
 
   // 입력창 하나에 첨부를 붙인다. onChange: 첨부가 바뀔 때(보내기 버튼 상태 갱신)
   function bindAttach(form, { onChange = () => {} } = {}) {
-    const btn = $("[data-attach]", form), input = $("input:not([type=file])", form);
+    const btn = $("[data-attach]", form), input = $(".cin", form);
     const tray = document.createElement("div");
     tray.className = "attach-tray";
     tray.hidden = true;
@@ -1089,7 +1137,7 @@
   async function startVoice(form, btn) {
     if (!SpeechRec) return toast("이 브라우저는 음성 입력을 지원하지 않아요. Chrome·Edge·Safari에서 써 주세요");
     voice?.stop();
-    const input = $("input", form), meter = $(".voice-meter", form), bars = $$("i", meter);
+    const input = $(".cin", form), meter = $(".voice-meter", form), bars = $$("i", meter);
     const placeholder = input.placeholder;
     const base = input.value.trim() ? `${input.value.trimEnd()} ` : "";
     const rec = new SpeechRec();
@@ -1174,23 +1222,37 @@
   // ================= 대화 =================
   // 질문을 보내고 답을 기다린다. 새 대화면 바로 그 대화로 이동하고, 서버가 진짜 id 를 주면 주소를 바꾼다
   // 계산·설명 질문인지 (서버 explain.is_explain_request 와 같은 기준의 간단판 — 팝업 문구에만 쓴다)
-  const explainLike = (t) => !/\d+\s*(문제|문항|개)|문제\s*(를|좀)?\s*(내|만들|줘)|모의고사|출제/.test(t)
-    && /계산|구해|풀어|적분|미분|값은|얼마|증명|왜|설명|어떻게|원리|그래프|극한|∫|√/.test(t);
-  function ask({ sessionId = null, projectId = null, text, files = [] }) {
-    const { id, done } = Store.sendMessage({ sessionId, projectId, text, files });
-    const ex = explainLike(text);
+  // 서버(services/intent.py fast_route)가 AI 판단 없이 바로 정하는 요청만 미리 알아본다 — '생각 중' 단계 글자에만 쓴다.
+  // 그 밖의 말은 서버가 대화 맥락을 보고 판단하므로, 문제를 만든다고 미리 단정하지 않는다
+  const problemLike = (t) => /\d+\s*(문제|문항)|문제\s*(를|좀|하나)?\s*(내|만들|출제)/.test(t);
+  const explainLike = (t) => !problemLike(t) && /[∫√π^=²³]|\d\s*[x×*/+\-]|\b[a-z]\s*\(|\bx\b|lim|sin|cos|tan|log|ln/.test(t)
+    && /계산|구해|풀어|적분|미분|값은|얼마|증명|왜|설명|어떻게|원리|그래프|극한|∫|√|lim/.test(t);
+  const THINK_BY_KIND = {
+    files: [["사진·파일 읽는 중", "문제 이해하는 중", "단계별로 푸는 중", "한 번 더 검산하는 중", "답변 정리하는 중"], 25000],
+    explain: [["질문 읽는 중", "풀이 방법 고르는 중", "단계별로 푸는 중", "한 번 더 검산하는 중", "그래프·화면 준비하는 중"], 18000],
+    problems: [["요청 읽는 중", "문제 만드는 중", "다른 AI가 다시 풀어 검산하는 중", "해설 다듬는 중", "화면 준비하는 중"], 30000],
+    general: [["질문 이해하는 중", "이전 대화 살펴보는 중", "학습 현황 확인하는 중", "답변 정리하는 중"], 9000],
+  };
+  // editIndex: 보낸 질문 고치기 — 그 질문부터 뒤를 지우고 고친 글로 다시 묻는다
+  function ask({ sessionId = null, projectId = null, text, files = [], editIndex = null }) {
+    const r = editIndex != null ? Store.editMessage({ sessionId, index: editIndex, text }) : Store.sendMessage({ sessionId, projectId, text, files });
+    if (!r) { toast("방금 보낸 질문은 답이 저장된 뒤에 고칠 수 있어요"); return null; }
+    const { id, done } = r;
+    const kind = files.length ? "files" : problemLike(text) && !(sessionId && /아까|방금|다시|비슷|(^|\s)더(\s|$)/.test(text)) ? "problems"
+      : explainLike(text) ? "explain" : "general";
     // 기다리는 동안은 대화 안에 '생각 중' 카드 — 단계 글자와 원형 진행률 (화면을 가리지 않는다)
-    pendingMeta[id] = {
-      at: Date.now(),
-      steps: files.length ? ["사진·파일 읽는 중", "문제 이해하는 중", "단계별로 푸는 중", "한 번 더 검산하는 중", "답변 정리하는 중"]
-        : ex ? ["질문 읽는 중", "풀이 방법 고르는 중", "단계별로 푸는 중", "한 번 더 검산하는 중", "그래프·화면 준비하는 중"]
-        : ["요청 읽는 중", "문제 만드는 중", "다른 AI가 다시 풀어 검산하는 중", "해설 다듬는 중", "화면 준비하는 중"],
-      expectMs: Store.mode === "api" ? (files.length ? 25000 : ex ? 18000 : 30000) : 900,
-    };
+    const [steps, expectMs] = THINK_BY_KIND[kind];
+    pendingMeta[id] = { at: Date.now(), steps, expectMs: Store.mode === "api" ? expectMs : 900 };
     if (location.hash !== `#/chat/${id}`) go(`/chat/${id}`);
     done.catch(() => id).then((realId = id) => {
       delete pendingMeta[id];
+      const wasStopped = stoppedIds.delete(id);
       if (![`#/chat/${id}`, `#/chat/${realId}`].includes(location.hash)) return; // 다른 화면으로 갔으면 그대로
+      if (wasStopped) { // 멈춘 답: 이미 '중단했어요' 를 보여 줬으니 타이핑 없이 조용히 서버 기록으로 바꾼다
+        if (realId === id) renderChat(id, { keepScroll: true });
+        else if (location.hash === `#/chat/${id}`) go(`/chat/${realId}`);
+        return;
+      }
       typeNext = realId;
       if (realId === id) renderChat(id);                      // 이어서 묻기: 같은 대화를 다시 그린다
       else if (location.hash === `#/chat/${id}`) go(`/chat/${realId}`);
@@ -1615,7 +1677,11 @@
   const THINK_STEPS = ["질문 읽는 중", "풀이 방법 고르는 중", "단계별로 푸는 중", "한 번 더 검산하는 중", "답변 정리하는 중"];
   const pendingAt = {};   // 대화 id → 답을 기다리기 시작한 시각 (다시 그려도 단계가 이어지게)
   const pendingMeta = {}; // 대화 id → { at, steps, expectMs } (질문 종류에 맞는 단계 글자)
-  let typeNext = null;    // 다음에 그릴 때 마지막 답변을 타이핑 효과로 보여 줄 대화 id
+  const stoppedIds = new Set(); // '답변 멈추기' 를 누른 대화 id (답이 도착하면 조용히 바꾼다)
+  const STOP_SVG = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5" fill="currentColor"/></svg>';
+  let typeNext = null;
+  let editingAt = null;               // 고치는 중인 질문 { sid, index }
+  let draft = { sid: null, text: "" }; // 대화 입력창에 쓰던 글 (답이 도착해 다시 그려도 남긴다)    // 다음에 그릴 때 마지막 답변을 타이핑 효과로 보여 줄 대화 id
   function renderChat(id, { keepScroll = false } = {}) {
     if (voice && !document.body.contains(voice.btn)) voice.stop();
     if (voice?.btn.closest("#chat-form")) voice.stop(); // 입력창을 새로 그리기 전에 듣기를 멈춘다
@@ -1623,11 +1689,29 @@
     if (!s) { toast("대화를 찾을 수 없어요"); return go("/"); }
     const scroll = contentEl.scrollTop;
     const p = s.projectId && Store.project(s.projectId);
+    // 글로만 답한 경우(현황 보고·일반 답·되묻기)는 AI 가 $…$ 수식을 쓰므로 수식으로 그린다
+    const TEXT_INTENTS = new Set(["project_report", "answer", "clarify"]);
+    // 마지막 답변 아래에만 '이어서 보낼 요청' 버튼 (기다리는 중이면 숨김)
+    const lastAi = Store.isPending(id) ? -1 : s.messages.findLastIndex((m) => m.role === "ai");
+    const busy = Store.isPending(id);
+    const canEdit = (m) => !busy && (Store.mode !== "api" || m.id);
     const msgs = s.messages.map((m, mi) => m.role === "user"
-      ? `<div class="msg user">${messageFilesHTML(m.files)}<div class="bubble">${esc(m.text)}</div></div>`
-      : `<div class="msg ai"><span class="ai-avatar"></span><div class="ai-body"><p>${esc(m.text)}</p>
+      ? (editingAt?.sid === id && editingAt.index === mi
+        ? `<div class="msg user editing"><form class="edit-box" data-edit-form="${mi}">
+            <textarea class="edit-input" rows="1" maxlength="2000" aria-label="질문 고치기">${esc(m.text)}</textarea>
+            <div class="edit-actions"><span class="mini">고친 질문으로 다시 물어보고, 이 뒤의 대화는 지워져요</span>
+              <button type="button" class="btn-ghost" data-edit-cancel>취소</button><button type="submit" class="btn-primary">보내기</button></div>
+          </form></div>`
+        : `<div class="msg user">${messageFilesHTML(m.files)}<div class="bubble">${esc(m.text)}</div>
+            <div class="msg-tools">
+              <button type="button" class="icon-btn" data-copy="${mi}" title="복사" aria-label="질문 복사"><i data-lucide="copy"></i></button>
+              ${canEdit(m) ? `<button type="button" class="icon-btn" data-edit="${mi}" title="고치기" aria-label="질문 고치기"><i data-lucide="pencil"></i></button>` : ""}
+            </div></div>`)
+      : `<div class="msg ai ${m.intent === "stopped" ? "stopped" : ""}"><span class="ai-avatar"></span><div class="ai-body"><p class="ai-text" ${TEXT_INTENTS.has(m.intent) ? "data-math" : ""}>${esc(m.text)}</p>
           ${m.explanation ? explanationHTML(m.explanation, `${s.id}-${mi}`) : ""}
           ${problemSetHTML(s, mi, m.problemIds ?? [])}
+          ${mi === lastAi && m.suggestions?.length ? `<div class="suggest">${m.suggestions.map((t) =>
+            `<button type="button" class="suggest-chip" data-suggest="${esc(t)}">${esc(t)}</button>`).join("")}</div>` : ""}
         </div></div>`).join("");
 
     view.innerHTML = `
@@ -1646,24 +1730,34 @@
         </div>
         <form class="composer glass chat-composer" id="chat-form">
           <button type="button" class="icon-btn" data-attach title="사진·파일 첨부" aria-label="사진·파일 첨부"><i data-lucide="plus"></i></button>
-          <input id="chat-input" placeholder="이어서 물어보세요" autocomplete="off" />
+          <textarea id="chat-input" class="cin" rows="1" maxlength="2000" placeholder="이어서 물어보세요" aria-label="메시지"></textarea>
           ${voiceMeterHTML}
           <button type="button" class="icon-btn mic-btn" data-mic title="음성 입력" aria-label="음성 입력"><i data-lucide="mic"></i></button>
-          <button type="submit" class="send" disabled aria-label="보내기"><i data-lucide="arrow-up"></i></button>
+          ${busy ? `<button type="submit" class="send stop" aria-label="답변 멈추기" title="답변 멈추기">${STOP_SVG}</button>`
+            : '<button type="submit" class="send" disabled aria-label="보내기"><i data-lucide="arrow-up"></i></button>'}
         </form>
       </div>`;
     if (keepScroll) $(".chat-view").classList.add("still"); // 답을 고를 때 다시 그려도 떠오르는 움직임은 처음 한 번만
     icons();
 
     const input = $("#chat-input"), btn = $("#chat-form .send");
-    const sync = () => (btn.disabled = !(input.value.trim() || attach.count) || attach.busy);
+    if (draft.sid === id && draft.text) input.value = draft.text; // 다시 그려도 쓰던 글은 남긴다
+    input.addEventListener("input", () => (draft = { sid: id, text: input.value }));
+    const sync = () => (btn.disabled = !busy && (!(input.value.trim() || attach.count) || attach.busy));
     const attach = bindAttach($("#chat-form"), { onChange: () => sync() });
+    growInput(input);
     input.addEventListener("input", sync);
     $("#chat-form").addEventListener("submit", (e) => {
       e.preventDefault();
+      if (Store.isPending(id)) { // 답을 기다리는 중: 멈추기 버튼을 눌렀을 때만 멈춘다 (Enter 로는 멈추지 않음)
+        if (e.submitter === btn) { stoppedIds.add(id); Store.stopMessage(id); renderChat(id, { keepScroll: true }); toast("답변을 멈췄어요"); }
+        return;
+      }
+      if (id.startsWith("tmp")) return toast("대화를 저장하는 중이에요. 잠시만 기다려 주세요");
       const text = input.value.trim();
       if (attach.busy) return toast("파일을 올리는 중이에요. 잠시만 기다려 주세요");
       if (!text && !attach.count) return;
+      draft = { sid: null, text: "" };
       ask({ sessionId: id, text, files: attach.take() });
       renderChat(id);
       [...$$(".thread .msg.user")].at(-1)?.classList.add("sent");
@@ -1677,9 +1771,40 @@
     view.onclick = (e) => {
       const f = e.target.closest("[data-file-open]");
       if (f) return openMessageFile(f.dataset.fileOpen);
+      const cp = e.target.closest("[data-copy]");
+      if (cp) {
+        navigator.clipboard?.writeText(s.messages[Number(cp.dataset.copy)]?.text ?? "").then(() => toast("질문을 복사했어요"), () => toast("복사하지 못했어요"));
+        return;
+      }
+      const ed = e.target.closest("[data-edit]");
+      if (ed) { editingAt = { sid: id, index: Number(ed.dataset.edit) }; return renderChat(id, { keepScroll: true }); }
+      if (e.target.closest("[data-edit-cancel]")) { editingAt = null; return renderChat(id, { keepScroll: true }); }
+      const sg = e.target.closest("[data-suggest]");
+      if (sg) { // 제안 버튼: 그 글을 그대로 보낸다
+        if (Store.isPending(id)) return;
+        ask({ sessionId: id, text: sg.dataset.suggest });
+        renderChat(id);
+        return [...$$(".thread .msg.user")].at(-1)?.classList.add("sent");
+      }
       if (!handleProblemSet(e, redraw) && !handleProblemExtras(e)) handleAnswer(e, ctx, redraw);
     };
     hydrateMessageFiles(view);
+    const ef = $("[data-edit-form]");
+    if (ef) {
+      const ta = $(".edit-input", ef), index = Number(ef.dataset.editForm);
+      growInput(ta);
+      ta.focus();
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      ta.addEventListener("keydown", (e) => { if (e.key === "Escape") { editingAt = null; renderChat(id, { keepScroll: true }); } });
+      ef.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const text = ta.value.trim(), old = s.messages[index];
+        editingAt = null;
+        if (!text || text === old?.text) return renderChat(id, { keepScroll: true });
+        if (ask({ sessionId: id, text, editIndex: index })) renderChat(id);
+        else renderChat(id, { keepScroll: true });
+      });
+    }
 
     contentEl.scrollTop = keepScroll ? scroll : contentEl.scrollHeight;
 

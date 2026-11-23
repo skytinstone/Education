@@ -392,12 +392,26 @@ class Message(Base):
     problem_ids: Mapped[list[str]] = mapped_column(ARRAY(String(64)), server_default="{}")
     # 계산·설명 질문의 풀이 (결과·원리·단계·그래프·검산, services/explain.py). 문제를 낸 답변이면 비어 있다
     explanation: Mapped[dict | None] = mapped_column(JSONB)
+    # AI 답변이 어떤 요청으로 판단했는지 (services/intent.py) — 잘못 판단한 경우를 찾는 데 쓴다
+    intent: Mapped[str | None] = mapped_column(String(24))
+    # 답 아래에 보여 줄 '이어서 보낼 요청' 버튼 (누르면 그 글이 그대로 보내진다)
+    suggestions: Mapped[list[str]] = mapped_column(ARRAY(String(80)), server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp(), nullable=False)
 
     session: Mapped[ChatSession] = relationship(back_populates="messages")
     attachments: Mapped[list[ChatFile]] = relationship(order_by="ChatFile.created_at", passive_deletes=True)
 
     __table_args__ = (CheckConstraint("role IN ('user', 'ai')", name="message_role"),)
+
+
+class ChatStop(Base):
+    """'답변 멈추기' 신호 — 보낼 때 붙인 ref 로 남긴다. 답을 만드는 요청이 단계마다 확인한다
+    (서버가 여러 프로세스라 메모리가 아니라 DB 에). 하루 지난 것은 새로 남길 때 거둔다."""
+    __tablename__ = "chat_stops"
+
+    ref: Mapped[uuid.UUID] = mapped_column(primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = created_at()
 
 
 class ChatFile(Base):

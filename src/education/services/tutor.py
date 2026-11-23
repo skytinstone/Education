@@ -1,6 +1,7 @@
 """대화 답변.
 
-AI 가 설정되어 있으면 요청에서 개념·난이도·문항 수를 읽어 새 문제를 만들고 검증한다(services/generator.py).
+먼저 무엇을 원하는지 판단한다 (services/intent.py — 이전 대화·학습 현황을 함께 본다).
+문제 요청이면 개념·난이도·문항 수를 읽어 새 문제를 만들고 검증한다(services/generator.py).
 AI 가 없거나 실패하거나 개념을 못 찾으면, 문제 은행의 검증된 문제에서 고른다.
 """
 
@@ -8,13 +9,14 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass, field
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from education.db import models as m
 from education.schemas import Domain, VerificationStatus
-from education.services import explain, generator, learning, quota
+from education.services import explain, generator, intent, learning, quota
 from education.services.llm import Attachment, LLMError, get_llm
 
 log = logging.getLogger(__name__)
@@ -68,32 +70,72 @@ def textbook_label(project: m.Project) -> str | None:
     return f"{project.textbook} (ISBN {project.textbook_isbn})" if project.textbook_isbn else project.textbook
 
 
+class Stopped(Exception):
+    """학생이 '답변 멈추기' 를 눌렀다 — 다음 단계(문제 만들기·풀이)로 가지 않는다."""
+
+
+@dataclass
+class Reply:
+    text: str
+    problem_ids: list[str] = field(default_factory=list)
+    explanation: dict | None = None
+    intent: str | None = None          # services/intent.py 의 판단 (글자 기준·AI 판단 모두)
+    suggestions: list[str] = field(default_factory=list)
+
+
 def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
-               files: list[Attachment] | None = None) -> tuple[str, list[str], dict | None]:
-    """(답변 문장, 문제 id 목록, 풀이). 계산·설명 질문이면 문제 대신 풀이로 답한다.
-    사진·PDF 를 첨부했으면 그 자료를 읽고 풀이로 답한다 (AI 가 있어야 함)."""
+               files: list[Attachment] | None = None, session: m.ChatSession | None = None,
+               should_stop=lambda: False) -> Reply:
+    """대화 답변 하나. 무엇을 할지는 이전 대화·학습 현황과 함께 판단한다 (services/intent.py).
+    - 문제 요청 → 새 문제 (실패하면 문제 은행) · 계산·설명 → 풀이 · 현황 보고·일반 질문·되묻기 → 글로 답
+    - 사진·PDF 를 첨부했으면 그 자료를 읽고 풀이로 답한다 (AI 가 있어야 함).
+    should_stop: 비싼 단계 앞에서 확인 — 참이면 Stopped (학생이 멈추기를 눌렀다)."""
+    def checkpoint():
+        if should_stop():
+            raise Stopped
+
     llm = get_llm()
     if files:
+        checkpoint()
         return _files_reply(db, llm, user, text, files)
     if llm and quota.exceeded(db, user):  # 하루 한도를 넘으면 AI 없이 문제 은행에서
         ids = _from_bank(db, user, text, detect_domain(text), None)
-        return (f"오늘 쓸 수 있는 AI 사용량을 다 써서, 문제 은행의 검증된 문제 {len(ids)}개를 보여드려요. 내일 다시 AI 로 만들어 드릴게요."
-                if ids else quota.MESSAGE), ids, None
-    if llm and explain.is_explain_request(text):
+        return Reply((f"오늘 쓸 수 있는 AI 사용량을 다 써서, 문제 은행의 검증된 문제 {len(ids)}개를 보여드려요. 내일 다시 AI 로 만들어 드릴게요."
+                      if ids else quota.MESSAGE), ids, intent="quota")
+    if llm is None:  # AI 가 없으면 문제 은행에서
+        return Reply(*reply(db, user, text, project), intent="make_problems")
+
+    has_history = bool(session and session.messages)
+    kind, request = intent.fast_route(text, has_history), text
+    if kind is None:
         try:
-            line, payload = explain.explain(db, llm, user, text)
-            return line, [], payload
+            r = intent.route(db, llm, user, text, history=intent.history_text(db, user, session),
+                             facts=intent.facts_text(db, user, project))
+        except LLMError as e:
+            # 판단을 못 하면 예전처럼 글자 기준으로 (계산 질문이면 풀이, 아니면 문제)
+            log.warning("대화 의도 판단 실패: %s", e)
+            kind = "explain" if explain.is_explain_request(text) else "make_problems"
+        else:
+            kind, request = r.intent, (r.request.strip() or text)
+            if kind in ("project_report", "answer", "clarify"):
+                return Reply(r.reply.strip() or "무엇을 도와드릴까요?", intent=kind, suggestions=r.suggestions)
+
+    checkpoint()  # 문제 만들기·풀이는 오래 걸리고 비싸다 — 그 전에 멈췄는지 본다
+    if kind == "explain":
+        try:
+            line, payload = explain.explain(db, llm, user, request, prompt=f"학생 질문: {request}" if request != text else None)
+            return Reply(line, explanation=payload, intent="explain")
         except LLMError as e:
             log.warning("AI 풀이 실패: %s", e)
-    return (*reply(db, user, text, project), None)
+    return Reply(*reply(db, user, request, project), intent="make_problems")
 
 
-def _files_reply(db: Session, llm, user: m.User, text: str, files: list[Attachment]) -> tuple[str, list[str], dict | None]:
+def _files_reply(db: Session, llm, user: m.User, text: str, files: list[Attachment]) -> Reply:
     """첨부한 사진·PDF 를 읽고 풀이로 답한다. AI 가 없거나 한도를 넘었으면 이유를 알린다."""
     if llm is None:
-        return "사진·파일을 읽으려면 AI 가 켜져 있어야 해요. 지금은 문제를 글로 적어서 물어봐 주세요.", [], None
+        return Reply("사진·파일을 읽으려면 AI 가 켜져 있어야 해요. 지금은 문제를 글로 적어서 물어봐 주세요.", intent="explain_file")
     if quota.exceeded(db, user):
-        return quota.MESSAGE, [], None
+        return Reply(quota.MESSAGE, intent="quota")
     names = ", ".join(f.filename for f in files)
     prompt = f"학생 질문: {text}\n\n[첨부한 자료] {names}"
     try:
@@ -101,8 +143,8 @@ def _files_reply(db: Session, llm, user: m.User, text: str, files: list[Attachme
                                         purpose="explain_file", files=files)
     except LLMError as e:
         log.warning("첨부 자료 풀이 실패: %s", e)
-        return "첨부한 자료를 읽지 못했어요. 잠시 후 다시 보내 주거나, 더 선명한 사진으로 올려 주세요.", [], None
-    return line.replace("풀이를 정리", "첨부한 자료를 읽고 풀이를 정리", 1), [], payload
+        return Reply("첨부한 자료를 읽지 못했어요. 잠시 후 다시 보내 주거나, 더 선명한 사진으로 올려 주세요.", intent="explain_file")
+    return Reply(line.replace("풀이를 정리", "첨부한 자료를 읽고 풀이를 정리", 1), explanation=payload, intent="explain_file")
 
 
 def reply(db: Session, user: m.User, text: str, project: m.Project | None) -> tuple[str, list[str]]:

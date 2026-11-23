@@ -4,12 +4,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
-from sqlalchemy import func, select
+from sqlalchemy import delete, exists, func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from education.api.deps import DB, CurrentUser, owned
-from education.api.dto import (FILE_ONLY_TEXT, ChatFileOut, DriveConfig, MessageIn, MessageOut, SessionDetail, SessionIn, SessionOut,
-                               SessionPatch)
+from education.api.dto import (FILE_ONLY_TEXT, ChatFileOut, DriveConfig, MessageEdit, MessageIn, MessageOut, SessionDetail,
+                               SessionIn, SessionOut, SessionPatch, StopIn)
 from education.config import get_settings
 from education.db import models as m
 from education.services import chat_files, learning, tutor
@@ -26,15 +27,31 @@ def _claim(db: Session, user: m.User, ids: list[UUID]) -> list[m.ChatFile]:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
 
 
-def _converse(db: Session, user: m.User, s: m.ChatSession, text: str, files: list[m.ChatFile]) -> list[m.Message]:
-    """학생 메시지(와 첨부)를 남기고 답변을 만든다."""
+STOPPED_TEXT = "답변을 중단했어요."
+STOP_TTL = timedelta(days=1)
+
+
+def _stopped(db: Session, ref: UUID | None) -> bool:
+    return ref is not None and db.scalar(select(exists().where(m.ChatStop.ref == ref)))
+
+
+def _converse(db: Session, user: m.User, s: m.ChatSession, text: str, files: list[m.ChatFile],
+              ref: UUID | None = None) -> list[m.Message]:
+    """학생 메시지(와 첨부)를 남기고 답변을 만든다. 도중에 '멈추기'(ref)가 오면 질문만 남기고 '중단했어요' 로 답한다."""
     project = db.get(m.Project, s.project_id) if s.project_id else None
-    reply_text, problem_ids, explanation = tutor.reply_full(
-        db, user, text, project, files=chat_files.attachments(files) if files else None)
+    try:
+        r = tutor.reply_full(db, user, text, project, files=chat_files.attachments(files) if files else None, session=s,
+                             should_stop=lambda: _stopped(db, ref))
+        if _stopped(db, ref):  # 답을 다 만든 뒤에 멈췄어도 학생이 멈춘 쪽을 따른다
+            raise tutor.Stopped
+    except tutor.Stopped:
+        r = tutor.Reply(STOPPED_TEXT, intent="stopped")
     msgs = [m.Message(session_id=s.id, role="user", text=text),
-            m.Message(session_id=s.id, role="ai", text=reply_text, problem_ids=problem_ids, explanation=explanation)]
+            m.Message(session_id=s.id, role="ai", text=r.text, problem_ids=r.problem_ids, explanation=r.explanation,
+                      intent=r.intent, suggestions=r.suggestions)]
     db.add_all(msgs)
     db.flush()
+    db.expire(s, ["messages"])  # 판단할 때 읽어 둔 대화 목록을 새로 읽게
     for f in files:
         f.message_id = msgs[0].id
     s.updated_at = func.now()
@@ -44,6 +61,7 @@ def _converse(db: Session, user: m.User, s: m.ChatSession, text: str, files: lis
 
 def _message_out(db: Session, user: m.User, msg: m.Message) -> MessageOut:
     return MessageOut(id=msg.id, role=msg.role, text=msg.text, created_at=msg.created_at, explanation=msg.explanation,
+                      intent=msg.intent, suggestions=msg.suggestions or [],
                       attachments=[ChatFileOut.model_validate(f) for f in msg.attachments],
                       problems=learning.problem_views(db, user, msg.problem_ids, session_id=msg.session_id))
 
@@ -123,8 +141,17 @@ def create_session(body: SessionIn, user: CurrentUser, db: DB) -> SessionDetail:
     s = m.ChatSession(user_id=user.id, project_id=body.project_id, title=title if len(title) <= 24 else f"{title[:24]}…")
     db.add(s)
     db.flush()
-    _converse(db, user, s, body.text, files)
+    _converse(db, user, s, body.text, files, body.ref)
     return session_detail(db, user, s)
+
+
+@router.post("/stop", status_code=status.HTTP_204_NO_CONTENT)
+def stop_reply(body: StopIn, user: CurrentUser, db: DB) -> Response:
+    """'답변 멈추기' — 그 답을 만드는 요청이 다음 단계 전에 보고 멈춘다. 이미 끝났으면 아무 일도 없다."""
+    db.execute(delete(m.ChatStop).where(m.ChatStop.created_at < datetime.now(UTC) - STOP_TTL))
+    db.execute(insert(m.ChatStop).values(ref=body.ref, user_id=user.id).on_conflict_do_nothing())
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/{session_id}")
@@ -136,7 +163,29 @@ def get_session(session_id: UUID, user: CurrentUser, db: DB) -> SessionDetail:
 def send_message(session_id: UUID, body: MessageIn, user: CurrentUser, db: DB) -> list[MessageOut]:
     s = owned(db, m.ChatSession, session_id, user)
     files = _claim(db, user, body.attachment_ids)
-    return [_message_out(db, user, msg) for msg in _converse(db, user, s, body.text, files)]
+    return [_message_out(db, user, msg) for msg in _converse(db, user, s, body.text, files, body.ref)]
+
+
+@router.post("/{session_id}/messages/{message_id}/edit")
+def edit_message(session_id: UUID, message_id: UUID, body: MessageEdit, user: CurrentUser, db: DB) -> SessionDetail:
+    """보낸 질문 고치기 — 그 질문과 뒤의 대화를 지우고, 고친 글로 다시 묻는다. 그 질문의 첨부는 그대로 다시 쓴다."""
+    s = owned(db, m.ChatSession, session_id, user)
+    target = db.get(m.Message, message_id)
+    if target is None or target.session_id != s.id or target.role != "user":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "고칠 질문을 찾을 수 없어요")
+    later = list(db.scalars(select(m.Message).where(m.Message.session_id == s.id, m.Message.created_at >= target.created_at)))
+    keep = list(target.attachments)
+    for f in keep:  # 고친 질문의 첨부는 지우지 않고 새 질문에 다시 붙인다
+        f.message_id = None
+    db.flush()
+    dropped = list(db.scalars(select(m.ChatFile).where(m.ChatFile.message_id.in_([x.id for x in later])))) if later else []
+    for x in later:
+        db.delete(x)
+    db.flush()
+    db.expire(s, ["messages"])
+    _converse(db, user, s, body.text, keep, body.ref)
+    chat_files.remove_disk(dropped)
+    return session_detail(db, user, s)
 
 
 @router.patch("/{session_id}")
