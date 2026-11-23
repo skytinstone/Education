@@ -666,3 +666,31 @@ body.panel-view:not(.embed) .xt-nav { background: linear-gradient(to top, rgba(2
   .xt-flag span { display: none; }
   .xt-legend > span:last-child { display: none; }
 }
+
+/* ---------- 연결된 프로젝트: 홈 입력창 윗 테두리에 걸친 라벨 (app.js renderChip) ---------- */
+#composer { margin-top: 34px; }
+#project-chip {
+  position: absolute; z-index: 2; left: 24px; top: 0; transform: translateY(-55%);
+  max-width: calc(100% - 48px); gap: 6px; padding: 4px 10px 4px 9px; font-size: 12px; cursor: pointer;
+  background: color-mix(in srgb, var(--c) 9%, #fff);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 22%, transparent), 0 4px 12px rgba(31, 41, 80, .08);
+  transition: box-shadow .15s, transform .15s;
+}
+#project-chip:hover { box-shadow: 0 0 0 1px color-mix(in srgb, var(--c) 40%, transparent), 0 6px 16px rgba(31, 41, 80, .12); }
+#project-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#project-chip .chip-text { display: inline !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; max-width: 320px; }
+#project-chip .chip-dd { padding: 1px 6px; border-radius: var(--r-pill); background: color-mix(in srgb, var(--c) 16%, #fff); font-size: 11px; font-variant-numeric: tabular-nums; }
+#project-chip:not(.on) { font-weight: 500; background: #fff; box-shadow: 0 0 0 1px rgba(15, 23, 42, .1), 0 4px 12px rgba(31, 41, 80, .06); }
+#project-chip > svg:last-child { opacity: .6; }
+@media (max-width: 760px) { #project-chip { left: 16px; } #project-chip .chip-text { max-width: 52vw; } }
+
+/* ---------- PDF 저장 (app.js savePdf): 화면을 흰 종이처럼 ---------- */
+body.pdf-capture, body.pdf-capture .main { background: #fff !important; }
+body.pdf-capture #view > *, body.pdf-capture #view * { animation: none !important; transition: none !important; }
+body.pdf-capture .reveal { opacity: 1 !important; transform: none !important; filter: none !important; }
+body.pdf-capture .panel, body.pdf-capture .ak-card, body.pdf-capture .ak-quick, body.pdf-capture .ak-item,
+body.pdf-capture .note-item, body.pdf-capture .exam-paper {
+  background: #fff !important; box-shadow: none !important; border: 1px solid #e3e5ea !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
+}
+body.pdf-capture .exam-paper { border: 0 !important; }

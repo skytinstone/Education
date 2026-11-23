@@ -848,8 +848,13 @@
   function renderChip() {
     const p = homeProjectId && Store.project(homeProjectId);
     const chip = $("#project-chip");
+    // 입력창 윗 테두리에 걸친 라벨 (glass.css #project-chip) — 입력 줄은 글자에 다 쓴다
+    const n = p ? daysLeft(p.examDate) : null;
     chip.style.setProperty("--c", p ? COLOR[projectDomain(p)] : "var(--ink-3)");
-    chip.innerHTML = `<i data-lucide="${p ? "folder" : "folder-open"}"></i><span class="chip-text">${p ? esc(p.name) : "프로젝트 없음"}</span><i data-lucide="chevron-down"></i>`;
+    chip.classList.toggle("on", Boolean(p));
+    chip.title = p ? `${p.name} 에서 공부해요 · 눌러서 바꾸기` : "어느 프로젝트에서 공부할지 고르기";
+    chip.innerHTML = `<i data-lucide="${p ? "folder" : "folder-plus"}"></i><span class="chip-text">${p ? esc(p.name) : "프로젝트 연결"}</span>`
+      + `${n != null && n >= 0 ? `<span class="chip-dd">${ddayLabel(n)}</span>` : ""}<i data-lucide="chevron-down"></i>`;
     icons();
   }
 
@@ -2517,7 +2522,8 @@
         <div class="page-actions">
           <button class="btn-ghost" data-exam-shuffle><i data-lucide="shuffle"></i>다시 섞기</button>
           ${list.length ? '<button class="btn-ghost" data-exam-take><i data-lucide="timer"></i>화면에서 시험 보기</button>' : ""}
-          <button class="btn-primary" data-exam-print><i data-lucide="printer"></i>인쇄 · PDF 저장</button>
+          ${list.length ? `<button class="btn-ghost" data-pdf="${esc(`${p.name} 시험지`)}" data-pdf-target=".exam-paper"><i data-lucide="file-down"></i>PDF 저장</button>` : ""}
+          <button class="btn-primary" data-print><i data-lucide="printer"></i>인쇄</button>
         </div>
       </div>
       ${!list.length ? '<div class="empty"><i data-lucide="file-x"></i><b>시험지에 넣을 문항이 없어요</b></div>' : `
@@ -2549,7 +2555,6 @@
       </article>` : ""}`}`;
     icons();
     view.onclick = (e) => {
-      if (e.target.closest("[data-exam-print]")) return window.print();
       const o = e.target.closest("[data-orig]");
       if (o) return openOriginal(o.dataset.orig, o.dataset.page);
       if (e.target.closest("[data-exam-take]")) return takeOptions(projectId, params);
@@ -3267,7 +3272,8 @@
           ${has && !running ? `<button class="btn-ghost" data-ak-take><i data-lucide="timer"></i>이 문제지로 시험 보기</button>
             ${akWrong(key).length ? `<button class="btn-ghost" data-ak-retry><i data-lucide="rotate-ccw"></i>틀린 문항만 다시 풀기 (${akWrong(key).length})</button>` : ""}
             <button class="btn-ghost" data-ak-rebuild><i data-lucide="refresh-cw"></i>다시 만들기</button>
-            <button class="btn-primary" data-ak-print><i data-lucide="printer"></i>인쇄 · PDF 저장</button>` : ""}
+            <button class="btn-ghost" data-pdf="${esc(`${mat.filename.replace(/\.[a-z0-9]+$/i, "")} 정답지`)}"><i data-lucide="file-down"></i>PDF 저장</button>
+            <button class="btn-primary" data-print><i data-lucide="printer"></i>인쇄</button>` : ""}
         </div>
       </div>
       ${has ? `
@@ -3313,7 +3319,6 @@
     view.onclick = async (e) => {
       const jump = e.target.closest("[data-ak-jump]");
       if (jump) { e.preventDefault(); $(`#ak-${CSS.escape(jump.dataset.akJump)}`)?.scrollIntoView({ behavior: "smooth", block: "start" }); return; }
-      if (e.target.closest("[data-ak-print]")) return window.print();
       const o = e.target.closest("[data-orig]");
       if (o) return openOriginal(o.dataset.orig, o.dataset.page);
       if (e.target.closest("[data-ak-take]")) return takeOptions(mat.project_id, new URLSearchParams({ m: mat.id }));
@@ -3518,7 +3523,82 @@
     if (akAsk.materialId === ctx.materialId && akAsk.problemId === ctx.problemId) renderAsk();
   }
 
-  document.addEventListener("click", (e) => { if (e.target.closest("[data-print-notes]")) window.print(); });
+  // ================= 인쇄 · PDF 저장 (따로) =================
+  // [data-print] 는 브라우저 인쇄 창, [data-pdf="파일 이름"] 은 인쇄 창 없이 바로 PDF 파일을 내려받는다.
+  // PDF 는 화면(기본 #view, data-pdf-target 으로 바꿈)을 그대로 A4 로 옮기고, 인쇄에서 빼는 버튼·도구 줄은 뺀다
+  // html2canvas-pro: 앱이 쓰는 color-mix() 같은 새 색 표기도 그린다 (원래 html2canvas 는 못 그림)
+  const PDF_LIBS = ["https://cdn.jsdelivr.net/npm/html2canvas-pro@1.5.8/dist/html2canvas-pro.min.js",
+    "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"];
+  const PDF_SKIP = ".print-hide, .toolbar, .glass-bar, .note-actions, .exam-toolbar, .ak-actions, .ak-back, .ak-ask, .ask-pop, .ask-panel, [data-pdf], [data-print], .toast";
+  const PDF_KEEP = ".note-item, .ak-item, .ak-cell, .exam-q, .exam-cover, .exam-key, .problem"; // 페이지 사이에서 자르지 않을 덩어리
+  let pdfLib = null;
+  const loadPdfScript = (src) => new Promise((ok, fail) => {
+    const sc = document.createElement("script");
+    sc.src = src;
+    sc.onload = ok;
+    sc.onerror = () => fail(new Error("PDF 도구를 불러오지 못했어요. 인터넷 연결을 확인해 주세요"));
+    document.head.append(sc);
+  });
+  const loadPdfLib = () => (pdfLib ??= Promise.all(PDF_LIBS.map(loadPdfScript)).catch((err) => { pdfLib = null; throw err; }));
+  async function savePdf(btn) {
+    const target = btn.dataset.pdfTarget ? $(btn.dataset.pdfTarget) : view;
+    if (!target || btn.disabled) return;
+    const name = `${(btn.dataset.pdf || "Eureka").replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 80)}.pdf`;
+    const label = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader" class="spin"></i>PDF 만드는 중…';
+    icons();
+    try {
+      await loadPdfLib();
+      const SCALE = 2, box = target.getBoundingClientRect();
+      // 자르면 안 되는 덩어리의 위·아래 (캔버스 픽셀)
+      const keep = $$(PDF_KEEP, target).filter((el) => !el.closest(PDF_SKIP)).map((el) => {
+        const r = el.getBoundingClientRect();
+        return [(r.top - box.top) * SCALE, (r.bottom - box.top) * SCALE];
+      });
+      const canvas = await window.html2canvas(target, {
+        scale: SCALE, useCORS: true, backgroundColor: "#ffffff",
+        ignoreElements: (el) => el.matches?.(PDF_SKIP),
+        onclone: (doc) => doc.body.classList.add("pdf-capture"),
+      });
+      const pdf = new window.jspdf.jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
+      const M = 10, W = 210 - M * 2, H = 297 - M * 2;
+      const pageH = Math.floor((canvas.width * H) / W); // 한 쪽에 들어가는 캔버스 높이
+      let y = 0, first = true;
+      while (y < canvas.height - 2) {
+        let end = Math.min(canvas.height, y + pageH);
+        if (end < canvas.height) {
+          // 덩어리를 가로지르면 그 덩어리 위에서 자른다 (한 쪽보다 큰 덩어리는 어쩔 수 없이 자름)
+          const cut = keep.filter(([t, b]) => t > y + 40 && t < end && b > end).map(([t]) => t);
+          if (cut.length) end = Math.min(...cut) - 8 * SCALE;
+        }
+        const part = document.createElement("canvas");
+        part.width = canvas.width;
+        part.height = end - y;
+        const ctx = part.getContext("2d");
+        ctx.fillStyle = "#fff";
+        ctx.fillRect(0, 0, part.width, part.height);
+        ctx.drawImage(canvas, 0, y, canvas.width, end - y, 0, 0, canvas.width, end - y);
+        if (!first) pdf.addPage();
+        pdf.addImage(part.toDataURL("image/jpeg", 0.92), "JPEG", M, M, W, ((end - y) * W) / canvas.width);
+        first = false;
+        y = end;
+      }
+      pdf.save(name);
+      toast(`PDF 로 저장했어요 · ${name}`);
+    } catch (err) {
+      toast(err.message || "PDF 를 만들지 못했어요");
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = label;
+      icons();
+    }
+  }
+  document.addEventListener("click", (e) => {
+    const pdf = e.target.closest("[data-pdf]");
+    if (pdf) { e.preventDefault(); return savePdf(pdf); }
+    if (e.target.closest("[data-print]")) { e.preventDefault(); window.print(); }
+  });
   // ================= 오답노트 =================
   const noteFilter = { domain: "all", error: "all", openOnly: true, project: null };
 
@@ -3534,7 +3614,9 @@
           <h1>오답노트</h1>
           <p>${proj ? `${esc(proj.name)}의 오답 · <a href="#/notes" style="color:inherit">전체 보기</a>` : "틀린 문제를 다시 풀어 맞히면 극복으로 표시돼요"}</p>
         </div>
-        <div class="page-actions print-hide"><button class="btn-ghost" data-print-notes title="지금 보이는 오답을 인쇄하거나 PDF로 저장"><i data-lucide="printer"></i>인쇄 · PDF 저장</button></div>
+        <div class="page-actions print-hide">
+          <button class="btn-ghost" data-pdf="${esc(proj ? `${proj.name} 오답노트` : "오답노트")}" title="지금 보이는 오답을 PDF 파일로 저장"><i data-lucide="file-down"></i>PDF 저장</button>
+          <button class="btn-ghost" data-print title="지금 보이는 오답을 인쇄"><i data-lucide="printer"></i>인쇄</button></div>
       </div>
       <div class="note-stats" id="note-stats"></div>
       <div class="toolbar glass-bar">
