@@ -257,6 +257,10 @@
 
   const view = $("#view");
   const home = $("#home");
+  // 삽입 모드: 대화 오른쪽 패널(iframe) 안에서 열린 화면 — 사이드바·상단바·배경 없이 내용만
+  const EMBED = new URLSearchParams(location.search).has("embed");
+  if (EMBED) document.body.classList.add("embed");
+  const toParent = (msg) => { if (EMBED && parent !== window) parent.postMessage(msg, location.origin); };
   const contentEl = $(".content");
 
   // 스크롤바는 스크롤하는 동안만 보이고, 멈추고 0.8초 뒤 사라진다 (CSS .content.is-scrolling)
@@ -370,6 +374,7 @@
     else if (page === "answer-key") renderAnswerKey(a);
     else if (page === "exam") renderExamPaper(a, params);
     else if (page === "exam-record") renderExamRecord(a);
+    else if (page === "exam-chat") renderChatExam(a, params);
     else if (page === "admin") { location.href = "/admin"; return; }
     else return go("/");
     renderSidebar();
@@ -1233,6 +1238,7 @@
     files: [["사진·파일 읽는 중", "문제 이해하는 중", "단계별로 푸는 중", "한 번 더 검산하는 중", "답변 정리하는 중"], 25000],
     explain: [["질문 읽는 중", "풀이 방법 고르는 중", "단계별로 푸는 중", "한 번 더 검산하는 중", "그래프·화면 준비하는 중"], 18000],
     problems: [["요청 읽는 중", "문제 만드는 중", "다른 AI가 다시 풀어 검산하는 중", "해설 다듬는 중", "화면 준비하는 중"], 30000],
+    exam: [["시험 볼 문항 모으는 중", "시험 화면 준비하는 중"], 1500],
     deep: [["고른 부분 읽는 중", "이전 대화와 연결하는 중", "더 깊게 풀어 쓰는 중", "한 번 더 검산하는 중", "답변 정리하는 중"], 22000],
     general: [["질문 이해하는 중", "이전 대화 살펴보는 중", "학습 현황 확인하는 중", "답변 정리하는 중"], 9000],
   };
@@ -1241,7 +1247,7 @@
     const r = editIndex != null ? Store.editMessage({ sessionId, index: editIndex, text }) : Store.sendMessage({ sessionId, projectId, text, files, quote });
     if (!r) { toast("방금 보낸 질문은 답이 저장된 뒤에 고칠 수 있어요"); return null; }
     const { id, done } = r;
-    const kind = files.length ? "files" : quote ? "deep" : problemLike(text) && !(sessionId && /아까|방금|다시|비슷|(^|\s)더(\s|$)/.test(text)) ? "problems"
+    const kind = files.length ? "files" : quote ? "deep" : /시험\s*모드|시험\s*(시작|진입)|모의\s*시험/.test(text) ? "exam" : problemLike(text) && !(sessionId && /아까|방금|다시|비슷|(^|\s)더(\s|$)/.test(text)) ? "problems"
       : explainLike(text) ? "explain" : "general";
     // 기다리는 동안은 대화 안에 '생각 중' 카드 — 단계 글자와 원형 진행률 (화면을 가리지 않는다)
     const [steps, expectMs] = THINK_BY_KIND[kind];
@@ -1250,6 +1256,10 @@
     done.catch(() => id).then((realId = id) => {
       delete pendingMeta[id];
       const wasStopped = stoppedIds.delete(id);
+      const lastMsg = Store.session(realId)?.messages.at(-1);
+      if (!wasStopped && lastMsg?.action?.type === "exam") { // 시험 모드: 답과 함께 오른쪽 패널에 시험 화면
+        openExamPane(realId, lastMsg.action);
+      }
       if (![`#/chat/${id}`, `#/chat/${realId}`].includes(location.hash)) return; // 다른 화면으로 갔으면 그대로
       if (wasStopped) { // 멈춘 답: 이미 '중단했어요' 를 보여 줬으니 타이핑 없이 조용히 서버 기록으로 바꾼다
         if (realId === id) renderChat(id, { keepScroll: true });
@@ -1719,6 +1729,7 @@
       : `<div class="msg ai ${m.intent === "stopped" ? "stopped" : ""}">${AI_AVATAR}<div class="ai-body"><p class="ai-text" ${TEXT_INTENTS.has(m.intent) ? "data-math" : ""}>${esc(m.text)}</p>
           ${m.explanation ? explanationHTML(m.explanation, `${s.id}-${mi}`) : ""}
           ${problemSetHTML(s, mi, m.problemIds ?? [])}
+          ${m.action?.type === "exam" ? `<button type="button" class="btn-ghost exam-open" data-open-exam="${mi}"><i data-lucide="panel-right-open"></i>시험 화면 열기</button>` : ""}
           ${mi === lastAi && m.suggestions?.length ? `<div class="suggest">${m.suggestions.map((t) =>
             `<button type="button" class="suggest-chip" data-suggest="${esc(t)}">${esc(t)}</button>`).join("")}</div>` : ""}
         </div></div>`).join("");
@@ -1784,6 +1795,8 @@
       const f = e.target.closest("[data-file-open]");
       if (f) return openMessageFile(f.dataset.fileOpen);
       if (e.target.closest("[data-unquote]")) { chatQuote = null; renderChat(id, { keepScroll: true }); return $("#chat-input").focus(); }
+      const oe = e.target.closest("[data-open-exam]");
+      if (oe) return openExamPane(id, s.messages[Number(oe.dataset.openExam)]?.action);
       const cp = e.target.closest("[data-copy]");
       if (cp) {
         navigator.clipboard?.writeText(s.messages[Number(cp.dataset.copy)]?.text ?? "").then(() => toast("질문을 복사했어요"), () => toast("복사하지 못했어요"));
@@ -1802,6 +1815,7 @@
       if (!handleProblemSet(e, redraw) && !handleProblemExtras(e)) handleAnswer(e, ctx, redraw);
     };
     hydrateMessageFiles(view);
+    drawPane();
     const ef = $("[data-edit-form]");
     if (ef) {
       const ta = $(".edit-input", ef), index = Number(ef.dataset.editForm);
@@ -2699,8 +2713,137 @@
     } catch (err) { win?.close(); toast(err.message); }
   }
 
+  // ================= 대화에서 나온 문제로 시험 보기 (#/exam-chat/<대화 id>) =================
+  function renderChatExam(sid, params) {
+    const s = Store.session(sid);
+    if (!s) { toast("대화를 찾을 수 없어요"); return go("/"); }
+    const only = params.get("ids") ? new Set(params.get("ids").split(",")) : null;
+    const list = [...new Set(s.messages.flatMap((m) => m.problemIds ?? []))].slice(0, 40)
+      .map((id) => Store.problem(id)).filter((q) => q && (!only || only.has(q.id)))
+      .map((q) => ({ id: q.id, stem: q.stem, choices: q.choices, difficulty: q.difficulty ?? 3, answer: q.answer }));
+    const p = s.projectId && Store.project(s.projectId);
+    const pts = (q) => (q.difficulty >= 4 ? 4 : q.difficulty >= 2 ? 3 : 2);
+    if (!params.get("take")) params.set("take", "1");
+    renderExamTake({ p: p || { id: null, name: s.title }, list, params, pts, subject: p ? concept(p.subjectId)?.name ?? "" : "",
+      scopeName: "대화 문제", path: `/exam-chat/${sid}`, back: `#/chat/${sid}` });
+  }
+
+  // ================= 대화 오른쪽 분할 패널 =================
+  // 대화에서 '시험 모드' 를 요청하면 오른쪽에 시험 화면을 연다 (같은 앱을 삽입 모드 iframe 으로).
+  // 접기·펼치기, 가운데 손잡이를 끌어 폭 조절 (폭은 기억). 다른 화면으로 가면 숨겼다가 그 대화로 돌아오면 다시 보인다
+  const PANE_W = "eureka.paneW", PANE_MIN = 360, RAIL = 44;
+  let pane = null; // { sid, url, title, sub, collapsed }
+  const paneSaved = () => { try { return Number(localStorage.getItem(PANE_W)) || 0; } catch { return 0; } };
+  const examMinutes = (n) => Math.min(100, Math.max(10, Math.round((n * 3) / 10) * 10));
+  function openExamPane(sid, action) {
+    const s = Store.session(sid);
+    if (!s || action?.type !== "exam") return;
+    const q = new URLSearchParams({ take: "1", per: "1", t: String(examMinutes(action.count || 10)) });
+    const hash = action.source === "project" && s.projectId ? `#/exam/${s.projectId}?m=all&${q}` : `#/exam-chat/${sid}?${q}`;
+    pane = { sid, url: `index.html?embed=1${hash}`, full: `index.html${hash}`, collapsed: false,
+      title: "시험 모드", sub: `${action.source === "project" ? "프로젝트 기출" : "대화 문제"} ${action.count ?? ""}문항` };
+    drawPane();
+  }
+  function closePane() { pane = null; drawPane(); }
+  function paneLimits() {
+    const mw = $(".main").getBoundingClientRect().width;
+    return [Math.min(PANE_MIN, mw * 0.5), Math.max(PANE_MIN, mw * 0.72)];
+  }
+  function setPaneWidth(w, remember = false) {
+    const [lo, hi] = paneLimits();
+    const v = Math.round(Math.min(hi, Math.max(lo, w)));
+    document.documentElement.style.setProperty("--pane-w", `${pane?.collapsed ? RAIL : v}px`);
+    if (remember) { try { localStorage.setItem(PANE_W, String(v)); } catch { /* 저장 불가 */ } }
+    return v;
+  }
+  function drawPane() {
+    let el = $("#side-pane");
+    const [page, id] = route().parts;
+    const show = Boolean(pane && page === "chat" && id === pane.sid);
+    document.body.classList.toggle("pane-open", show);
+    document.body.classList.toggle("pane-collapsed", show && pane.collapsed);
+    if (!pane) { el?.remove(); return; }
+    if (!el) {
+      el = document.createElement("aside");
+      el.id = "side-pane";
+      el.setAttribute("aria-label", "시험 모드");
+      el.innerHTML = `
+        <div class="pane-grip" role="separator" aria-orientation="vertical" tabindex="0" aria-label="패널 폭 조절 (좌우 화살표)" title="끌어서 폭 조절 · 두 번 누르면 기본 폭"></div>
+        <div class="pane-head">
+          <button type="button" class="icon-btn" data-pane-toggle></button>
+          <div class="pane-title"><b></b><small></small></div>
+          <a class="icon-btn" data-pane-full target="_blank" rel="noopener" title="새 탭에서 크게 보기" aria-label="새 탭에서 크게 보기"><i data-lucide="external-link"></i></a>
+          <button type="button" class="icon-btn" data-pane-close title="닫기" aria-label="패널 닫기"><i data-lucide="x"></i></button>
+        </div>
+        <iframe title="시험 모드" loading="eager"></iframe>`;
+      $(".main").append(el);
+      bindPane(el);
+    }
+    el.hidden = !show;
+    if (!show) return;
+    const t = $("[data-pane-toggle]", el);
+    t.title = pane.collapsed ? "패널 펼치기" : "패널 접기";
+    t.setAttribute("aria-label", t.title);
+    t.innerHTML = `<i data-lucide="${pane.collapsed ? "panel-right-open" : "panel-right-close"}"></i>`;
+    $(".pane-title b", el).textContent = pane.title;
+    $(".pane-title small", el).textContent = pane.sub;
+    $("[data-pane-full]", el).href = pane.full;
+    const f = $("iframe", el);
+    if (f.dataset.url !== pane.url) { f.dataset.url = pane.url; f.src = pane.url; }
+    setPaneWidth(paneSaved() || $(".main").getBoundingClientRect().width * 0.46);
+    lucide.createIcons();
+  }
+  function bindPane(el) {
+    el.addEventListener("click", (e) => {
+      if (e.target.closest("[data-pane-close]")) return closePane();
+      if (e.target.closest("[data-pane-toggle]")) { pane.collapsed = !pane.collapsed; drawPane(); }
+    });
+    const grip = $(".pane-grip", el);
+    grip.addEventListener("pointerdown", (e) => {
+      if (pane.collapsed) return;
+      e.preventDefault();
+      grip.setPointerCapture(e.pointerId);
+      document.body.classList.add("pane-dragging"); // 끄는 동안 iframe 이 마우스를 가로채지 않게
+      const right = $(".main").getBoundingClientRect().right;
+      const move = (ev) => setPaneWidth(right - ev.clientX);
+      const up = (ev) => {
+        setPaneWidth(right - ev.clientX, true);
+        document.body.classList.remove("pane-dragging");
+        grip.removeEventListener("pointermove", move);
+        grip.removeEventListener("pointerup", up);
+        grip.removeEventListener("pointercancel", up);
+      };
+      grip.addEventListener("pointermove", move);
+      grip.addEventListener("pointerup", up);
+      grip.addEventListener("pointercancel", up);
+    });
+    grip.addEventListener("dblclick", () => { try { localStorage.removeItem(PANE_W); } catch { /* 무시 */ } drawPane(); });
+    grip.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      const cur = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--pane-w")) || PANE_MIN;
+      setPaneWidth(cur + (e.key === "ArrowLeft" ? 32 : -32), true);
+    });
+  }
+  // 패널 안(삽입 모드)에서 보내는 신호: 나가기 → 닫기, 시험 끝 → 기록 새로 고침
+  window.addEventListener("message", (e) => {
+    if (e.origin !== location.origin || !e.data?.type) return;
+    if (e.data.type === "eureka:pane-close") closePane();
+    if (e.data.type === "eureka:exam-done") Store.reload().then(() => {
+      const [page, id] = route().parts;
+      if (page === "chat") renderChat(id, { keepScroll: true });
+    });
+  });
+  window.addEventListener("hashchange", () => drawPane());
+  window.addEventListener("resize", () => { if (document.body.classList.contains("pane-open")) setPaneWidth(paneSaved() || $(".main").getBoundingClientRect().width * 0.46); }, { passive: true });
+  // 삽입 모드의 '나가기' 는 패널을 닫는다
+  if (EMBED) document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-xt-leave]")) { e.preventDefault(); toParent({ type: "eureka:pane-close" }); }
+  }, true);
+
   let takeTimer = null;
-  function renderExamTake({ p, list, params, pts, subject, scopeName }) {
+  // path: 다시 풀기 등에 쓸 이 시험의 주소 · back: 나가기 (대화 문제 시험이면 그 대화로)
+  function renderExamTake({ p, list, params, pts, subject, scopeName, path = `/exam/${p.id}`, back = `#/project/${p.id}` }) {
     clearInterval(takeTimer);
     if (!list.length) { view.innerHTML = '<div class="empty"><i data-lucide="file-x"></i><b>시험 볼 문항이 없어요</b></div>'; icons(); return; }
     const per = params.get("per") === "4" ? 4 : 1;
@@ -2744,7 +2887,7 @@
       view.innerHTML = `
         <div class="xt">
           <div class="xt-bar">
-            <a class="ak-back" href="#/project/${p.id}" data-xt-leave><i data-lucide="x"></i>나가기</a>
+            <a class="ak-back" href="${back}" data-xt-leave><i data-lucide="x"></i>나가기</a>
             <div class="xt-title"><b>${esc(subject || p.name)}</b><span>${list.length}문항 · ${totalPts}점${scopeName ? ` · ${esc(scopeName)}` : ""}</span></div>
             <div class="xt-prog"><span>답한 문항 <b id="xt-done">${answered()}</b>/${list.length}</span><i><em style="width:${(answered() / list.length) * 100}%"></em></i></div>
             ${limit ? `<div class="xt-clock" id="xt-clock"><i data-lucide="timer"></i><b>${clock(left())}</b></div>` : `<div class="xt-clock off" id="xt-clock"><i data-lucide="clock"></i><b>${clock(Date.now() - s.startedAt)}</b></div>`}
@@ -2794,7 +2937,7 @@
       rows.forEach((r) => (r.sec = Math.round(s.secs[r.q.id] ?? 0)));
       // 시험 기록 남기기 (점수 추이 · 오래 걸린 문항)
       let saved = null;
-      if (Store.mode === "api") {
+      if (Store.mode === "api" && p.id) {
         try {
           saved = await Store.saveExam(p.id, {
             title: `${subject || p.name}${scopeName ? ` · ${scopeName}` : ""}${params.get("ids") ? " · 틀린 문항" : ""}`.slice(0, 200),
@@ -2805,6 +2948,7 @@
           });
         } catch (err) { toast(`시험 기록을 저장하지 못했어요: ${err.message}`); }
       }
+      toParent({ type: "eureka:exam-done" }); // 오른쪽 패널이면 대화 쪽 기록도 새로 고침
       if (location.hash !== here) return;
       showResult(rows, usedMs, auto, saved);
     }
@@ -2835,7 +2979,7 @@
               ${wrongIds.length ? '<a class="btn-ghost" href="#/notes"><i data-lucide="circle-x"></i>오답노트 보기</a>' : ""}
               <button class="btn-ghost" data-xt-again><i data-lucide="refresh-cw"></i>처음부터 다시</button>
               ${saved ? `<a class="btn-ghost" href="#/project/${p.id}?tab=exams"><i data-lucide="trending-up"></i>점수 추이</a>` : ""}
-              <a class="btn-ghost" href="#/project/${p.id}"><i data-lucide="folder"></i>프로젝트로</a>
+              ${p.id && !EMBED ? `<a class="btn-ghost" href="#/project/${p.id}"><i data-lucide="folder"></i>프로젝트로</a>` : ""}
             </div>
           </div>
           ${slow.length ? `<div class="panel xt-slow"><h3>시간이 오래 걸린 문항</h3>
@@ -2856,9 +3000,9 @@
           const q = new URLSearchParams(params);
           q.set("ids", wrongIds.join(","));
           q.delete("seed");
-          return go(`/exam/${p.id}?${q}`);
+          return go(`${path}?${q}`);
         }
-        if (e.target.closest("[data-xt-again]")) return renderExamTake({ p, list, params, pts, subject, scopeName });
+        if (e.target.closest("[data-xt-again]")) return renderExamTake({ p, list, params, pts, subject, scopeName, path, back });
       };
       countUp(view);
     }

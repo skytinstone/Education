@@ -182,7 +182,7 @@ const Store = (() => {
   }
   const toFile = (f) => ({ id: f.id, name: f.filename, mime: f.content_type, size: f.size_bytes });
   const toMessage = (msg) => ({ id: msg.id, role: msg.role, text: msg.text, quote: msg.quote ?? null, problemIds: msg.problems.map((p) => p.id), explanation: msg.explanation ?? null,
-    intent: msg.intent ?? null, suggestions: msg.suggestions ?? [], files: (msg.attachments ?? []).map(toFile), at: Date.parse(msg.created_at) });
+    intent: msg.intent ?? null, suggestions: msg.suggestions ?? [], action: msg.action ?? null, files: (msg.attachments ?? []).map(toFile), at: Date.parse(msg.created_at) });
   const FILE_ONLY_TEXT = "첨부한 자료를 보고 풀이해 줘"; // 서버(dto.FILE_ONLY_TEXT)와 같게
   const QUOTE_ONLY_TEXT = "이 부분을 더 자세히 설명해 줘"; // 서버(dto.QUOTE_ONLY_TEXT)와 같게
   let drivePromise = null;
@@ -700,6 +700,7 @@ const Store = (() => {
     get bank() { return Object.values(bank); },
     subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     onError(fn) { onError = fn; },
+    reload: () => boot(), // 서버 데이터를 다시 받는다 (예: 오른쪽 패널에서 시험을 마친 뒤)
     ...q,
     ...ops,
   };
