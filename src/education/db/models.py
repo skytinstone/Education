@@ -398,6 +398,8 @@ class Message(Base):
     intent: Mapped[str | None] = mapped_column(String(24))
     # 답 아래에 보여 줄 '이어서 보낼 요청' 버튼 (누르면 그 글이 그대로 보내진다)
     suggestions: Mapped[list[str]] = mapped_column(ARRAY(String(80)), server_default="{}")
+    # 답변이 화면에 시키는 일 — {"type": "exam", "source": "project"|"chat", "count": n} 이면 오른쪽 패널에 시험 화면을 연다
+    action: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.clock_timestamp(), nullable=False)
 
     session: Mapped[ChatSession] = relationship(back_populates="messages")

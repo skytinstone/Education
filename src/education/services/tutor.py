@@ -81,6 +81,7 @@ class Reply:
     explanation: dict | None = None
     intent: str | None = None          # services/intent.py 의 판단 (글자 기준·AI 판단 모두)
     suggestions: list[str] = field(default_factory=list)
+    action: dict | None = None         # 화면에 시키는 일 (예: 오른쪽 패널에 시험 화면)
 
 
 def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
@@ -101,6 +102,9 @@ def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
     if quote:
         checkpoint()
         return _deep_reply(db, llm, user, text, quote, session, project)
+    has_history = bool(session and session.messages)
+    if intent.fast_route(text, has_history) == "exam_mode":  # 시험 모드는 AI 없이 — 한도·AI 꺼짐과 상관없이
+        return exam_reply(db, user, project, session)
     if llm and quota.exceeded(db, user):  # 하루 한도를 넘으면 AI 없이 문제 은행에서
         ids = _from_bank(db, user, text, detect_domain(text), None)
         return Reply((f"오늘 쓸 수 있는 AI 사용량을 다 써서, 문제 은행의 검증된 문제 {len(ids)}개를 보여드려요. 내일 다시 AI 로 만들어 드릴게요."
@@ -108,7 +112,6 @@ def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
     if llm is None:  # AI 가 없으면 문제 은행에서
         return Reply(*reply(db, user, text, project), intent="make_problems")
 
-    has_history = bool(session and session.messages)
     kind, request = intent.fast_route(text, has_history), text
     if kind is None:
         try:
@@ -120,6 +123,8 @@ def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
             kind = "explain" if explain.is_explain_request(text) else "make_problems"
         else:
             kind, request = r.intent, (r.request.strip() or text)
+            if kind == "exam_mode":
+                return exam_reply(db, user, project, session)
             if kind in ("project_report", "answer", "clarify"):
                 return Reply(r.reply.strip() or "무엇을 도와드릴까요?", intent=kind, suggestions=r.suggestions)
 
@@ -131,6 +136,33 @@ def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
         except LLMError as e:
             log.warning("AI 풀이 실패: %s", e)
     return Reply(*reply(db, user, request, project), intent="make_problems")
+
+
+EXAM_MAX = 40  # 대화 문제로 보는 시험의 최대 문항 수
+
+
+def exam_reply(db: Session, user: m.User, project: m.Project | None, session: m.ChatSession | None) -> Reply:
+    """시험 모드: 프로젝트에 올린 기출 문항이 있으면 그걸로, 없으면 이 대화에서 나온 문제로 오른쪽 패널에 시험 화면을 연다.
+    AI 는 부르지 않는다."""
+    if project is not None:
+        n = len(project_past_problems(db, user, project))
+        if n:
+            return Reply(f"오른쪽에 '{project.name}' 기출 {n}문항으로 시험 화면을 열었어요. 타이머가 켜져 있고, 제출하면 바로 채점해요.",
+                         intent="exam_mode", action={"type": "exam", "source": "project", "count": n},
+                         suggestions=["틀린 문항 다시 풀기", "약점 개념 설명해줘"])
+    seen: list[str] = []
+    for x in (session.messages if session else []):
+        for pid in x.problem_ids or []:
+            if pid not in seen:
+                seen.append(pid)
+    if seen:
+        n = min(len(seen), EXAM_MAX)
+        return Reply(f"오른쪽에 이 대화에서 나온 {n}문제로 시험 화면을 열었어요. 제출하면 바로 채점하고, 틀린 문제는 오답노트에 담겨요.",
+                     intent="exam_mode", action={"type": "exam", "source": "chat", "count": n},
+                     suggestions=["비슷한 문제 5개 더 내줘", "틀린 문제 다시 설명해줘"])
+    where = "이 프로젝트에 올린 기출이나 " if project is not None else ""
+    return Reply(f"시험 볼 문항이 아직 없어요. {where}이 대화에서 문제를 먼저 만들면 바로 시험 모드로 풀 수 있어요.",
+                 intent="exam_mode", suggestions=["5문제 내줘", "기출 올리는 방법 알려줘"])
 
 
 def _deep_reply(db: Session, llm, user: m.User, text: str, quote: str, session: m.ChatSession | None,

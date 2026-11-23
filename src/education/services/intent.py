@@ -19,9 +19,11 @@ from education.db import models as m
 from education.services import explain, learning
 from education.services.llm import LLM, LLMError
 
-Intent = Literal["make_problems", "explain", "project_report", "answer", "clarify"]
+Intent = Literal["make_problems", "explain", "project_report", "exam_mode", "answer", "clarify"]
 HISTORY_TURNS = 8  # 판단에 넘기는 최근 메시지 수
 
+# 시험 모드(화면에서 시험 보기)로 들어가자는 요청 — 오른쪽 패널에 시험 화면을 연다
+_EXAM_MODE = re.compile(r"시험\s*모드|모의\s*시험\s*(을|를)?\s*(시작|보|볼|쳐|치)|시험\s*(을|를)?\s*(보|쳐|치)(자|고\s*싶|게|기|러|\s*볼)|시험\s*(시작|진입)")
 # 문제를 '내 달라는' 것이 분명한 요청 (개수를 말했거나 '문제 내/만들어')
 _FAST_PROBLEM = re.compile(r"\d+\s*(문제|문항)|문제\s*(를|좀|하나)?\s*(내|만들|출제)")
 # 식이 들어간 계산 질문 — 글자만으로 '극한·미분' 을 말한 질문은 맥락을 봐야 해서 AI 판단으로 보낸다
@@ -33,6 +35,8 @@ _FOLLOW_UP = re.compile(r"아까|방금|이전|위\s*(에|의)|[그이저]\s*(�
 def fast_route(text: str, has_history: bool) -> Intent | None:
     """AI 없이 정할 수 있으면 그 의도, 아니면 None."""
     t = text.strip()
+    if _EXAM_MODE.search(t):
+        return "exam_mode"
     if has_history and _FOLLOW_UP.search(t):
         return None
     if _FAST_PROBLEM.search(t):
@@ -56,6 +60,7 @@ intent
 - make_problems: 문제를 새로 내 달라는 요청. '더 어렵게', '비슷한 거 하나 더', '주관식으로 다시' 처럼 앞 문제를 바꿔 달라는 것도 포함.
 - explain: 특정 문제·식·개념을 풀어 주거나 설명해 달라는 요청. 앞에서 보여 준 문제를 가리키는 '2번 풀이 알려줘', '이거 왜 답이 3이야?' 도 포함.
 - project_report: 준비 중인 시험·프로젝트의 현황, 진도, 약점, 남은 기간, 점수 추이를 알려 달라는 요청.
+- exam_mode: 지금 시험을 보겠다는 요청 (시험 모드, 모의시험 시작, 실전처럼 풀어 보기). 문제를 새로 만들어 달라는 말이 아니다.
 - answer: 그 밖의 질문·대화 (공부 방법·계획 상담, 서비스 사용법, 인사 등). [학습 현황]으로 답할 수 있으면 그것을 근거로 답한다.
 - clarify: 무엇을 원하는지 정말 알 수 없을 때만. 짧게 되묻고 suggestions 에 고를 수 있는 선택지 2~3개를 넣는다.
 문제를 내 달라는 말이 없으면 make_problems 를 고르지 않는다.
@@ -64,7 +69,7 @@ request (make_problems·explain 일 때만)
 - 이전 대화를 반영해 혼자 읽어도 알 수 있게 다시 쓴다. 문제를 낼 때는 개념 이름과 개수(없으면 2)를 꼭 넣는다. 예: '극한 계산 3문제, 난이도 어렵게'.
 - 앞에서 보여 준 문제를 가리키면 그 문제 내용을 그대로 옮겨 쓴다. 예: '다음 극한을 풀어 줘: $\\lim_{x\\to 0} \\frac{\\sin x}{x}$'.
 
-reply (project_report·answer·clarify 일 때만)
+reply (project_report·answer·clarify 일 때만 — exam_mode 면 빈 문자열)
 - 해요체, 짧고 분명하게 (보통 3~6줄). 첫 줄에 핵심을 말한다.
 - 숫자·날짜·개념 이름은 [학습 현황]에 있는 것만 쓰고 지어내지 않는다. 기록이 없으면 '아직 기록이 없어요' 라고 말하고 무엇을 하면 기록이 쌓이는지 알려 준다.
 - 보고에는 남은 기간, 푼 문제·정답률, 약점, 다음에 할 일을 담는다.
