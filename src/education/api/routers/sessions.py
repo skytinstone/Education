@@ -48,7 +48,7 @@ def _converse(db: Session, user: m.User, s: m.ChatSession, text: str, files: lis
         r = tutor.Reply(STOPPED_TEXT, intent="stopped")
     msgs = [m.Message(session_id=s.id, role="user", text=text, quote=quote),
             m.Message(session_id=s.id, role="ai", text=r.text, problem_ids=r.problem_ids, explanation=r.explanation,
-                      intent=r.intent, suggestions=r.suggestions)]
+                      intent=r.intent, suggestions=r.suggestions, action=r.action)]
     db.add_all(msgs)
     db.flush()
     db.expire(s, ["messages"])  # 판단할 때 읽어 둔 대화 목록을 새로 읽게
@@ -61,7 +61,7 @@ def _converse(db: Session, user: m.User, s: m.ChatSession, text: str, files: lis
 
 def _message_out(db: Session, user: m.User, msg: m.Message) -> MessageOut:
     return MessageOut(id=msg.id, role=msg.role, text=msg.text, quote=msg.quote, created_at=msg.created_at, explanation=msg.explanation,
-                      intent=msg.intent, suggestions=msg.suggestions or [],
+                      intent=msg.intent, suggestions=msg.suggestions or [], action=msg.action,
                       attachments=[ChatFileOut.model_validate(f) for f in msg.attachments],
                       problems=learning.problem_views(db, user, msg.problem_ids, session_id=msg.session_id))
 

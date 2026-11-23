@@ -555,3 +555,46 @@ body.panel-view .topbar { padding: 8px 10px 0 8px; height: 56px; }
 body.panel-view .topbar::before { left: 0; right: 0; top: 0; bottom: -20px;
   background: linear-gradient(180deg, #fff 0%, rgba(255, 255, 255, .85) 50%, rgba(255, 255, 255, 0) 100%); }
 body.chat-panel .chat-composer { bottom: 16px; }
+
+/* ---------- 대화 오른쪽 분할 패널 (시험 모드) — app.js drawPane ---------- */
+#side-pane {
+  position: absolute; top: 0; right: 0; bottom: 0; width: var(--pane-w, 46%); z-index: 6;
+  display: flex; flex-direction: column; background: #fff;
+  border-left: 1px solid rgba(15, 23, 42, .08); box-shadow: -12px 0 32px rgba(31, 41, 80, .06);
+  animation: pane-in .32s cubic-bezier(.2, .8, .2, 1);
+}
+#side-pane[hidden] { display: none; }
+@keyframes pane-in { from { transform: translateX(24px); opacity: 0; } }
+body.pane-open .main .content { padding-right: calc(var(--pane-w) + 28px); }
+body.pane-open .topbar { right: var(--pane-w); }
+.pane-head { display: flex; align-items: center; gap: 6px; padding: 10px 10px 8px 12px; border-bottom: 1px solid rgba(15, 23, 42, .06); }
+.pane-title { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
+.pane-title b { font-size: 14px; }
+.pane-title small { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#side-pane iframe { flex: 1; width: 100%; border: 0; background: #fff; }
+.pane-grip { position: absolute; left: -5px; top: 0; bottom: 0; width: 10px; cursor: col-resize; z-index: 2; touch-action: none; }
+.pane-grip::after { content: ""; position: absolute; left: 4px; top: 50%; width: 3px; height: 44px; margin-top: -22px; border-radius: 3px;
+  background: rgba(15, 23, 42, .14); transition: background .15s, height .15s; }
+.pane-grip:hover::after, .pane-grip:focus-visible::after, body.pane-dragging .pane-grip::after { background: var(--blue, #2f6bff); height: 64px; margin-top: -32px; }
+body.pane-dragging, body.pane-dragging * { cursor: col-resize !important; user-select: none; }
+body.pane-dragging #side-pane iframe { pointer-events: none; }
+body.pane-dragging #side-pane, body.pane-dragging .main .content { transition: none; }
+/* 접힌 패널: 얇은 막대 — 펼치기·닫기만 */
+body.pane-collapsed #side-pane .pane-head { flex-direction: column; padding: 10px 4px; border: 0; gap: 4px; }
+body.pane-collapsed #side-pane .pane-title, body.pane-collapsed #side-pane [data-pane-full],
+body.pane-collapsed #side-pane iframe, body.pane-collapsed .pane-grip { display: none; }
+.exam-open { margin-top: 12px; }
+/* 좁은 화면: 패널이 화면 전체를 덮는다 */
+@media (max-width: 900px) {
+  #side-pane { position: fixed; inset: 0; width: auto; z-index: 60; border: 0; }
+  body.pane-open .main .content { padding-right: 28px; }
+  body.pane-open .topbar { right: 0; }
+  .pane-grip { display: none; }
+  body.pane-collapsed #side-pane { inset: auto 12px 12px auto; width: 48px; height: auto; border-radius: 14px; box-shadow: var(--lg-shadow-float); }
+}
+
+/* ---------- 삽입 모드 (패널 안 화면): 내용만 ---------- */
+body.embed .sidebar, body.embed .topbar, body.embed #dots, body.embed .chat-composer { display: none !important; }
+body.embed .app { padding: 0; gap: 0; }
+body.embed .main { border-radius: 0 !important; box-shadow: none !important; background: #fff !important; }
+body.embed .main .content { margin: 0; padding: 16px 18px 28px !important; }

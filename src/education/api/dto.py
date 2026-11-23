@@ -424,6 +424,7 @@ class MessageOut(BaseModel):
     explanation: dict | None = None  # 계산·설명 질문의 풀이 (services/explain.py)
     intent: str | None = None  # 어떤 요청으로 판단했는지 (services/intent.py) · stopped = 학생이 멈춤
     suggestions: list[str] = []  # 답 아래 '이어서 보낼 요청' 버튼
+    action: dict | None = None  # 화면에 시키는 일 (예: 오른쪽 패널에 시험 화면)
     created_at: datetime
 
 

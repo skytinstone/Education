@@ -176,3 +176,33 @@ def test_quote_needs_ai(client, auth, monkeypatch):
     s = client.post("/api/sessions", json={"text": "치환적분 1문제"}, headers=auth).json()
     ai = client.post(f"/api/sessions/{s['id']}/messages", json={"text": "왜?", "quote": "부분적분"}, headers=auth).json()[1]
     assert ai["intent"] == "deep" and "AI" in ai["text"] and ai["problems"] == []
+
+
+# ---------- 시험 모드: 오른쪽 패널 ----------
+@pytest.mark.parametrize("text,expected", [
+    ("시험 모드로 진입 부탁해", "exam_mode"),
+    ("이제 시험 보고 싶어", "exam_mode"),
+    ("모의시험 시작하자", "exam_mode"),
+    ("현재 우리가 진행하고 있는 시험에 대해 분석을 해줘!", None),
+    ("시험 범위랑 시험일 알려줘", None),
+])
+def test_exam_mode_route(text, expected):
+    assert intent.fast_route(text, True) == expected
+
+
+def test_exam_mode_uses_chat_problems_without_ai(client, auth, db, monkeypatch):
+    monkeypatch.setattr(tutor, "get_llm", lambda: None)
+    s = client.post("/api/sessions", json={"text": "화학 2문제"}, headers=auth).json()
+    n = len(s["messages"][1]["problems"])
+    llm = FakeLLM()  # 부르면 실패 — 시험 모드는 AI 없이
+    monkeypatch.setattr(tutor, "get_llm", lambda: llm)
+    ai = client.post(f"/api/sessions/{s['id']}/messages", json={"text": "시험 모드로 진입 부탁해"}, headers=auth).json()[1]
+    assert ai["intent"] == "exam_mode" and ai["action"] == {"type": "exam", "source": "chat", "count": n}
+    assert db.scalar(select(m.LLMCall)) is None
+    assert client.get("/api/sync", headers=auth).json()["sessions"][0]["messages"][3]["action"]["source"] == "chat"
+
+
+def test_exam_mode_without_problems_explains(client, auth, monkeypatch):
+    monkeypatch.setattr(tutor, "get_llm", lambda: None)
+    ai = client.post("/api/sessions", json={"text": "시험 모드로 들어가자"}, headers=auth).json()["messages"][1]
+    assert ai["intent"] == "exam_mode" and ai["action"] is None and "문항이 아직 없어요" in ai["text"]
