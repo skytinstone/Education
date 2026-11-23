@@ -163,26 +163,51 @@
   // 불러오는 동안 회색 틀이 반짝이며 기다린다
   const skel = (rows = 3) => `<div class="skel" aria-busy="true" aria-label="불러오는 중">${Array.from({ length: rows }, (_, i) => `<span style="width:${[92, 78, 64, 86][i % 4]}%"></span>`).join("")}</div>`;
 
-  // 답변이 빠르게 타이핑되듯 나타난다 (커서 없음). 글은 단어 단위, 수식·그래프·문제 카드는 한 덩어리로
-  const TW_ATOMIC = ".katex, .katex-display, svg, img, button, input, textarea, select, table, .problem, .choices, .ex-plot, .ex-graph, .msg-files, .pset-bar";
+  // ================= 생성형 등장 (답변·문제가 만들어지듯 나타난다, 커서 없음) =================
+  // 화면 주사율(120Hz 포함)에 맞춰 requestAnimationFrame 으로 그린다. 시간 기준이라 프레임이 달라도 속도는 같다.
+  // - 글: 단어 단위로 떠오름  - 수식·그림·보기 버튼: 한 덩어리씩  - 문제 카드·풀이 단락: 틀(껍데기)이 먼저 떠오르고 안이 채워짐
+  // 움직임은 transform·opacity 만 써서 레이아웃을 흔들지 않는다
+  const TW_SKIP = "[hidden], .work, script, style";
+  const TW_SHELL = ".explain > *, .ex-steps > li, .pset, .pslot, .problem, .choices, .short-result, .result, .solution";
+  const TW_ATOMIC = ".katex, .katex-display, svg, img, input, textarea, select, table, .ex-plot, .ex-graph, .msg-files, .pset-bar, .problem-meta, .choice, .short-form, .essay-form, .why, button";
+  const UNIT_W = (el) => (el.matches(".ex-plot, .ex-graph, table") ? 10 : el.matches(".choice") ? 3.2 : el.matches(".problem-meta, .pset-bar") ? 2.5 : el.matches(".katex-display") ? 4 : 1.6);
+
+  // 화면 갱신마다 부르기 — rAF 가 멈추는 곳(가려진 탭 등)에서는 타이머로 이어 간다
+  function frameLoop(step) {
+    let stopped = false, raf = 0, to = 0;
+    // 시계는 performance.now() 하나만 쓴다 (rAF 의 프레임 시각과 섞으면 어긋날 수 있다)
+    const run = () => {
+      cancelAnimationFrame(raf); clearTimeout(to);
+      if (stopped) return;
+      if (step(performance.now()) === false) { stopped = true; return; }
+      raf = requestAnimationFrame(run);
+      to = setTimeout(run, 50);
+    };
+    raf = requestAnimationFrame(run);
+    to = setTimeout(run, 50);
+    return () => { stopped = true; cancelAnimationFrame(raf); clearTimeout(to); };
+  }
+
   function typeReveal(root, { onStep = () => {}, onDone = () => {} } = {}) {
     if (!root || noMotion()) return onDone();
     const units = [];
     const walk = (node) => {
       for (const n of [...node.childNodes]) {
         if (n.nodeType === 1) {
-          if (n.matches(TW_ATOMIC)) { n.classList.add("tw-h"); units.push({ el: n, w: n.matches(".problem, .ex-plot, .ex-graph") ? 8 : 2 }); }
-          else walk(n);
+          if (n.matches(TW_SKIP)) continue;
+          if (n.matches(TW_ATOMIC)) { n.classList.add("tw-h"); units.push({ el: n, w: UNIT_W(n), kind: "pop" }); continue; }
+          if (n.matches(TW_SHELL)) { n.classList.add("tw-h"); units.push({ el: n, w: 0.6, kind: "shell" }); }
+          walk(n);
         } else if (n.nodeType === 3 && n.textContent.trim()) {
           const frag = document.createDocumentFragment();
           n.textContent.split(/(\s+)/).forEach((tok) => {
             if (!tok) return;
             if (/^\s+$/.test(tok)) return frag.append(tok);
-            const s = document.createElement("span");
-            s.className = "tw tw-h";
-            s.textContent = tok;
-            frag.append(s);
-            units.push({ el: s, w: 1 });
+            const sp = document.createElement("span");
+            sp.className = "tw tw-h";
+            sp.textContent = tok;
+            frag.append(sp);
+            units.push({ el: sp, w: Math.min(2.2, 0.55 + tok.length * 0.12), kind: "word" });
           });
           n.replaceWith(frag);
         }
@@ -190,31 +215,41 @@
     };
     walk(root);
     if (!units.length) return onDone();
-    // 길이에 맞춰 속도 조절: 짧으면 또박또박, 길어도 3초 안에
-    const words = units.reduce((a, u) => a + u.w, 0);
-    const perWord = Math.max(4, Math.min(28, 3000 / words));
-    let i = 0, acc = 0, last = performance.now(), stopped = false;
-    const finish = () => { units.slice(i).forEach((u) => u.el.classList.remove("tw-h")); i = units.length; stopped = true; onDone(); };
-    const frame = (now) => {
-      if (stopped) return;
-      if (!root.isConnected) return (stopped = true);
-      acc += now - last; last = now;
-      while (i < units.length && acc >= perWord * units[i].w) {
-        acc -= perWord * units[i].w;
-        const el = units[i].el;
-        el.classList.remove("tw-h");
-        if (el.matches(".ex-plot, .ex-graph")) { el.classList.add("draw-in"); $$(".ex-plot", el).forEach((p) => p.classList.add("draw-in")); }
-        i++;
-      }
-      onStep();
-      if (i >= units.length) { stopped = true; onDone(); } else setTimeout(() => frame(performance.now()), 16);
+    let total = 0;
+    units.forEach((u) => { u.at = total; total += u.w; });
+    // 짧은 답은 또박또박(최소 0.7초), 길어도 2.6초 안에 (단어 하나 ≈ 20ms)
+    const dur = Math.max(700, Math.min(2600, total * 20));
+    const show = (u) => {
+      u.el.classList.remove("tw-h");
+      u.el.classList.add(u.kind === "word" ? "tw-in" : u.kind === "shell" ? "tw-shell" : "tw-pop");
+      if (u.el.matches(".ex-plot, .ex-graph")) { u.el.classList.add("draw-in"); $$(".ex-plot", u.el).forEach((p) => p.classList.add("draw-in")); }
     };
-    // 탭이 가려져 있으면 기다리지 않고 바로 다 보여 준다
+    let i = 0, t0 = null, stop = null;
+    const finish = () => { stop?.(); while (i < units.length) show(units[i++]); onStep(true); onDone(); };
     if (document.hidden) { finish(); return finish; }
-    setTimeout(() => frame(performance.now()), 16);
+    stop = frameLoop((now) => {
+      if (!root.isConnected) return false;
+      t0 ??= now;
+      const reached = ((now - t0) / dur) * total;
+      while (i < units.length && units[i].at <= reached) show(units[i++]);
+      onStep(false);
+      if (i >= units.length) { onDone(); return false; }
+    });
     return finish;
   }
 
+  // 새 답을 따라 부드럽게 내려가기 (프레임과 무관하게 일정한 속도로 따라붙는다)
+  function smoothFollow(el, isOn) {
+    let last = null;
+    return frameLoop((now) => {
+      const dt = last == null ? 16 : now - last;
+      last = now;
+      if (!el.isConnected) return false;
+      if (!isOn()) return;
+      const target = el.scrollHeight - el.clientHeight, cur = el.scrollTop, gap = target - cur;
+      if (gap > 0.5) el.scrollTop = cur + gap * (1 - Math.exp(-dt / 90));
+    });
+  }
 
   const view = $("#view");
   const home = $("#home");
@@ -1140,17 +1175,22 @@
   function ask({ sessionId = null, projectId = null, text, files = [] }) {
     const { id, done } = Store.sendMessage({ sessionId, projectId, text, files });
     const ex = explainLike(text);
-    withAIProgress({
-      title: files.length ? "첨부한 자료를 읽는 중" : ex ? "풀이를 준비하는 중" : "문제를 준비하는 중",
-      steps: files.length ? ["사진·파일 읽기", "문제 이해하기", "단계별로 풀기", "검산하기"]
-        : ex ? ["질문 이해하기", "단계별로 풀기", "검산하기", "그래프·화면 준비"]
-        : ["요청 이해하기", "문제 만들기", "다른 AI가 다시 풀어 검산", "화면 준비"],
+    // 기다리는 동안은 대화 안에 '생각 중' 카드 — 단계 글자와 원형 진행률 (화면을 가리지 않는다)
+    pendingMeta[id] = {
+      at: Date.now(),
+      steps: files.length ? ["사진·파일 읽는 중", "문제 이해하는 중", "단계별로 푸는 중", "한 번 더 검산하는 중", "답변 정리하는 중"]
+        : ex ? ["질문 읽는 중", "풀이 방법 고르는 중", "단계별로 푸는 중", "한 번 더 검산하는 중", "그래프·화면 준비하는 중"]
+        : ["요청 읽는 중", "문제 만드는 중", "다른 AI가 다시 풀어 검산하는 중", "해설 다듬는 중", "화면 준비하는 중"],
       expectMs: Store.mode === "api" ? (files.length ? 25000 : ex ? 18000 : 30000) : 900,
-      run: () => done.catch(() => id), // 실패해도 대화에 '답변을 만들지 못했어요'가 남으니 그 대화를 연다
-    }).then((realId = id) => {
+    };
+    if (location.hash !== `#/chat/${id}`) go(`/chat/${id}`);
+    done.catch(() => id).then((realId = id) => {
+      delete pendingMeta[id];
+      if (![`#/chat/${id}`, `#/chat/${realId}`].includes(location.hash)) return; // 다른 화면으로 갔으면 그대로
       typeNext = realId;
-      if (location.hash === `#/chat/${realId}`) renderChat(realId);
-      else go(`/chat/${realId}`);
+      if (realId === id) renderChat(id);                      // 이어서 묻기: 같은 대화를 다시 그린다
+      else if (location.hash === `#/chat/${id}`) go(`/chat/${realId}`);
+      // 새 대화: 저장소가 이미 주소를 진짜 id 로 바꿨으면, 곧 올 hashchange 가 한 번만 그린다
     });
     return id;
   }
@@ -1561,13 +1601,16 @@
     if (!step && !goTo) return false;
     const set = e.target.closest("[data-pset]"), key = set.dataset.pset, n = Number(set.dataset.count);
     const pos = goTo ? Number(goTo.dataset.pgo) : (problemPos[key] ?? 0) + Number(step.dataset.pstep);
-    problemPos[key] = Math.max(0, Math.min(n - 1, pos));
+    const from = problemPos[key] ?? 0, to = Math.max(0, Math.min(n - 1, pos));
+    problemPos[key] = to;
     rerender();
+    if (to !== from && !noMotion()) $(`[data-pset="${CSS.escape(key)}"] .pslot:not([hidden])`)?.classList.add(to > from ? "slide-next" : "slide-prev");
     return true;
   }
 
   const THINK_STEPS = ["질문 읽는 중", "풀이 방법 고르는 중", "단계별로 푸는 중", "한 번 더 검산하는 중", "답변 정리하는 중"];
   const pendingAt = {};   // 대화 id → 답을 기다리기 시작한 시각 (다시 그려도 단계가 이어지게)
+  const pendingMeta = {}; // 대화 id → { at, steps, expectMs } (질문 종류에 맞는 단계 글자)
   let typeNext = null;    // 다음에 그릴 때 마지막 답변을 타이핑 효과로 보여 줄 대화 id
   function renderChat(id, { keepScroll = false } = {}) {
     if (voice && !document.body.contains(voice.btn)) voice.stop();
@@ -1592,7 +1635,10 @@
         </div>
         <div class="thread">
           ${msgs}
-          ${Store.isPending(id) ? `<div class="msg ai pending"><span class="ai-avatar"></span><div class="ai-body"><div class="typing"><span class="dots"><i></i><i></i><i></i></span><span class="think" id="think-step">${THINK_STEPS[0]}</span></div></div></div>` : ""}
+          ${Store.isPending(id) ? `<div class="msg ai pending"><span class="ai-avatar"></span><div class="ai-body">
+            <div class="think-card"><span class="think-ring" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" class="trk"/><circle cx="12" cy="12" r="9.5" class="bar" pathLength="100" id="think-bar"/></svg></span>
+              <span class="think" id="think-step" role="status">${esc((pendingMeta[id]?.steps ?? THINK_STEPS)[0])}</span></div>
+            <div class="think-lines" aria-hidden="true"><i></i><i></i><i></i></div></div></div>` : ""}
         </div>
         <form class="composer glass chat-composer" id="chat-form">
           <button type="button" class="icon-btn" data-attach title="사진·파일 첨부" aria-label="사진·파일 첨부"><i data-lucide="plus"></i></button>
@@ -1633,17 +1679,16 @@
 
     contentEl.scrollTop = keepScroll ? scroll : contentEl.scrollHeight;
 
-    // 생각 중: 단계 글자가 차례로 바뀐다
+    // 생각 중: 단계 글자가 차례로 바뀌고, 원형이 예상 시간에 맞춰 90%까지 차오른다
     if (Store.isPending(id)) {
-      const started = (pendingAt[id] ??= Date.now());
-      const el = $("#think-step");
-      const tickThink = () => {
-        if (!el.isConnected || !Store.isPending(id)) return;
-        const k = Math.min(THINK_STEPS.length - 1, Math.floor((Date.now() - started) / 2200));
-        if (el.textContent !== THINK_STEPS[k]) { el.textContent = THINK_STEPS[k]; el.classList.remove("swap"); void el.offsetWidth; el.classList.add("swap"); }
-        setTimeout(tickThink, 400);
-      };
-      tickThink();
+      const meta = pendingMeta[id] ?? (pendingMeta[id] = { at: pendingAt[id] ??= Date.now(), steps: THINK_STEPS, expectMs: 20000 });
+      const el = $("#think-step"), bar = $("#think-bar");
+      frameLoop(() => {
+        if (!el.isConnected || !Store.isPending(id)) return false;
+        const t = Date.now() - meta.at, k = Math.min(meta.steps.length - 1, Math.floor((t / meta.expectMs) * meta.steps.length));
+        if (el.textContent !== meta.steps[k]) { el.textContent = meta.steps[k]; el.classList.remove("swap"); void el.offsetWidth; el.classList.add("swap"); }
+        bar.style.strokeDashoffset = String(100 - 90 * (1 - Math.exp(-t / (meta.expectMs * 0.55))));
+      });
     } else delete pendingAt[id];
 
     // 방금 받은 답변은 빠르게 타이핑되듯 (커서 없음) — 읽는 중이면 따라 내려가고, 위로 올려 보면 '새 답변' 버튼
@@ -1654,21 +1699,31 @@
       if (bodyEl) {
         let follow = true;
         const atBottom = () => contentEl.scrollHeight - contentEl.scrollTop - contentEl.clientHeight < 80;
-        const onScroll = () => { follow = atBottom(); pill.hidden = follow || !typing; };
+        // 사용자가 직접 스크롤하면 따라가기를 멈추고, 다시 맨 아래로 오면 이어서 따라간다
+        const userScroll = () => { follow = false; pill.hidden = !typing; };
+        const onScroll = () => { if (!follow && atBottom()) { follow = true; pill.hidden = true; } };
         const pill = document.createElement("button");
         pill.type = "button";
         pill.className = "new-answer";
         pill.hidden = true;
         pill.innerHTML = '<i data-lucide="arrow-down"></i>답변 계속 보기';
-        pill.onclick = () => { contentEl.scrollTo({ top: contentEl.scrollHeight, behavior: "smooth" }); follow = true; pill.hidden = true; };
+        pill.onclick = () => { follow = true; pill.hidden = true; };
         $(".chat-view").append(pill);
         icons();
         let typing = true;
+        const inputs = ["wheel", "touchmove", "keydown"];
+        inputs.forEach((ev) => contentEl.addEventListener(ev, userScroll, { passive: true }));
         contentEl.addEventListener("scroll", onScroll, { passive: true });
         last.classList.add("arrive");
+        const stopFollow = smoothFollow(contentEl, () => follow);
         typeReveal(bodyEl, {
-          onStep: () => { if (follow) contentEl.scrollTop = contentEl.scrollHeight; },
-          onDone: () => { typing = false; pill.remove(); contentEl.removeEventListener("scroll", onScroll); },
+          onDone: () => {
+            typing = false;
+            pill.remove();
+            contentEl.removeEventListener("scroll", onScroll);
+            inputs.forEach((ev) => contentEl.removeEventListener(ev, userScroll));
+            setTimeout(stopFollow, 700); // 마지막 줄까지 부드럽게 따라 내려간 뒤 멈춘다
+          },
         });
       }
     }
