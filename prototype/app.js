@@ -4914,8 +4914,13 @@
   // 무지개 도트: 홈에서는 입력창 중심, 다른 화면에서는 화면 위쪽 가운데
   const composerEl = $("#composer");
   const homeText = [".hero h1", ".hero p", ".action"].flatMap((s) => $$(s));
-  // 대화 화면: 움직이는 배경 위에 사이드바 같은 흰색 컨테이너를 깔고 그 위에 글 (glass.css body.chat-panel)
-  const syncPanel = () => document.body.classList.toggle("chat-panel", location.hash.startsWith("#/chat/"));
+  // 홈을 뺀 화면: 움직이는 배경 위에 사이드바 같은 흰색 컨테이너를 깔고 그 위에 글 (glass.css body.panel-view)
+  // 홈은 입력창 주변으로 도트가 퍼지는 디자인이라 그대로 둔다
+  const syncPanel = () => {
+    const page = route().parts[0];
+    document.body.classList.toggle("panel-view", Boolean(page));
+    document.body.classList.toggle("chat-panel", page === "chat");
+  };
   window.addEventListener("hashchange", syncPanel);
   syncPanel();
   dotField($("#dots"), {
