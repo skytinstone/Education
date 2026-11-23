@@ -183,9 +183,32 @@
   }
   .choice.pick { background: rgba(22,163,74,.08); box-shadow: inset 0 0 0 1.5px var(--ok); color: var(--ok); font-weight: 600; }
   .reply { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; color: var(--ink-2); line-height: 1.6; }
-  .reply .ai { width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0; background: conic-gradient(#ff5f6d, #ffb347, #ffe259, #5ee7a0, #4fc3ff, #6b7cff, #c06bff, #ff5f6d); display: grid; place-items: center; }
-  .reply .ai::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: #fff; }
+  /* 앱과 같은 무지개 별 아바타 (glass.css .ai-avatar) */
+  .ai { position: relative; display: block; width: 26px; height: 26px; flex-shrink: 0; }
+  .ai i {
+    position: absolute; display: block;
+    background: linear-gradient(135deg, #ff5f6d 0%, #ffb347 22%, #5ee7a0 45%, #4fc3ff 66%, #6b7cff 82%, #c06bff 100%);
+    -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1c.8 6.4 4.6 10.2 11 11-6.4.8-10.2 4.6-11 11-.8-6.4-4.6-10.2-11-11 6.4-.8 10.2-4.6 11-11z'/%3E%3C/svg%3E") center / contain no-repeat;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 1c.8 6.4 4.6 10.2 11 11-6.4.8-10.2 4.6-11 11-.8-6.4-4.6-10.2-11-11 6.4-.8 10.2-4.6 11-11z'/%3E%3C/svg%3E") center / contain no-repeat;
+  }
+  .ai .s1 { left: 0; top: 4px; width: 21px; height: 21px; }
+  .ai .s2 { right: 0; top: 0; width: 9px; height: 9px; opacity: .9; }
+  .reply { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; color: var(--ink-2); line-height: 1.6; }
   .reply b { color: var(--ink); font-weight: 600; }
+  /* 답글 데모: 답의 일부를 드래그 → '답글' → 그 부분만 더 깊게 */
+  .reply .sel { position: relative; border-radius: 3px; transition: background .3s; }
+  .reply .sel.on { background: rgba(79,124,255,.18); }
+  .reply-pop {
+    position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translate(-50%, 4px); opacity: 0; pointer-events: none;
+    display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border-radius: 9px; white-space: nowrap;
+    background: var(--ink); color: #fff; font-size: 11.5px; font-weight: 600; font-style: normal;
+    transition: opacity .3s var(--ease), transform .3s var(--ease);
+  }
+  .reply-pop [data-lucide] { width: 12px; height: 12px; }
+  .reply .sel.pop .reply-pop { opacity: 1; transform: translate(-50%, 0); }
+  .ask.quote { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+  .ask.quote q { quotes: none; display: flex; gap: 6px; align-items: center; font-size: 12px; color: rgba(255,255,255,.7); padding-left: 8px; border-left: 2px solid rgba(255,255,255,.35); }
+  .ask.quote q .math { color: #fff; }
   .step { transition: opacity .5s var(--ease), transform .5s var(--ease); }
   .step.off { opacity: 0; transform: translateY(8px); }
 
@@ -200,7 +223,7 @@
   .reveal { opacity: 0; transform: translateY(28px); transition: opacity .8s var(--ease), transform .8s var(--ease); transition-delay: var(--d, 0ms); }
   .reveal.in { opacity: 1; transform: none; }
 
-  /* ---------- 핵심 기능 4가지 ---------- */
+  /* ---------- 핵심 기능 ---------- */
   .features { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 48px; }
   .feature {
     background: rgba(255,255,255,.85); border-radius: 22px; padding: 28px;
@@ -216,9 +239,34 @@
   .tag { font-size: 12.5px; font-weight: 600; padding: 5px 10px; border-radius: 999px; background: color-mix(in srgb, var(--c, var(--ink-3)) 11%, transparent); color: var(--c, var(--ink-2)); }
 
   .mini-q { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: var(--bg); font-size: 13.5px; }
-  .mini-q + .mini-q { margin-top: 8px; }
+  .mini-q + .mini-q, .mini-a + .mini-q { margin-top: 8px; }
   .mini-q .tag { margin-left: auto; }
   .mini-q [data-lucide] { color: var(--ink-3); }
+  .mini-q.me { margin-left: 18%; background: var(--ink); color: #fff; }
+  .mini-q.me [data-lucide] { color: rgba(255,255,255,.6); }
+  .mini-a { display: flex; gap: 10px; align-items: center; margin-top: 8px; padding: 2px 4px; font-size: 13.5px; color: var(--ink-2); }
+  .mini-a .ai { width: 22px; height: 22px; }
+  .mini-a .ai .s1 { width: 18px; height: 18px; }
+  .mini-a .ai .s2 { width: 8px; height: 8px; }
+  .mini-q q { quotes: none; font-size: 12px; color: rgba(255,255,255,.7); padding-left: 8px; border-left: 2px solid rgba(255,255,255,.35); }
+
+  /* 시험 모드: 대화 + 오른쪽 분할 패널 미니 그림 */
+  .split { display: flex; height: 150px; border-radius: 14px; overflow: hidden; background: var(--bg); box-shadow: inset 0 0 0 1px var(--line); }
+  .split .chat { flex: 1; padding: 12px; display: flex; flex-direction: column; gap: 6px; justify-content: flex-end; }
+  .split .chat span { height: 8px; border-radius: 4px; background: rgba(15,23,42,.08); }
+  .split .chat span.me { align-self: flex-end; width: 62%; height: 20px; border-radius: 8px; background: var(--ink); color: #fff; font-size: 10.5px; line-height: 20px; padding: 0 8px; white-space: nowrap; overflow: hidden; }
+  .split .grip { width: 10px; display: grid; place-items: center; cursor: col-resize; }
+  .split .grip::after { content: ""; width: 3px; height: 26px; border-radius: 2px; background: rgba(15,23,42,.18); }
+  .split .pane { width: 50%; background: #fff; box-shadow: -1px 0 0 var(--line); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .split .pane .top { display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; font-weight: 700; }
+  .split .pane .timer { display: inline-flex; align-items: center; gap: 4px; color: var(--accent); font-variant-numeric: tabular-nums; }
+  .split .pane .timer [data-lucide] { width: 12px; height: 12px; }
+  .split .pane .q { height: 34px; border-radius: 8px; background: var(--bg); }
+  .split .pane .dots { display: flex; gap: 4px; margin-top: auto; }
+  .split .pane .dots i { flex: 1; height: 6px; border-radius: 3px; background: rgba(15,23,42,.08); }
+  .split .pane .dots i.ok { background: var(--ok); }
+  .split .pane .dots i.x { background: var(--bad); }
+  .split .pane .dots i.now { background: var(--ink); }
 
   .bars { display: grid; gap: 10px; }
   .bar-row { display: grid; grid-template-columns: 7.5em 1fr 3em; align-items: center; gap: 10px; font-size: 13px; }
@@ -409,7 +457,7 @@
       </div>
 
       <!-- 제품 미리보기 (실제 화면 흐름을 재현한 데모) -->
-      <div class="demo glass reveal" aria-label="문제 생성 예시" role="img">
+      <div class="demo glass reveal" aria-label="문제 생성과 답글 예시" role="img">
         <div class="demo-bar" aria-hidden="true"><i></i><i></i><i></i></div>
         <div class="ask" id="demo-ask"><span id="demo-text"></span><span class="caret"></span></div>
         <div class="checks step off" id="demo-checks">
@@ -432,8 +480,16 @@
           </div>
         </div>
         <div class="reply step off" id="demo-reply">
-          <span class="ai" aria-hidden="true"></span>
-          <p><b>정답이에요!</b> <span class="math">t = x²</span>으로 치환하면 <span class="math">dt = 2x dx</span>, 구간도 0 → 1 그대로라 <span class="math">∫ e<sup>t</sup> dt = e − 1</span>. 이 개념 정답률이 <b>58%에서 64%</b>로 올랐어요.</p>
+          <span class="ai" aria-hidden="true"><i class="s1"></i><i class="s2"></i></span>
+          <p><b>정답이에요!</b> <span class="sel" id="demo-sel"><span class="math">t = x²</span>으로 치환하면 <span class="math">dt = 2x dx</span><span class="reply-pop"><i data-lucide="reply"></i>답글</span></span>, 구간도 0 → 1 그대로라 <span class="math">∫ e<sup>t</sup> dt = e − 1</span>. 이 개념 정답률이 <b>58%에서 64%</b>로 올랐어요.</p>
+        </div>
+        <div class="ask quote step off" id="demo-quote">
+          <q><span class="math">t = x²</span>으로 치환하면 <span class="math">dt = 2x dx</span></q>
+          <span>왜 <span class="math">t = x²</span>으로 잡아야 해?</span>
+        </div>
+        <div class="reply step off" id="demo-deep">
+          <span class="ai" aria-hidden="true"><i class="s1"></i><i class="s2"></i></span>
+          <p>적분식 안에 <span class="math">x²</span>과 그 미분 <span class="math">2x</span>가 <b>짝으로</b> 들어 있기 때문이에요. 이렇게 '함수와 그 도함수'가 함께 보이면, 그 함수를 <span class="math">t</span>로 두는 게 치환적분의 첫 신호예요.</p>
         </div>
       </div>
     </div>
@@ -500,6 +556,35 @@
             <div class="seg" aria-hidden="true"><span>더 쉽게</span><span>비슷하게</span><span class="on">더 어렵게</span></div>
           </div>
         </article>
+
+        <article class="feature reveal">
+          <span class="num">05</span>
+          <h3>물어보면, 이어서 답해요.</h3>
+          <p>방금 푼 문제와 앞서 나눈 대화를 기억하고 답해요. 문제만 내는 게 아니라 개념 질문, 내 시험 현황까지. 답에서 궁금한 부분을 드래그해 답글을 달면 그 부분만 더 깊게 설명해요.</p>
+          <div class="viz" aria-label="이어지는 대화와 답글 예시">
+            <div class="mini-q me"><i data-lucide="message-square"></i>아까 그 3번 문제, 왜 ③이 아니야?</div>
+            <div class="mini-a"><span class="ai" aria-hidden="true"><i class="s1"></i><i class="s2"></i></span>③은 구간을 바꾸지 않아서 생긴 함정이에요…</div>
+            <div class="mini-q me" style="flex-direction:column;align-items:flex-start;gap:6px"><q>구간을 바꾸지 않아서 생긴 함정</q>이 부분 더 자세히 설명해 줘</div>
+          </div>
+        </article>
+
+        <article class="feature reveal">
+          <span class="num">06</span>
+          <h3>말 한마디로, 시험 모드.</h3>
+          <p>"시험 모드로 진입해줘"라고 말하면 오른쪽에 시험 화면이 열려요. 대화는 그대로 두고 실전처럼 시간을 재며 풀고, 제출하면 바로 채점해 틀린 문제는 오답노트로 보내요. 화면은 접고 펼치고, 드래그로 넓힐 수 있어요.</p>
+          <div class="viz">
+            <div class="split" aria-label="대화 옆에 열린 시험 화면 예시">
+              <div class="chat"><span style="width:70%"></span><span style="width:52%"></span><span class="me">시험 모드로 진입해줘</span></div>
+              <div class="grip" aria-hidden="true"></div>
+              <div class="pane">
+                <div class="top"><span>미적분 · 12문항</span><span class="timer"><i data-lucide="timer"></i>24:10</span></div>
+                <div class="q"></div>
+                <div class="q" style="height:22px;width:70%"></div>
+                <div class="dots" aria-hidden="true"><i class="ok"></i><i class="ok"></i><i class="x"></i><i class="ok"></i><i class="now"></i><i></i><i></i><i></i></div>
+              </div>
+            </div>
+          </div>
+        </article>
       </div>
 
       <div class="extras">
@@ -564,7 +649,7 @@
         <div class="stepc reveal">
           <span class="n">2</span>
           <h4>대화하듯 풀기</h4>
-          <p>풀고 싶은 문제를 말하고, 모르는 건 바로 물어보세요. 틀린 문제는 이유와 함께 오답노트로 가요.</p>
+          <p>풀고 싶은 문제를 말하고, 모르는 건 바로 물어보세요. 준비가 되면 시험 모드로 실전처럼 풀어요. 틀린 문제는 이유와 함께 오답노트로 가요.</p>
           <div class="chiprow">
             <span class="tag" style="--c:var(--ok)">정답 8</span>
             <span class="tag" style="--c:var(--bad)">오답 2 → 오답노트</span>
@@ -629,6 +714,10 @@
         <details class="reveal">
           <summary>AI가 만든 문제, 정말 믿어도 되나요?<i data-lucide="plus"></i></summary>
           <p>네. AI가 만든 문제는 그대로 나가지 않아요. 한 번 더 검산해서 정답과 조건이 정확한 문제만 보여 드려요. 그래도 이상한 문제가 있다면 문제 화면에서 신고해 주세요. 바로 확인할게요.</p>
+        </details>
+        <details class="reveal">
+          <summary>문제 말고 개념 질문도 할 수 있나요?<i data-lucide="plus"></i></summary>
+          <p>네. Eureka는 앞서 나눈 대화와 방금 푼 문제를 기억하고 답해요. "아까 그 문제 왜 틀렸어?", "치환적분은 언제 써?"처럼 편하게 물어보세요. 답에서 궁금한 부분을 드래그해 답글을 달면 그 부분만 더 깊고 자세하게 설명해 드려요.</p>
         </details>
         <details class="reveal">
           <summary>어떤 과목을 공부할 수 있나요?<i data-lucide="plus"></i></summary>
@@ -713,10 +802,10 @@
   }, { threshold: 0.12, rootMargin: "0px 0px -6% 0px" });
   $$(".reveal").forEach((el) => io.observe(el));
 
-  // ---------- 히어로 데모: 질문 입력 → 검증 → 문제 → 풀이 ----------
+  // ---------- 히어로 데모: 질문 입력 → 검증 → 문제 → 풀이 → 답글로 더 깊게 ----------
   const QUESTION = "미적분 치환적분 3점짜리 문제 내줘";
-  const text = $("#demo-text"), checks = $$("[data-check]");
-  const steps = ["#demo-checks", "#demo-problem", "#demo-reply"].map((s) => $(s));
+  const text = $("#demo-text"), checks = $$("[data-check]"), sel = $("#demo-sel");
+  const steps = ["#demo-checks", "#demo-problem", "#demo-reply", "#demo-quote", "#demo-deep"].map((s) => $(s));
   const answer = $(".choice[data-c]");
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const setCheck = (el, done) => {
@@ -729,12 +818,14 @@
     checks.forEach((c) => setCheck(c, true));
     steps.forEach((s) => s.classList.remove("off"));
     answer.classList.add("pick");
+    sel.classList.add("on");
     lucide.createIcons();
   }
   async function play() {
     for (;;) {
       text.textContent = "";
       steps.forEach((s) => s.classList.add("off"));
+      sel.classList.remove("on", "pop");
       checks.forEach((c) => setCheck(c, false));
       answer.classList.remove("pick");
       lucide.createIcons();
@@ -749,6 +840,15 @@
       answer.classList.add("pick");
       await wait(500);
       steps[2].classList.remove("off");
+      await wait(2200);
+      sel.classList.add("on");        // 답의 일부를 드래그하면
+      await wait(500);
+      sel.classList.add("pop");       // '답글' 이 뜨고
+      await wait(1100);
+      sel.classList.remove("pop");
+      steps[3].classList.remove("off"); // 그 부분을 인용해 묻고
+      await wait(1300);
+      steps[4].classList.remove("off"); // 더 깊게 답한다
       await wait(6000);
     }
   }
