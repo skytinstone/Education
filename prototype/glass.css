@@ -693,7 +693,14 @@ body.pdf-capture .note-item, body.pdf-capture .exam-paper {
   background: #fff !important; box-shadow: none !important; border: 1px solid #e3e5ea !important;
   -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
 }
-body.pdf-capture .exam-paper { border: 0 !important; }
+body.pdf-capture .exam-paper { border: 0 !important; box-shadow: none !important; margin: 0 auto !important; }
+/* 종이에 담지 않는 것 (app.js PDF_SKIP 과 같음) */
+body.pdf-capture :is(.print-hide, .toolbar, .glass-bar, .note-actions, .exam-toolbar, .ak-actions, .ak-back, .ak-ask, .ask-pop, .ask-panel, [data-pdf], [data-print]) { display: none !important; }
+body.pdf-capture .exam-body { column-count: 1 !important; column-rule: none !important; } /* 쪽으로 자를 때 읽는 순서가 섞이지 않게 한 단으로 */
+.pdf-veil { position: fixed; inset: 0; z-index: 9999; display: grid; place-items: center; background: rgba(246, 247, 251, .96); }
+.pdf-veil span { display: inline-flex; align-items: center; gap: 8px; padding: 12px 18px; border-radius: 999px; background: #fff;
+  box-shadow: 0 8px 30px rgba(31, 41, 80, .12); font-size: 14px; font-weight: 600; }
+.pdf-veil svg { width: 16px; height: 16px; }
 
 /* ---------- 대화 화면 간격·폭: 질문·답 한 쌍은 가깝게, 쌍과 쌍 사이는 넓게 ---------- */
 @media (min-width: 1400px) { .chat-view { max-width: 860px; } }
