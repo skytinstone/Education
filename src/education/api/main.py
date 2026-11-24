@@ -41,7 +41,8 @@ async def security_headers(request: Request, call_next):
     h.setdefault("X-Content-Type-Options", "nosniff")
     h.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     h.setdefault("X-Frame-Options", "SAMEORIGIN")
-    h.setdefault("Permissions-Policy", "microphone=(self), camera=(), geolocation=(), payment=()")
+    # 카메라·마이크는 AI 면접(내 모습·받아쓰기)에서 쓴다 — 우리 사이트에서만 허용
+    h.setdefault("Permissions-Policy", "microphone=(self), camera=(self), geolocation=(), payment=()")
     if request.headers.get("x-forwarded-proto") == "https" or request.url.scheme == "https":
         h.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     # 화면 파일(js·css·html)은 매번 바뀌었는지 확인하게 — 배포하면 강력 새로고침 없이 바로 새 화면 (안 바뀌었으면 304 라 가벼움)

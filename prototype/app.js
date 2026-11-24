@@ -3200,6 +3200,15 @@
   const ivCamPref = (on) => { try { localStorage.setItem("eureka.ivCam", on ? "1" : "0"); } catch { /* 무시 */ } };
   const ivMedia = { stream: null, ctx: null, an: null, raf: 0, cam: false, err: "", asking: false };
   const IV_VIDEO = { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } };
+  // 카메라가 안 켜진 이유를 알려 준다 (권한 · 장치 없음 · 다른 앱이 사용 중)
+  const ivCamError = (e) => ({
+    NotAllowedError: "카메라 권한이 꺼져 있어요 · 주소창 왼쪽 아이콘에서 카메라를 '허용'으로 바꾼 뒤 다시 시도해 주세요",
+    SecurityError: "카메라 권한이 꺼져 있어요 · 주소창 왼쪽 아이콘에서 카메라를 '허용'으로 바꾼 뒤 다시 시도해 주세요",
+    NotFoundError: "카메라를 찾지 못했어요 · 연결을 확인해 주세요",
+    OverconstrainedError: "카메라를 찾지 못했어요 · 연결을 확인해 주세요",
+    NotReadableError: "다른 앱이 카메라를 쓰고 있어요 · Zoom·Teams 같은 앱을 닫고 다시 시도해 주세요",
+    AbortError: "다른 앱이 카메라를 쓰고 있어요 · Zoom·Teams 같은 앱을 닫고 다시 시도해 주세요",
+  })[e?.name] ?? "카메라를 쓸 수 없어요 · 권한을 확인해 주세요";
   async function ivMediaStart(withCam = ivCamOn()) {
     ivMediaStop();
     ivMedia.asking = true;
@@ -3209,11 +3218,11 @@
       try {
         ivMedia.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: withCam ? IV_VIDEO : false });
         ivMedia.err = "";
-      } catch {
+      } catch (e) {
         try { // 카메라가 없거나 거절했으면 마이크만이라도
           ivMedia.stream = withCam ? await navigator.mediaDevices.getUserMedia({ audio: true }) : null;
-          ivMedia.err = withCam ? "카메라를 쓸 수 없어요 · 권한을 확인해 주세요" : "마이크 권한을 허용해 주세요";
-        } catch { ivMedia.err = "카메라·마이크 권한을 허용해 주세요 (주소창 왼쪽 자물쇠)"; }
+          ivMedia.err = withCam ? ivCamError(e) : "마이크 권한을 허용해 주세요";
+        } catch { ivMedia.err = "카메라·마이크 권한을 허용해 주세요 (주소창 왼쪽 아이콘)"; }
       }
     }
     ivMedia.asking = false;
@@ -3287,7 +3296,7 @@
       ivMedia.err = "";
       const v = $("#iv-cam video");
       if (v) v.srcObject = null; // 새 영상 트랙을 다시 붙이게
-    } catch { ivMedia.err = "카메라를 쓸 수 없어요 · 권한을 확인해 주세요"; }
+    } catch (e) { ivMedia.err = ivCamError(e); }
     ivMediaDraw();
   }
   window.addEventListener("hashchange", () => { if (!location.hash.startsWith(`#/interview/${iv?.id}`)) ivCleanup(); });
