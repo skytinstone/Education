@@ -674,6 +674,11 @@ const Store = (() => {
     notionAuto: (auto) => api("/notion", { method: "PATCH", body: { auto } }).then((s) => ((notionPromise = Promise.resolve(s)), s)),
     notionDisconnect: () => api("/notion", { method: "DELETE" }).then(() => (notionPromise = null)),
     notionExport: (body) => api("/notion/export", { method: "POST", body }),
+    // 요금제와 결제 (PortOne 월 구독)
+    billing: () => (MODE === "api" ? api("/billing") : Promise.resolve(null)),
+    billingSubscribe: (plan, billingKey) => api("/billing/subscribe", { method: "POST", body: { plan, billing_key: billingKey } }),
+    billingCancel: () => api("/billing/cancel", { method: "POST" }),
+    billingResume: () => api("/billing/resume", { method: "POST" }),
     // 자기소개서 파일 → 글 (서버는 파일을 저장하지 않는다)
     resumeText(file) {
       const form = new FormData();

@@ -136,6 +136,40 @@ class NotionLink(Base):
     created_at: Mapped[datetime] = created_at()
 
 
+class Subscription(Base):
+    """월 구독 (services/billing.py) — 카드 정보는 PortOne 에만 있고, 여기에는 암호화한 빌링키와 표시용 카드 이름만."""
+    __tablename__ = "subscriptions"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    plan: Mapped[str] = mapped_column(String(16))                       # plus | pro
+    status: Mapped[str] = mapped_column(String(16))                     # active | past_due | ended
+    billing_key_sealed: Mapped[str] = mapped_column(Text)
+    card_label: Mapped[str | None] = mapped_column(String(80))           # 예: 신한카드 1234
+    period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, server_default="false")
+    next_payment_id: Mapped[str | None] = mapped_column(String(64))      # 다음 달 예약 결제
+    created_at: Mapped[datetime] = created_at()
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class BillingPayment(Base):
+    """결제 한 건 — PortOne paymentId 가 기본키. 웹훅이 오면 PortOne 에서 다시 조회해 상태를 맞춘다."""
+    __tablename__ = "billing_payments"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    plan: Mapped[str] = mapped_column(String(16))
+    amount: Mapped[int]
+    kind: Mapped[str] = mapped_column(String(16))                       # first | renewal
+    status: Mapped[str] = mapped_column(String(16))                     # ready | scheduled | paid | failed | revoked | cancelled
+    failure: Mapped[str | None] = mapped_column(Text)
+    receipt_url: Mapped[str | None] = mapped_column(Text)
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = created_at()
+
+
 class Interview(Base):
     """AI 면접 한 번 — 질문·받아쓴 답·리포트 (services/interview.py). 녹음은 저장하지 않는다."""
     __tablename__ = "interviews"

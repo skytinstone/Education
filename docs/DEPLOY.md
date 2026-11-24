@@ -182,6 +182,17 @@ crontab -e
 - VOC: 의견·문제 신고 확인·답변·복구, 전체 공지
 새 피드백을 메일로 받으려면 `SMTP_USER`·`SMTP_PASSWORD` (Gmail 앱 비밀번호) 를 넣는다. 바꾼 뒤 `docker compose -f docker-compose.prod.yml up -d`.
 
+## 13. 월 구독 결제 (PortOne V2 · 선택)
+값이 없으면 결제 화면이 숨겨진다 (베타 무료 운영). 켜는 순서:
+1. https://admin.portone.io 가입 → **결제 연동 → 채널 관리**에서 **테스트** 환경으로 토스페이먼츠 **카드 정기결제(빌링키)** 채널을 추가한다
+2. **결제 연동 → 연동 정보**에서 상점 ID, 채널 키, **V2 API 시크릿**을 복사한다
+3. **결제 연동 → 웹훅**에서 버전 2024-04-25, 주소 `https://도메인/api/billing/webhook` 을 등록하고 웹훅 시크릿을 복사한다
+4. `.env` 에 `PORTONE_STORE_ID`·`PORTONE_CHANNEL_KEY`·`PORTONE_API_SECRET`·`PORTONE_WEBHOOK_SECRET` 을 넣고 앱을 다시 시작한다
+5. 설정 화면의 **요금제와 결제**에서 테스트 카드로 구독 → 해지 → 해지 취소를 해 본다 (테스트 결제는 실제로 청구되지 않는다)
+6. 사업자등록 · 통신판매업 신고 · 결제 회사 심사가 끝나면 **실연동** 채널 키·API 시크릿·웹훅 시크릿으로 바꾼다
+
+요금·하루 AI 한도는 `services/billing.py` 의 `PLANS`. 금액은 서버에서만 정하고, 웹훅이 와도 PortOne 에서 결제를 다시 조회해 금액까지 맞을 때만 반영한다.
+
 ---
 
 ## 새 버전 배포

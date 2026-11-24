@@ -5195,6 +5195,86 @@
     });
   }
 
+  // ---------- 요금제와 결제 (PortOne 월 구독) — 서버에 PortOne 설정이 있을 때만 보인다 ----------
+  // 카드는 PortOne 창에서 등록하고(카드 번호는 우리 서버를 지나지 않는다), 받은 빌링키로 서버가 첫 달을 결제한다
+  const PORTONE_SDK = "https://cdn.portone.io/v2/browser-sdk.js";
+  let portoneLoad = null;
+  const loadPortOne = () => (portoneLoad ??= new Promise((ok, fail) => {
+    if (window.PortOne) return ok(window.PortOne);
+    const sc = document.createElement("script");
+    sc.src = PORTONE_SDK;
+    sc.onload = () => (window.PortOne ? ok(window.PortOne) : fail(new Error("결제 창을 불러오지 못했어요")));
+    sc.onerror = () => { portoneLoad = null; fail(new Error("결제 창을 불러오지 못했어요. 인터넷 연결을 확인해 주세요")); };
+    document.head.append(sc);
+  }));
+  const won = (n) => `${n.toLocaleString()}원`;
+  const ymd = (iso) => new Date(iso).toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
+  async function subscribePlan(b, p, btn) {
+    const label = btn.innerHTML;
+    const busy = (on, text) => { btn.disabled = on; btn.innerHTML = on ? `<i data-lucide="loader" class="spin"></i>${text}` : label; icons(); };
+    busy(true, "결제 창을 여는 중…");
+    try {
+      const PortOne = await loadPortOne();
+      const u = Store.state.user || {};
+      const r = await PortOne.requestIssueBillingKey({
+        storeId: b.store_id, channelKey: b.channel_key, billingKeyMethod: "CARD", issueName: `Eureka ${p.name} 정기결제`,
+        customer: { customerId: b.customer_id, fullName: u.name || undefined, email: u.email || undefined },
+      });
+      if (!r || r.code !== undefined || !r.billingKey) { busy(false); if (r?.message) toast(r.message); return; } // 창을 닫았거나 실패
+      busy(true, "결제하는 중…");
+      await Store.billingSubscribe(p.key, r.billingKey);
+      toast(`${p.name} 구독을 시작했어요. 고마워요!`);
+      drawBillingCard();
+    } catch (err) { busy(false); toast(err.message); }
+  }
+  async function drawBillingCard() {
+    const card = $("#billing-card"), box = $("#billing-box");
+    if (!box) return;
+    let b;
+    try { b = await Store.billing(); } catch { b = null; }
+    if (!$("#billing-box") || !b?.available) return; // 결제 설정 전(베타)에는 카드를 숨긴다
+    card.hidden = false;
+    const plan = b.plans.find((p) => p.key === b.plan);
+    const sub = b.subscription;
+    const paid = b.plans.filter((p) => p.price);
+    const head = sub && plan.price ? `
+      <div class="settings-row"><span><b>${esc(plan.name)}</b> 이용 중 · 월 ${won(plan.price)}${sub.card ? ` · ${esc(sub.card)}` : ""}</span>
+        ${sub.cancel_at_period_end
+          ? '<button class="btn-ghost glassy" data-bill-resume><i data-lucide="rotate-ccw"></i>해지 취소</button>'
+          : '<button class="btn-ghost glassy" data-bill-cancel><i data-lucide="x"></i>구독 해지</button>'}</div>
+      <p class="mini">${sub.status === "past_due" ? "<b>지난 결제가 실패했어요.</b> 카드를 확인해 주세요. 3일 안에 결제되지 않으면 무료로 바뀌어요."
+        : sub.cancel_at_period_end ? `${ymd(sub.period_end)}까지 쓸 수 있고, 그 뒤에는 무료로 바뀌어요.`
+        : `다음 결제일은 ${ymd(sub.period_end)}이에요. 언제든 해지할 수 있어요.`}</p>`
+      : `<p class="mini">지금은 <b>무료</b>로 쓰고 있어요. 더 많이 쓰고 싶다면 요금제를 골라 주세요. 매달 같은 날 자동으로 결제되고, 언제든 해지할 수 있어요.</p>
+      <div class="bill-plans">${paid.map((p) => `
+        <div class="bill-plan"><b>${esc(p.name)}</b><span class="bill-price">${won(p.price)}<small> / 월</small></span>
+          <ul>${p.perks.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+          <button class="btn-primary" data-bill-plan="${p.key}">${esc(p.name)} 구독하기</button></div>`).join("")}</div>`;
+    const history = b.payments.length ? `<details class="bill-history"><summary>결제 내역</summary><ul>${b.payments.map((x) => `
+        <li><span>${new Date(x.at).toLocaleDateString("ko-KR")}</span><span>${esc(b.plans.find((p) => p.key === x.plan)?.name || x.plan)} · ${won(x.amount)}</span>
+          ${x.status === "paid" ? (x.receipt_url ? `<a href="${esc(x.receipt_url)}" target="_blank" rel="noopener">영수증</a>` : "<span>결제됨</span>")
+            : `<span class="bill-fail" title="${esc(x.failure || "")}">실패</span>`}</li>`).join("")}</ul></details>` : "";
+    box.innerHTML = head + history;
+    icons();
+    box.onclick = (e) => {
+      const pb = e.target.closest("[data-bill-plan]");
+      if (pb) {
+        const p = b.plans.find((x) => x.key === pb.dataset.billPlan);
+        return confirmModal({ title: `${p.name} 구독을 시작할까요?`, action: "카드 등록하고 결제",
+          text: `오늘 ${won(p.price)}이 결제되고, 매달 같은 날 자동으로 결제돼요. 언제든 해지할 수 있고, 해지해도 결제한 기간 끝까지 쓸 수 있어요.`,
+          run: () => subscribePlan(b, p, pb) });
+      }
+      if (e.target.closest("[data-bill-cancel]")) {
+        return confirmModal({ title: "구독을 해지할까요?", action: "해지",
+          text: `${ymd(sub.period_end)}까지는 지금처럼 쓸 수 있고, 그 뒤에는 결제되지 않아요.`,
+          run: async () => { try { await Store.billingCancel(); toast("해지했어요. 다음 결제는 되지 않아요"); drawBillingCard(); } catch (err) { toast(err.message); } } });
+      }
+      if (e.target.closest("[data-bill-resume]")) {
+        Store.billingResume().then(() => { toast("해지를 취소했어요. 다음 달에도 이어서 결제돼요"); drawBillingCard(); }).catch((err) => toast(err.message));
+      }
+    };
+  }
+
   async function drawNotionCard() {
     const box = $("#notion-box");
     if (!box) return;
@@ -5296,6 +5376,11 @@
           <div class="addr-embed" id="addr-embed" hidden></div></div>
         <div class="settings-foot"><button class="btn-primary" type="submit"><i data-lucide="check"></i>저장</button></div>
       </form>
+
+      ${Store.mode === "api" ? `<section class="glass-card settings-card" style="--c:#1F5FE0" id="billing-card" hidden>
+        <h3>요금제와 결제</h3>
+        <div id="billing-box"></div>
+      </section>` : ""}
 
       ${Store.mode === "api" ? `<section class="glass-card settings-card" style="--c:#0f172a" id="notion-card">
         <h3>Notion 연결</h3>
@@ -5402,6 +5487,7 @@
     });
     renderLoginMethods();
     drawNotionCard();
+    drawBillingCard();
     $("#s-logout").addEventListener("click", () => {
       try { localStorage.removeItem("eureka.token"); localStorage.removeItem("eureka.user"); } catch { /* 무시 */ }
       location.href = "login.html";

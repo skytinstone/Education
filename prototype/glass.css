@@ -1326,3 +1326,18 @@ body.pdf-capture .exam-body { column-count: 1 !important; column-rule: none !imp
   .ivx-bar { position: sticky; bottom: -40px; z-index: 2; padding: 12px 0 52px; margin-bottom: -40px; } /* 화면 아래 여백(40px)까지 덮는다 */
 }
 @media (prefers-reduced-motion: reduce) { .ivx-track, .ivx-step i { transition: none; } .ivx-slot.pop .ivx-topic { animation: none; } }
+
+/* ---------- 요금제와 결제 (설정 · app.js drawBillingCard) ---------- */
+.bill-plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-top: 10px; }
+.bill-plan { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid rgba(15, 23, 42, .1); border-radius: 14px; background: #fff; word-break: keep-all; }
+.bill-plan b { font-size: 15px; }
+.bill-price { font-size: 22px; font-weight: 700; color: #1F5FE0; }
+.bill-price small { font-size: 13px; font-weight: 500; color: var(--ink-3); }
+.bill-plan ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: var(--ink-2); flex: 1; }
+.bill-plan .btn-primary { justify-content: center; background: #1F5FE0 !important; box-shadow: 0 4px 14px rgba(31, 95, 224, .25); }
+.bill-plan .btn-primary:hover { background: #174BB8 !important; }
+.bill-history { margin-top: 10px; font-size: 13px; }
+.bill-history summary { cursor: pointer; color: var(--ink-2); min-height: 32px; display: flex; align-items: center; }
+.bill-history ul { list-style: none; margin: 6px 0 0; padding: 0; }
+.bill-history li { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 8px; padding: 8px 0; border-top: 1px solid rgba(15, 23, 42, .06); }
+.bill-fail { color: #B42318; cursor: help; }
