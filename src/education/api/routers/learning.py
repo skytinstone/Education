@@ -3,6 +3,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Response, status
+from pydantic import BaseModel, Field
 from sqlalchemy import any_, delete, func, literal, select, update
 from sqlalchemy.dialects.postgresql import insert
 
@@ -13,7 +14,7 @@ from education.api.dto import (
 )
 from education.db import models as m
 from education.schemas import ErrorType
-from education.services import quota, learning, notes, review
+from education.services import learning, lessons, notes, quota, review, tutor_chat
 from education.services.llm import get_llm
 
 router = APIRouter(tags=["학습"])
@@ -69,6 +70,84 @@ def create_note(concept_id: str, user: CurrentUser, db: DB) -> ConceptNoteCreate
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"검증을 통과한 정리를 만들지 못했어요. 잠시 후 다시 시도해 주세요 ({e})") from None
     return ConceptNoteCreated(note=ConceptNoteOut.model_validate(result.note),
                               added_cards=[CardOut.model_validate(c) for c in result.added_cards])
+
+
+# ---------- 개념 레슨 · 개념과 대화하기 (라이브러리) ----------
+@router.get("/concepts/{concept_id}/lesson", tags=["개념"])
+def get_lesson(concept_id: str, user: CurrentUser, db: DB) -> dict | None:
+    """모두가 같이 보는 개념 레슨 — 아직 없으면 null."""
+    lesson = lessons.get_lesson(db, concept_id)
+    return {"concept_id": concept_id, "content": lesson.content, "created_at": lesson.created_at.isoformat()} if lesson else None
+
+
+@router.post("/concepts/{concept_id}/lesson", tags=["개념"], status_code=status.HTTP_201_CREATED)
+def create_lesson(concept_id: str, user: CurrentUser, db: DB) -> dict:
+    """레슨을 만들고 검증한다 (1~2분). 이미 있으면 그대로 돌려준다."""
+    if db.get(m.Concept, concept_id) is None:
+        raise HTTPException(404, "개념을 찾을 수 없어요")
+    if lessons.get_lesson(db, concept_id) is None:
+        llm = get_llm()
+        if llm is None:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 아직 설정되지 않았어요")
+        quota.check(db, user)
+        try:
+            lessons.create_lesson(db, llm, user, concept_id)
+        except lessons.LessonError as e:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"검증을 통과한 레슨을 만들지 못했어요. 잠시 후 다시 시도해 주세요 ({e})") from None
+    return get_lesson(concept_id, user, db)
+
+
+class ChatIn(BaseModel):
+    mode: tutor_chat.Mode = "explain"
+    message: str = Field(default="", max_length=4000)
+    history: list[tutor_chat.Turn] = Field(default_factory=list, max_length=30)
+
+
+@router.post("/concepts/{concept_id}/chat", tags=["개념"])
+def concept_chat(concept_id: str, body: ChatIn, user: CurrentUser, db: DB) -> dict:
+    llm = get_llm()
+    if llm is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 아직 설정되지 않았어요")
+    quota.check(db, user)
+    try:
+        return tutor_chat.reply(db, llm, user, concept_id, body.mode, body.history, body.message.strip())
+    except tutor_chat.ChatError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from None
+
+
+class ClipIn(BaseModel):
+    text: str = Field(min_length=1, max_length=6000)
+    visual: dict | None = None
+
+
+def _clip_out(c: m.ConceptClip) -> dict:
+    return {"id": str(c.id), "text": c.text, "visual": c.visual, "created_at": c.created_at.isoformat()}
+
+
+@router.get("/concepts/{concept_id}/clips", tags=["개념"])
+def list_clips(concept_id: str, user: CurrentUser, db: DB) -> list[dict]:
+    rows = db.scalars(select(m.ConceptClip).where(m.ConceptClip.user_id == user.id, m.ConceptClip.concept_id == concept_id)
+                      .order_by(m.ConceptClip.created_at.desc()).limit(50))
+    return [_clip_out(c) for c in rows]
+
+
+@router.post("/concepts/{concept_id}/clips", tags=["개념"], status_code=status.HTTP_201_CREATED)
+def add_clip(concept_id: str, body: ClipIn, user: CurrentUser, db: DB) -> dict:
+    if db.get(m.Concept, concept_id) is None:
+        raise HTTPException(404, "개념을 찾을 수 없어요")
+    visual = body.visual if body.visual and len(str(body.visual)) < 60000 else None
+    clip = m.ConceptClip(user_id=user.id, concept_id=concept_id, text=body.text.strip(), visual=visual)
+    db.add(clip)
+    db.commit()
+    db.refresh(clip)
+    return _clip_out(clip)
+
+
+@router.delete("/clips/{clip_id}", tags=["개념"], status_code=status.HTTP_204_NO_CONTENT)
+def delete_clip(clip_id: UUID, user: CurrentUser, db: DB) -> Response:
+    db.execute(delete(m.ConceptClip).where(m.ConceptClip.id == clip_id, m.ConceptClip.user_id == user.id))
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ---------- 문제 · 풀이 ----------

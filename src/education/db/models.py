@@ -136,6 +136,30 @@ class NotionLink(Base):
     created_at: Mapped[datetime] = created_at()
 
 
+class ConceptLesson(Base):
+    """개념 레슨 — 개념마다 하나, 모든 사용자가 같이 본다 (services/lessons.py). 검증을 통과한 것만 저장."""
+    __tablename__ = "concept_lessons"
+
+    concept_id: Mapped[str] = mapped_column(ForeignKey("concepts.id", ondelete="CASCADE"), primary_key=True)
+    content: Mapped[dict] = mapped_column(JSONB)          # 한 줄 직관 · 그림 · 기본/심화/시험 적용 · 공식 · 예제 · 퀴즈
+    generation_meta: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = created_at()
+
+
+class ConceptClip(Base):
+    """개념 대화에서 '내 노트에 담기' 한 설명 (services/tutor_chat.py)."""
+    __tablename__ = "concept_clips"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    concept_id: Mapped[str] = mapped_column(ForeignKey("concepts.id", ondelete="CASCADE"))
+    text: Mapped[str] = mapped_column(Text)
+    visual: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (Index("ix_concept_clips_user_concept", "user_id", "concept_id"),)
+
+
 class Subscription(Base):
     """월 구독 (services/billing.py) — 카드 정보는 PortOne 에만 있고, 여기에는 암호화한 빌링키와 표시용 카드 이름만."""
     __tablename__ = "subscriptions"
