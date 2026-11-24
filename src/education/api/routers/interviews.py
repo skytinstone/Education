@@ -29,6 +29,7 @@ class AnswerIn(BaseModel):
 def _kind_out(k: iv_svc.Kind) -> dict:
     return {"key": k.key, "name": k.name, "desc": k.desc, "lang": k.lang, "mains": k.mains, "follow_ups": k.follow_ups,
             "prep_sec": k.prep_sec, "answer_sec": k.answer_sec, "levels": list(k.levels), "level_note": k.level_note,
+            "time_note": k.time_note, "fixed": k.fixed,
             "fields": [{"key": f.key, "label": f.label, "placeholder": f.placeholder, "kind": f.kind,
                         "options": list(f.options), "required": f.required, "max_len": f.max_len} for f in k.fields]}
 

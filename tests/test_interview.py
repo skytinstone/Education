@@ -134,10 +134,70 @@ def test_admission_interview_bank(client, auth):
     d = run(client, auth, kind="admission", setup={"track": "대학원", "major": "컴퓨터학과"})
     assert d["kind_info"]["answer_sec"] == 120 and d["mains"] == 6
     kinds = [k["key"] for k in client.get("/api/interviews/kinds", headers=auth).json()]
-    assert kinds == ["opic", "job", "admission"]
+    assert kinds == ["opic", "toeic", "job", "aicomp", "admission"]
 
 
 def test_camera_and_mic_allowed_for_interview(client):
     """AI 면접의 내 모습(카메라)·받아쓰기(마이크)를 서버 헤더가 막지 않는다 — 예전에 camera=() 로 막혀 있었다."""
     pp = client.get("/api/health").headers["Permissions-Policy"]
     assert "camera=(self)" in pp and "microphone=(self)" in pp and "geolocation=()" in pp
+
+
+RESUME = ("저는 교내 동아리에서 결제 서버 개발을 맡아 응답 시간을 800ms에서 200ms로 줄였습니다. 처음에는 원인을 몰라 로그를 하나씩 분석했습니다.\n"
+          "6개월간 스타트업 인턴으로 일하며 고객 문의 자동 분류 기능을 기획하고 개발해 상담 시간을 30% 단축했습니다.\n"
+          "팀 프로젝트에서 의견 갈등이 있었을 때 회의 방식을 바꿔 합의를 이끌었습니다. 저는 성실한 사람입니다.")
+
+
+def test_resume_based_questions_without_ai(client, auth):
+    snips = interview.resume_snippets(RESUME)
+    assert len(snips) == 3 and "800ms" in snips[0] and all("성실한 사람" not in s for s in snips)
+    d = run(client, auth, kind="job", setup={"company": "토스", "job": "백엔드 개발자", "resume": RESUME})
+    iid = d["id"]
+    while d["status"] == "active":
+        d = client.post(f"/api/interviews/{iid}/answers", json={"text": KO_ANSWER, "sec": 60}, headers=auth).json()
+    based = [t for t in d["turns"] if t.get("basis")]
+    assert len(based) == 3 and all(t["basis"] in RESUME or t["basis"].rstrip("…") in RESUME for t in based)
+    assert any("토스" in t["q"] for t in d["turns"])
+
+
+def test_resume_basis_from_ai_is_checked(client, auth, monkeypatch):
+    class Planner(FakeLLM):
+        def structured(self, *, schema, **kw):
+            if schema is interview.Plan:
+                qs = [f"질문 {i}" for i in range(6)]
+                basis = ["", "결제 서버 개발을 맡아 응답 시간을 800ms에서 200ms로", "지어낸 문장 우주 정거장", "", "", ""]
+                return interview.LLMResult(data=interview.Plan(questions=qs, basis=basis), usage=interview.Usage(model="m"))
+            return super().structured(schema=schema, **kw)
+    monkeypatch.setattr(interview, "LLMResult", LLMResult, raising=False)
+    monkeypatch.setattr(interview, "Usage", Usage, raising=False)
+    monkeypatch.setattr(interview, "get_llm", lambda: Planner())
+    d = run(client, auth, kind="aicomp", setup={"company": "토스", "resume": RESUME})
+    assert d["by_ai"] and d["turns"][0]["part"] == "기본 질문 · 자기소개" and d["turns"][0]["answer"] == 60
+    plan = client.get(f"/api/interviews/{d['id']}", headers=auth).json()
+    # 자기소개서에 있는 근거만 붙고, 지어낸 근거는 버린다 — 서버에 저장된 계획으로 확인
+    from education.db import models as m  # noqa: F401
+    iid = d["id"]
+    d = client.post(f"/api/interviews/{iid}/answers", json={"text": "", "sec": 0}, headers=auth).json()
+    assert d["turns"][1].get("basis", "").startswith("결제 서버") and d["turns"][1]["answer"] == 90
+    d = client.post(f"/api/interviews/{iid}/answers", json={"text": "", "sec": 0}, headers=auth).json()
+    assert not d["turns"][2].get("basis")
+    assert plan["kind_info"]["time_note"]
+
+
+def test_toeic_format_and_read_accuracy(client, auth):
+    d = run(client, auth, kind="toeic", setup={})
+    t0 = d["turns"][0]
+    assert d["mains"] == 11 and t0["material"]["type"] == "read" and (t0["prep"], t0["answer"]) == (45, 45)
+    iid, text = d["id"], t0["material"]["text"]
+    d = client.post(f"/api/interviews/{iid}/answers", json={"text": text, "sec": 40}, headers=auth).json()  # 지문 그대로 읽기
+    parts = [d["turns"][1]["part"]]
+    while d["status"] == "active":
+        t = d["turns"][d["current"]]
+        parts.append(t["part"])
+        d = client.post(f"/api/interviews/{iid}/answers", json={"text": "I think it is a good idea because it saves time", "sec": 12}, headers=auth).json()
+    assert len(d["turns"]) == 11 and not any(t["follow"] for t in d["turns"])  # TOEIC 은 꼬리질문 없음
+    assert [t["answer"] for t in d["turns"]] == [45, 45, 30, 30, 15, 15, 30, 15, 15, 30, 60]
+    assert d["turns"][2]["material"]["type"] == "picture" and d["turns"][7]["material"]["type"] == "info"
+    rep = client.post(f"/api/interviews/{iid}/finish", headers=auth).json()["report"]
+    assert rep["per"][0]["read_acc"] == 100 and rep["metrics"]["read_acc"] is not None and rep["level"] in interview.TOEIC.levels
+    assert interview.read_accuracy("Thank you for calling the library", "thank you for calling library") >= 80

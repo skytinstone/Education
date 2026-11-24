@@ -3179,7 +3179,7 @@
   // 녹음은 서버로 보내지 않는다 — 받아쓴 글과 걸린 시간만 보낸다. 받아쓴 글은 제출 전에 고칠 수 있다
   let ivKinds = null;
   let iv = null; // 진행 중인 면접 화면 상태 { id, d, phase, timer, rec, ... }
-  const IV_ICON = { opic: "languages", job: "briefcase-business", admission: "graduation-cap" };
+  const IV_ICON = { opic: "languages", toeic: "headphones", job: "briefcase-business", aicomp: "bot", admission: "graduation-cap" };
   const ivVoiceOn = () => { try { return localStorage.getItem("eureka.ivVoice") !== "0"; } catch { return true; } };
   const ivKindsLoad = async () => (ivKinds ??= await Store.interviewKinds());
   const ivDur = (s) => [Math.floor(s / 60) && `${Math.floor(s / 60)}분`, s % 60 && `${s % 60}초`].filter(Boolean).join(" ");
@@ -3321,7 +3321,7 @@
         <a class="iv-kind panel" href="#/interview/new/${k.key}">
           <span class="iv-kic"><i data-lucide="${IV_ICON[k.key] ?? "mic"}"></i></span>
           <b>${esc(k.name)}</b><p>${esc(k.desc)}</p>
-          <small>${k.mains}문항${k.follow_ups ? ` + 꼬리질문` : ""} · 답변 ${ivDur(k.answer_sec)} · ${k.lang === "en" ? "영어로 답해요" : "한국어"}</small>
+          <small>${k.mains}문항${k.follow_ups ? ` + 꼬리질문` : ""} · ${k.time_note || `답변 ${ivDur(k.answer_sec)}`} · ${k.lang === "en" ? "영어로 답해요" : "한국어"}</small>
         </a>`).join("")}</div>
       <p class="iv-privacy"><i data-lucide="shield-check"></i>목소리는 녹음하지 않아요. 브라우저가 받아쓴 글만 저장하고, 제출 전에 고칠 수 있어요.${SpeechRec ? "" : " <b>이 브라우저는 음성 인식을 지원하지 않아 글로 답해요 (Chrome·Edge·Safari 권장).</b>"}</p>
       ${rows.length ? `<div class="panel iv-history"><h3>지난 면접</h3>${rows.map((r) => `
@@ -3340,7 +3340,10 @@
       ? `<label class="field"><span>${esc(f.label)}${f.required ? " *" : ""}</span><div class="iv-opts" data-field="${f.key}">${f.options.map((o) =>
           `<button type="button" class="iv-opt" data-opt="${esc(o)}">${esc(o)}</button>`).join("")}</div></label>`
       : f.kind === "textarea"
-        ? `<label class="field"><span>${esc(f.label)}${f.required ? " *" : ""}</span><textarea name="${f.key}" rows="5" maxlength="${f.max_len}" placeholder="${esc(f.placeholder)}"></textarea></label>`
+        ? `<label class="field ${f.key === "resume" ? "iv-resume" : ""}"><span>${esc(f.label)}${f.required ? " *" : ""}
+            <small class="iv-count" data-count-for="${f.key}">0 / ${f.max_len.toLocaleString()}자</small></span>
+            <textarea name="${f.key}" rows="${f.key === "resume" ? 11 : 5}" maxlength="${f.max_len}" placeholder="${esc(f.placeholder)}"></textarea>
+            ${f.key === "resume" ? '<small class="iv-hint"><i data-lucide="sparkles"></i>자기소개서의 경험·성과 문장을 읽고, 그 문장을 파고드는 질문을 만들어요. 질문마다 어느 문장에서 나왔는지 보여 드려요.</small>' : ""}</label>`
         : `<label class="field"><span>${esc(f.label)}${f.required ? " *" : ""}</span><input name="${f.key}" maxlength="${f.max_len}" placeholder="${esc(f.placeholder)}" autocomplete="off" /></label>`;
     view.innerHTML = `
       <div class="iv-setup">
@@ -3351,7 +3354,7 @@
             <label class="check iv-voice"><input type="checkbox" id="iv-voice" ${ivVoiceOn() ? "checked" : ""} /> 질문을 소리로 읽어 주기</label>
             <label class="check iv-voice"><input type="checkbox" id="iv-cam-pref" ${ivCamOn() ? "checked" : ""} /> 내 모습 보기 (카메라 · 화면에만 보이고 녹화하지 않아요)</label>
             <div class="iv-rules"><span><i data-lucide="list-ordered"></i>${k.mains}문항${k.follow_ups ? ` + 꼬리질문 최대 ${k.follow_ups}개` : ""}</span>
-              <span><i data-lucide="hourglass"></i>준비 ${k.prep_sec}초</span><span><i data-lucide="timer"></i>답변 ${ivDur(k.answer_sec)}</span></div>
+              ${k.time_note ? `<span><i data-lucide="timer"></i>${esc(k.time_note)}</span>` : `<span><i data-lucide="hourglass"></i>준비 ${k.prep_sec}초</span><span><i data-lucide="timer"></i>답변 ${ivDur(k.answer_sec)}</span>`}</div>
             <button class="btn-primary iv-go" type="submit"><i data-lucide="mic"></i>면접 시작</button>
           </form>
         </div>
@@ -3359,6 +3362,11 @@
     icons();
     const form = $("#iv-form");
     const chosen = {};
+    form.addEventListener("input", (e) => {
+      const ta = e.target.closest("textarea[name]");
+      const c = ta && $(`[data-count-for="${ta.name}"]`, form);
+      if (c) c.textContent = `${ta.value.length.toLocaleString()} / ${Number(ta.maxLength).toLocaleString()}자`;
+    });
     form.addEventListener("click", (e) => {
       const o = e.target.closest("[data-opt]");
       if (!o) return;
@@ -3414,6 +3422,19 @@
     } catch { done?.(); }
   }
 
+  // 문항 자료: 소리 내어 읽을 지문 · 묘사할 사진 · 보고 답할 표 · 상황 설명
+  function ivMaterial(mat, lang) {
+    if (!mat) return "";
+    if (mat.type === "read") return `<div class="iv-mat read" lang="${lang}">${esc(mat.text)}</div>`;
+    if (mat.type === "set") return `<div class="iv-mat set" lang="${lang}">${esc(mat.text)}</div>`;
+    if (mat.type === "picture") return `<figure class="iv-mat pic"><img src="iv/${encodeURIComponent(mat.scene)}.svg" alt="${esc(mat.alt || "")}" /></figure>`;
+    if (mat.type === "info") return `<div class="iv-mat info" lang="${lang}"><b>${esc(mat.title)}</b><small>${esc(mat.sub || "")}</small>
+      <table>${(mat.rows || []).map((r) => `<tr><th>${esc(r[0])}</th><td>${esc(r[1])}</td></tr>`).join("")}</table></div>`;
+    return "";
+  }
+  const ivPrepSec = () => { const t = iv.d.turns[iv.d.current]; return t?.prep ?? iv.d.kind_info.prep_sec; };
+  const ivAnsSec = () => { const t = iv.d.turns[iv.d.current]; return t?.answer ?? iv.d.kind_info.answer_sec; };
+
   function ivDrawQuestion() {
     const { d } = iv;
     const k = d.kind_info, t = d.turns[d.current];
@@ -3429,8 +3450,11 @@
         <div class="iv-stage">
           <div class="iv-ai" aria-hidden="true"><span class="ai-avatar"><i class="s1"></i><i class="s2"></i></span></div>
           <div class="iv-q">
-            <span class="iv-tag">${t.follow ? "꼬리질문" : `질문 ${mainNo}`}</span>
+            <span class="iv-tag">${t.part ? esc(t.part) : t.follow ? "꼬리질문" : `질문 ${mainNo}`}</span>
             <p lang="${d.lang}">${esc(t.q)}</p>
+            ${t.basis ? `<p class="iv-basis"><i data-lucide="file-text"></i><span>${t.q.includes(t.basis.replace(/…$/, "")) ? "내 자기소개서에서 나온 질문이에요"
+              : `자기소개서의 「${esc(t.basis)}」에서 나온 질문이에요`}</span></p>` : ""}
+            ${ivMaterial(t.material, d.lang)}
             <button type="button" class="iv-say" data-iv-say><i data-lucide="volume-2"></i>다시 듣기</button>
           </div>
           <div class="iv-phase" id="iv-phase"></div>
@@ -3458,7 +3482,8 @@
   function ivPrep() {
     const k = iv.d.kind_info;
     iv.phase = "prep";
-    let left = k.prep_sec;
+    const prepSec = ivPrepSec();
+    let left = prepSec;
     $("#iv-phase").innerHTML = `
       <div class="iv-prep">
         <span class="iv-ring" style="--p:1"><b id="iv-prep-n">${left}</b><small>초</small></span>
@@ -3472,13 +3497,13 @@
       left -= 1;
       const n = $("#iv-prep-n");
       if (n) n.textContent = Math.max(0, left);
-      $(".iv-ring")?.style.setProperty("--p", Math.max(0, left / k.prep_sec));
+      $(".iv-ring")?.style.setProperty("--p", Math.max(0, left / prepSec));
       if (left <= 0) ivAnswer();
     }, 1000);
   }
 
   function ivAnswer() {
-    const k = iv.d.kind_info;
+    const ansSec = ivAnsSec();
     clearInterval(iv.timer);
     try { speechSynthesis.cancel(); } catch { /* 없음 */ }
     iv.phase = "answer";
@@ -3489,7 +3514,7 @@
         <div class="iv-ans-top">
           <button type="button" class="iv-mic" data-iv-mic aria-label="말하기 시작·멈추기"><i data-lucide="mic"></i></button>
           <div class="iv-ans-info"><b id="iv-state">${SpeechRec ? "듣고 있어요" : "글로 답해 주세요"}</b>
-            <span><b id="iv-clock">0:00</b> / ${mmssIv(k.answer_sec)}</span></div>
+            <span><b id="iv-clock">0:00</b> / ${mmssIv(ansSec)}</span></div>
           <span class="voice-meter iv-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
         </div>
         <i class="iv-time"><em id="iv-time-bar"></em></i>
@@ -3509,8 +3534,8 @@
       const c = $("#iv-clock");
       if (c) c.textContent = mmssIv(sec);
       const bar = $("#iv-time-bar");
-      if (bar) { bar.style.width = `${Math.min(100, (sec / k.answer_sec) * 100)}%`; bar.classList.toggle("warn", sec > k.answer_sec - 15); }
-      if (sec >= k.answer_sec) { // 시간이 다 되면 멈추고 잠시 뒤 제출
+      if (bar) { bar.style.width = `${Math.min(100, (sec / ansSec) * 100)}%`; bar.classList.toggle("warn", sec > ansSec - Math.min(15, ansSec / 3)); }
+      if (sec >= ansSec) { // 시간이 다 되면 멈추고 잠시 뒤 제출
         ivStopRec();
         iv.phase = "timeup";
         $("#iv-state").textContent = "시간이 다 됐어요";
@@ -3645,6 +3670,7 @@
             <div><span>평균 답변</span><b>${mmssIv(mt.avg_sec)}</b></div>
             <div><span>말 속도</span><b>${mt.rate ?? "–"}<small> ${esc(mt.rate_unit)}</small></b></div>
             <div><span>군말</span><b>${mt.fillers}<small>번</small></b></div>
+            ${mt.read_acc != null ? `<div><span>읽기 정확도</span><b>${mt.read_acc}<small>%</small></b></div>` : ""}
           </div>
           ${mt.top_fillers?.length ? `<p class="mini">자주 나온 군말: ${mt.top_fillers.map((f) => `<span class="iv-fw">${esc(f)}</span>`).join(" ")}</p>` : ""}
         </div>
@@ -3656,9 +3682,11 @@
           ${turns.map((t, i) => {
             const f = r.items?.[i] ?? {}, p = r.per?.[i] ?? {};
             return `<details class="iv-item" ${i === 0 ? "open" : ""}>
-              <summary><b>${i + 1}</b><span lang="${d.lang}">${t.follow ? '<em class="iv-tag">꼬리질문</em> ' : ""}${esc(t.q)}</span>
+              <summary><b>${i + 1}</b><span lang="${d.lang}">${t.part ? `<em class="iv-tag">${esc(t.part)}</em> ` : t.follow ? '<em class="iv-tag">꼬리질문</em> ' : ""}${esc(t.q)}</span>
                 ${f.score != null ? `<i class="iv-pt ${f.score >= 75 ? "good" : f.score < 50 ? "low" : ""}">${f.score}</i>` : ""}</summary>
               <div class="iv-ibody">
+                ${t.basis ? `<p class="iv-basis"><i data-lucide="file-text"></i><span>자기소개서의 「${esc(t.basis)}」에서 나온 질문</span></p>` : ""}
+                ${t.material?.type === "read" ? `<div class="iv-read"><small>읽을 지문${p.read_acc != null ? ` · 정확도 <b>${p.read_acc}%</b>` : ""}</small><p lang="${d.lang}">${esc(t.material.text)}</p></div>` : ""}
                 <div class="iv-mine"><small>내 답 · ${mmssIv(p.sec ?? t.sec ?? 0)}${p.rate ? ` · ${p.rate} ${esc(mt.rate_unit)}` : ""}${p.fillers ? ` · 군말 ${p.fillers}` : ""}</small>
                   <p lang="${d.lang}">${t.ans ? esc(t.ans) : '<span class="mini">답하지 않았어요</span>'}</p></div>
                 ${f.feedback ? `<div class="iv-fb"><small>피드백</small><p>${esc(f.feedback)}</p></div>` : ""}
