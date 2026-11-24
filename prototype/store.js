@@ -655,6 +655,14 @@ const Store = (() => {
     listExams: (projectId) => api(`/projects/${projectId}/exams`),
     exam: (id) => api(`/exams/${id}`),
     deleteExam: (id) => api(`/exams/${id}`, { method: "DELETE" }),
+    // AI 면접
+    interviewKinds: () => api("/interviews/kinds"),
+    listInterviews: () => api("/interviews"),
+    interview: (id) => api(`/interviews/${id}`),
+    startInterview: (kind, setup) => api("/interviews", { method: "POST", body: { kind, setup } }),
+    answerInterview: (id, text, sec) => api(`/interviews/${id}/answers`, { method: "POST", body: { text, sec } }),
+    finishInterview: (id) => api(`/interviews/${id}/finish`, { method: "POST" }),
+    deleteInterview: (id) => api(`/interviews/${id}`, { method: "DELETE" }),
     ping: (page) => (MODE === "api" ? api("/me/ping", { method: "POST", body: { page } }).catch(() => {}) : Promise.resolve()),
     // 정답 연결 편집 — { manual_answer } · { reset_manual: true } · { number }
     editProblem: (materialId, problemId, body) => api(`/materials/${materialId}/problems/${encodeURIComponent(problemId)}`, { method: "PATCH", body }),

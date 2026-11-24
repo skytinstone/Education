@@ -375,6 +375,7 @@
     else if (page === "exam") renderExamPaper(a, params);
     else if (page === "exam-record") renderExamRecord(a);
     else if (page === "exam-chat") renderChatExam(a, params);
+    else if (page === "interview") renderInterview(a, b);
     else if (page === "admin") { location.href = "/admin"; return; }
     else return go("/");
     renderSidebar();
@@ -3169,6 +3170,408 @@
       else if (per === 1 && (e.key === "f" || e.key === "F" || e.key === "ㄹ") && !e.metaKey && !e.ctrlKey) {
         const id = $(".xt-q")?.dataset.q;
         if (id) toggleFlag(id);
+      }
+    };
+  }
+
+  // ================= AI 면접 모드 (#/interview · #/interview/new/<종류> · #/interview/<id>) =================
+  // 질문을 브라우저 음성으로 읽어 주고(speechSynthesis), 답은 브라우저가 받아써요(SpeechRecognition).
+  // 녹음은 서버로 보내지 않는다 — 받아쓴 글과 걸린 시간만 보낸다. 받아쓴 글은 제출 전에 고칠 수 있다
+  let ivKinds = null;
+  let iv = null; // 진행 중인 면접 화면 상태 { id, d, phase, timer, rec, ... }
+  const IV_ICON = { opic: "languages", job: "briefcase-business", admission: "graduation-cap" };
+  const ivVoiceOn = () => { try { return localStorage.getItem("eureka.ivVoice") !== "0"; } catch { return true; } };
+  const ivKindsLoad = async () => (ivKinds ??= await Store.interviewKinds());
+  const mmssIv = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, Math.floor(s % 60))).padStart(2, "0")}`;
+
+  function ivCleanup() {
+    if (!iv) return;
+    clearInterval(iv.timer);
+    iv.stopRec?.();
+    try { speechSynthesis.cancel(); } catch { /* 없음 */ }
+    iv = null;
+  }
+  window.addEventListener("hashchange", () => { if (!location.hash.startsWith(`#/interview/${iv?.id}`)) ivCleanup(); });
+
+  async function renderInterview(a, b) {
+    ivCleanup();
+    if (Store.mode !== "api") { view.innerHTML = '<div class="empty"><i data-lucide="mic-off"></i><b>AI 면접은 로그인한 뒤에 쓸 수 있어요</b></div>'; return icons(); }
+    view.innerHTML = `<div class="panel">${skel(4)}</div>`;
+    try {
+      if (!a) return await renderIvHome();
+      if (a === "new") return await renderIvSetup(b);
+      return await renderIvSession(a);
+    } catch (err) { view.innerHTML = `<div class="empty"><i data-lucide="triangle-alert"></i><b>${esc(err.message)}</b></div>`; icons(); }
+  }
+
+  async function renderIvHome() {
+    const [kinds, rows] = await Promise.all([ivKindsLoad(), Store.listInterviews()]);
+    if (route().parts[0] !== "interview" || route().parts[1]) return;
+    view.innerHTML = `
+      <div class="page-head"><div><h1>AI 면접</h1><p>질문을 듣고 말로 답하면, 꼬리질문까지 이어 묻고 리포트를 드려요</p></div></div>
+      <div class="iv-kinds">${kinds.map((k) => `
+        <a class="iv-kind panel" href="#/interview/new/${k.key}">
+          <span class="iv-kic"><i data-lucide="${IV_ICON[k.key] ?? "mic"}"></i></span>
+          <b>${esc(k.name)}</b><p>${esc(k.desc)}</p>
+          <small>${k.mains}문항${k.follow_ups ? ` + 꼬리질문` : ""} · 답변 ${Math.round(k.answer_sec / 60)}분 · ${k.lang === "en" ? "영어로 답해요" : "한국어"}</small>
+        </a>`).join("")}</div>
+      <p class="iv-privacy"><i data-lucide="shield-check"></i>목소리는 녹음하지 않아요. 브라우저가 받아쓴 글만 저장하고, 제출 전에 고칠 수 있어요.${SpeechRec ? "" : " <b>이 브라우저는 음성 인식을 지원하지 않아 글로 답해요 (Chrome·Edge·Safari 권장).</b>"}</p>
+      ${rows.length ? `<div class="panel iv-history"><h3>지난 면접</h3>${rows.map((r) => `
+        <a class="iv-row" href="#/interview/${r.id}">
+          <i data-lucide="${IV_ICON[r.kind] ?? "mic"}"></i><b>${esc(r.kind_name)}</b>
+          <span>${r.status === "done" ? (r.level ? `예상 ${esc(r.level)}` : `${r.score ?? "–"}점`) : "진행 중"}</span>
+          <small>${relTime(Date.parse(r.created_at))} · ${r.questions}문항</small></a>`).join("")}</div>` : ""}`;
+    icons();
+  }
+
+  async function renderIvSetup(key) {
+    const kinds = await ivKindsLoad();
+    const k = kinds.find((x) => x.key === key);
+    if (!k) return go("/interview");
+    const field = (f) => f.kind === "select"
+      ? `<label class="field"><span>${esc(f.label)}${f.required ? " *" : ""}</span><div class="iv-opts" data-field="${f.key}">${f.options.map((o) =>
+          `<button type="button" class="iv-opt" data-opt="${esc(o)}">${esc(o)}</button>`).join("")}</div></label>`
+      : f.kind === "textarea"
+        ? `<label class="field"><span>${esc(f.label)}${f.required ? " *" : ""}</span><textarea name="${f.key}" rows="5" maxlength="${f.max_len}" placeholder="${esc(f.placeholder)}"></textarea></label>`
+        : `<label class="field"><span>${esc(f.label)}${f.required ? " *" : ""}</span><input name="${f.key}" maxlength="${f.max_len}" placeholder="${esc(f.placeholder)}" autocomplete="off" /></label>`;
+    view.innerHTML = `
+      <div class="iv-setup">
+        <a class="ak-back" href="#/interview"><i data-lucide="arrow-left"></i>AI 면접</a>
+        <div class="panel">
+          <div class="iv-sh"><span class="iv-kic"><i data-lucide="${IV_ICON[k.key] ?? "mic"}"></i></span><div><h2>${esc(k.name)}</h2><p>${esc(k.desc)}</p></div></div>
+          <form id="iv-form">${k.fields.map(field).join("")}
+            <label class="check iv-voice"><input type="checkbox" id="iv-voice" ${ivVoiceOn() ? "checked" : ""} /> 질문을 소리로 읽어 주기</label>
+            <div class="iv-rules"><span><i data-lucide="list-ordered"></i>${k.mains}문항${k.follow_ups ? ` + 꼬리질문 최대 ${k.follow_ups}개` : ""}</span>
+              <span><i data-lucide="hourglass"></i>준비 ${k.prep_sec}초</span><span><i data-lucide="timer"></i>답변 ${Math.round(k.answer_sec / 60)}분</span></div>
+            <button class="btn-primary iv-go" type="submit"><i data-lucide="mic"></i>면접 시작</button>
+          </form>
+        </div>
+      </div>`;
+    icons();
+    const form = $("#iv-form");
+    const chosen = {};
+    form.addEventListener("click", (e) => {
+      const o = e.target.closest("[data-opt]");
+      if (!o) return;
+      const box = o.closest("[data-field]");
+      const key = box.dataset.field;
+      chosen[key] = chosen[key] === o.dataset.opt ? "" : o.dataset.opt;
+      $$("[data-opt]", box).forEach((x) => x.classList.toggle("on", x.dataset.opt === chosen[key]));
+    });
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const setup = { ...chosen };
+      $$("input[name], textarea[name]", form).forEach((x) => { if (x.value.trim()) setup[x.name] = x.value.trim(); });
+      const miss = k.fields.filter((f) => f.required && !setup[f.key]).map((f) => f.label);
+      if (miss.length) return toast(`${miss.join(", ")}을(를) 골라 주세요`);
+      try { localStorage.setItem("eureka.ivVoice", $("#iv-voice").checked ? "1" : "0"); } catch { /* 무시 */ }
+      const btn = $(".iv-go", form);
+      btn.disabled = true;
+      btn.innerHTML = '<i data-lucide="loader" class="spin"></i>질문을 준비하는 중…';
+      icons();
+      try {
+        const d = await Store.startInterview(k.key, setup);
+        go(`/interview/${d.id}`);
+      } catch (err) { toast(err.message); btn.disabled = false; btn.innerHTML = '<i data-lucide="mic"></i>면접 시작'; icons(); }
+    });
+  }
+
+  async function renderIvSession(id) {
+    const d = await Store.interview(id);
+    if (!location.hash.startsWith(`#/interview/${id}`)) return;
+    if (d.status === "done") return renderIvReport(d);
+    if (d.status === "answered") return ivFinish(d);
+    iv = { id, d, phase: "idle", text: "", started: 0 };
+    ivDrawQuestion();
+  }
+
+  function ivSpeak(text, lang, done) {
+    const synth = window.speechSynthesis;
+    if (!synth || !ivVoiceOn()) return done?.();
+    try {
+      synth.cancel();
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = lang === "en" ? "en-US" : "ko-KR";
+      u.rate = lang === "en" ? 0.95 : 1;
+      const v = synth.getVoices().find((x) => x.lang?.startsWith(u.lang.slice(0, 2)));
+      if (v) u.voice = v;
+      let fired = false;
+      const end = () => { if (!fired) { fired = true; $(".iv-ai")?.classList.remove("speaking"); done?.(); } };
+      u.onend = end; u.onerror = end;
+      $(".iv-ai")?.classList.add("speaking");
+      synth.speak(u);
+      setTimeout(end, Math.min(60000, 1500 + text.length * 90)); // 일부 브라우저는 onend 를 안 준다
+    } catch { done?.(); }
+  }
+
+  function ivDrawQuestion() {
+    const { d } = iv;
+    const k = d.kind_info, t = d.turns[d.current];
+    const mainNo = d.turns.slice(0, d.current + 1).filter((x) => !x.follow).length;
+    view.innerHTML = `
+      <div class="iv">
+        <div class="iv-bar">
+          <a class="ak-back" href="#/interview" data-iv-leave><i data-lucide="x"></i>그만두기</a>
+          <div class="iv-title"><b>${esc(k.name)}</b><span>질문 ${mainNo} / ${d.mains}${t.follow ? " · 꼬리질문" : ""}</span></div>
+          <div class="iv-steps" aria-hidden="true">${Array.from({ length: d.mains }, (_, i) => `<i class="${i < mainNo - 1 ? "done" : i === mainNo - 1 ? "cur" : ""}"></i>`).join("")}</div>
+          <button class="btn-ghost" data-iv-end title="여기까지 답한 것으로 리포트 받기"><i data-lucide="flag"></i>마치고 리포트</button>
+        </div>
+        <div class="iv-stage">
+          <div class="iv-ai" aria-hidden="true"><span class="ai-avatar"><i class="s1"></i><i class="s2"></i></span></div>
+          <div class="iv-q">
+            <span class="iv-tag">${t.follow ? "꼬리질문" : `질문 ${mainNo}`}</span>
+            <p lang="${d.lang}">${esc(t.q)}</p>
+            <button type="button" class="iv-say" data-iv-say><i data-lucide="volume-2"></i>다시 듣기</button>
+          </div>
+          <div class="iv-phase" id="iv-phase"></div>
+        </div>
+      </div>`;
+    icons();
+    view.onclick = ivClick;
+    ivPrep();
+    ivSpeak(t.q, d.lang);
+  }
+
+  // 준비 시간: 원이 줄어들고, 끝나면 답변으로 (바로 답하기도 가능)
+  function ivPrep() {
+    const k = iv.d.kind_info;
+    iv.phase = "prep";
+    let left = k.prep_sec;
+    $("#iv-phase").innerHTML = `
+      <div class="iv-prep">
+        <span class="iv-ring" style="--p:1"><b id="iv-prep-n">${left}</b><small>초</small></span>
+        <div><b>생각할 시간이에요</b><p>무엇을, 어떤 순서로 말할지 떠올려 보세요</p></div>
+        <button class="btn-primary" data-iv-start><i data-lucide="mic"></i>바로 답하기</button>
+      </div>`;
+    icons();
+    clearInterval(iv.timer);
+    iv.timer = setInterval(() => {
+      if (!iv || iv.phase !== "prep") return;
+      left -= 1;
+      const n = $("#iv-prep-n");
+      if (n) n.textContent = Math.max(0, left);
+      $(".iv-ring")?.style.setProperty("--p", Math.max(0, left / k.prep_sec));
+      if (left <= 0) ivAnswer();
+    }, 1000);
+  }
+
+  function ivAnswer() {
+    const k = iv.d.kind_info;
+    clearInterval(iv.timer);
+    try { speechSynthesis.cancel(); } catch { /* 없음 */ }
+    iv.phase = "answer";
+    iv.text = "";
+    iv.started = Date.now();
+    $("#iv-phase").innerHTML = `
+      <div class="iv-ans">
+        <div class="iv-ans-top">
+          <button type="button" class="iv-mic" data-iv-mic aria-label="말하기 시작·멈추기"><i data-lucide="mic"></i></button>
+          <div class="iv-ans-info"><b id="iv-state">${SpeechRec ? "듣고 있어요" : "글로 답해 주세요"}</b>
+            <span><b id="iv-clock">0:00</b> / ${mmssIv(k.answer_sec)}</span></div>
+          <span class="voice-meter iv-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+        </div>
+        <i class="iv-time"><em id="iv-time-bar"></em></i>
+        <textarea id="iv-text" lang="${iv.d.lang}" rows="6" maxlength="6000" placeholder="${SpeechRec ? "말하면 여기에 글로 적혀요. 잘못 들은 곳은 고쳐도 돼요" : "답을 적어 주세요"}"></textarea>
+        <div class="iv-ans-actions">
+          <button class="btn-ghost" data-iv-skip>넘어가기</button>
+          <button class="btn-primary" data-iv-submit><i data-lucide="send"></i>답변 제출</button>
+        </div>
+      </div>`;
+    icons();
+    const ta = $("#iv-text");
+    ta.addEventListener("input", () => { iv.text = ta.value; iv.interim = ""; });
+    if (SpeechRec) ivStartRec(); else ta.focus();
+    iv.timer = setInterval(() => {
+      if (!iv || iv.phase !== "answer") return;
+      const sec = (Date.now() - iv.started) / 1000;
+      const c = $("#iv-clock");
+      if (c) c.textContent = mmssIv(sec);
+      const bar = $("#iv-time-bar");
+      if (bar) { bar.style.width = `${Math.min(100, (sec / k.answer_sec) * 100)}%`; bar.classList.toggle("warn", sec > k.answer_sec - 15); }
+      if (sec >= k.answer_sec) { // 시간이 다 되면 멈추고 잠시 뒤 제출
+        ivStopRec();
+        iv.phase = "timeup";
+        $("#iv-state").textContent = "시간이 다 됐어요";
+        setTimeout(() => iv?.phase === "timeup" && ivSubmit(), 1200);
+      }
+    }, 250);
+  }
+
+  // 받아쓰기: 브라우저가 말을 멈추면 끊기므로, 답변 시간 동안은 다시 켠다
+  function ivStartRec() {
+    const lang = iv.d.lang === "en" ? "en-US" : "ko-KR";
+    const rec = new SpeechRec();
+    rec.lang = lang;
+    rec.interimResults = true;
+    rec.continuous = true;
+    let want = true, stream = null, ctx = null, raf = 0;
+    const ta = $("#iv-text"), mic = $("[data-iv-mic]");
+    mic?.classList.add("on");
+    rec.onresult = (e) => {
+      let fin = "", interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) fin += r[0].transcript; else interim += r[0].transcript;
+      }
+      if (fin) iv.text = `${iv.text.trimEnd()} ${fin.trim()}`.trim();
+      if (ta) ta.value = interim ? `${iv.text} ${interim}`.trim() : iv.text;
+    };
+    rec.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        want = false;
+        toast("마이크를 쓸 수 없어요. 주소창의 마이크 권한을 허용하거나 글로 답해 주세요");
+        $("#iv-state") && ($("#iv-state").textContent = "글로 답해 주세요");
+      }
+    };
+    rec.onend = () => { if (want && iv?.phase === "answer") { try { rec.start(); } catch { /* 이미 켜짐 */ } } else stop(); };
+    const stop = () => {
+      want = false;
+      try { rec.stop(); } catch { /* 이미 멈춤 */ }
+      cancelAnimationFrame(raf);
+      stream?.getTracks().forEach((t) => t.stop());
+      ctx?.close().catch(() => {});
+      stream = null; ctx = null;
+      $("[data-iv-mic]")?.classList.remove("on");
+      const st = $("#iv-state");
+      if (st && iv?.phase === "answer") st.textContent = "멈췄어요 · 마이크를 누르면 이어서 들어요";
+    };
+    iv.stopRec = stop;
+    iv.recOn = true;
+    try { rec.start(); } catch { /* 무시 */ }
+    // 소리 크기 막대
+    navigator.mediaDevices?.getUserMedia?.({ audio: true }).then((s) => {
+      if (!want) return s.getTracks().forEach((t) => t.stop());
+      stream = s;
+      ctx = new AudioContext();
+      const an = ctx.createAnalyser();
+      an.fftSize = 64;
+      ctx.createMediaStreamSource(s).connect(an);
+      const buf = new Uint8Array(an.frequencyBinCount), bars = $$(".iv-meter i");
+      const loop = () => {
+        an.getByteFrequencyData(buf);
+        bars.forEach((b, i) => (b.style.transform = `scaleY(${0.25 + (buf[i * 3] / 255) * 1.2})`));
+        raf = requestAnimationFrame(loop);
+      };
+      loop();
+    }).catch(() => {});
+  }
+  function ivStopRec() { iv?.stopRec?.(); if (iv) iv.recOn = false; }
+
+  async function ivSubmit(skip = false) {
+    if (!iv || iv.busy) return;
+    ivStopRec();
+    clearInterval(iv.timer);
+    const text = skip ? "" : ($("#iv-text")?.value ?? iv.text).trim();
+    if (!skip && !text) { toast("답이 비어 있어요. 넘어가려면 '넘어가기'를 눌러 주세요"); if (iv.phase === "timeup") iv.phase = "answer"; return; }
+    const sec = Math.round((Date.now() - iv.started) / 1000);
+    iv.busy = true;
+    iv.phase = "sending";
+    $("#iv-phase").innerHTML = `<div class="iv-wait"><i data-lucide="loader" class="spin"></i><b>${skip ? "다음 질문으로 넘어가요" : "답을 듣고 다음 질문을 고르는 중…"}</b></div>`;
+    icons();
+    try {
+      const d = await Store.answerInterview(iv.id, text, Math.min(sec, 1800));
+      if (!iv || iv.id !== d.id) return;
+      iv.d = d;
+      iv.busy = false;
+      if (d.status === "answered") return ivFinish(d);
+      ivDrawQuestion();
+    } catch (err) { toast(err.message); if (iv) { iv.busy = false; ivAnswer(); } }
+  }
+
+  async function ivFinish(d) {
+    const id = d.id;
+    ivCleanup();
+    try {
+      const done = await withAIProgress({
+        title: "면접 리포트를 만드는 중", steps: ["답 정리하기", "말의 양·속도 재기", "AI 평가", "리포트 쓰기"], expectMs: 25000,
+        run: () => Store.finishInterview(id),
+      });
+      if (location.hash.startsWith(`#/interview/${id}`)) renderIvReport(done);
+    } catch (err) { toast(err.message); go("/interview"); }
+  }
+
+  function ivClick(e) {
+    if (!iv) return;
+    if (e.target.closest("[data-iv-say]")) { const t = iv.d.turns[iv.d.current]; return ivSpeak(t.q, iv.d.lang); }
+    if (e.target.closest("[data-iv-start]")) return ivAnswer();
+    if (e.target.closest("[data-iv-mic]")) {
+      if (!SpeechRec) return toast("이 브라우저는 음성 인식을 지원하지 않아요. 글로 답해 주세요");
+      if (iv.recOn) ivStopRec(); else { iv.text = $("#iv-text").value; ivStartRec(); $("#iv-state").textContent = "듣고 있어요"; }
+      return;
+    }
+    if (e.target.closest("[data-iv-submit]")) return ivSubmit();
+    if (e.target.closest("[data-iv-skip]")) return ivSubmit(true);
+    if (e.target.closest("[data-iv-end]")) {
+      const answered = iv.d.turns.filter((t) => t.ans).length;
+      if (!answered) return toast("한 문항 이상 답하면 리포트를 받을 수 있어요");
+      return confirmModal({ title: "여기서 마칠까요?", text: `답한 ${answered}문항으로 리포트를 만들어요. 지금 질문은 빼고 만들어요.`, action: "마치기",
+        run: () => ivFinish(iv.d) });
+    }
+    if (e.target.closest("[data-iv-leave]")) {
+      e.preventDefault();
+      return confirmModal({ title: "면접을 그만둘까요?", text: "지금까지 답한 내용은 '지난 면접'에 남아서 이어서 할 수 있어요.", action: "그만두기",
+        run: () => go("/interview") });
+    }
+  }
+
+  function renderIvReport(d) {
+    const k = d.kind_info, r = d.report, mt = r.metrics;
+    const turns = d.turns.filter((t) => t.ans !== null && t.ans !== undefined);
+    const lvIdx = k.levels.indexOf(r.level);
+    view.innerHTML = `
+      <div class="iv-report">
+        <a class="ak-back" href="#/interview"><i data-lucide="arrow-left"></i>AI 면접</a>
+        <div class="panel iv-score">
+          <span>${esc(k.name)} · ${new Date(d.created_at).toLocaleDateString("ko-KR")}</span>
+          ${r.level ? `<b class="iv-level">${esc(r.level)}</b><div class="iv-scale">${k.levels.map((l, i) => `<i class="${i === lvIdx ? "on" : i < lvIdx ? "past" : ""}">${esc(l)}</i>`).join("")}</div>`
+            : `<b class="iv-level">${r.score ?? "–"}<small>/100</small></b>`}
+          <p class="iv-by ${r.by_ai ? "ai" : ""}"><i data-lucide="${r.by_ai ? "sparkles" : "ruler"}"></i>${r.by_ai ? "AI 평가" : "측정값으로 어림"}${r.level && r.score != null && r.by_ai ? ` · ${r.score}점` : ""}${k.level_note ? ` · ${esc(k.level_note)}` : ""}</p>
+          <p class="iv-sum">${esc(r.summary)}</p>
+          <div class="xt-stats iv-metrics">
+            <div><span>답한 질문</span><b>${mt.answered}/${mt.total}</b></div>
+            <div><span>평균 답변</span><b>${mmssIv(mt.avg_sec)}</b></div>
+            <div><span>말 속도</span><b>${mt.rate ?? "–"}<small> ${esc(mt.rate_unit)}</small></b></div>
+            <div><span>군말</span><b>${mt.fillers}<small>번</small></b></div>
+          </div>
+          ${mt.top_fillers?.length ? `<p class="mini">자주 나온 군말: ${mt.top_fillers.map((f) => `<span class="iv-fw">${esc(f)}</span>`).join(" ")}</p>` : ""}
+        </div>
+        <div class="iv-two">
+          ${r.strengths?.length ? `<div class="panel"><h3><i data-lucide="thumbs-up"></i>잘한 점</h3><ul>${r.strengths.map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+          <div class="panel"><h3><i data-lucide="target"></i>먼저 고칠 점</h3><ul>${(r.improve ?? []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>
+        </div>
+        <div class="panel iv-items"><h3>질문별 피드백</h3>
+          ${turns.map((t, i) => {
+            const f = r.items?.[i] ?? {}, p = r.per?.[i] ?? {};
+            return `<details class="iv-item" ${i === 0 ? "open" : ""}>
+              <summary><b>${i + 1}</b><span lang="${d.lang}">${t.follow ? '<em class="iv-tag">꼬리질문</em> ' : ""}${esc(t.q)}</span>
+                ${f.score != null ? `<i class="iv-pt ${f.score >= 75 ? "good" : f.score < 50 ? "low" : ""}">${f.score}</i>` : ""}</summary>
+              <div class="iv-ibody">
+                <div class="iv-mine"><small>내 답 · ${mmssIv(p.sec ?? t.sec ?? 0)}${p.rate ? ` · ${p.rate} ${esc(mt.rate_unit)}` : ""}${p.fillers ? ` · 군말 ${p.fillers}` : ""}</small>
+                  <p lang="${d.lang}">${t.ans ? esc(t.ans) : '<span class="mini">답하지 않았어요</span>'}</p></div>
+                ${f.feedback ? `<div class="iv-fb"><small>피드백</small><p>${esc(f.feedback)}</p></div>` : ""}
+                ${f.better ? `<div class="iv-better"><small>이렇게 말해 보세요</small><p lang="${d.lang}">${esc(f.better)}</p></div>` : ""}
+                <button class="btn-ghost iv-polish" data-iv-polish="${i}"><i data-lucide="message-circle-question"></i>이 답 대화에서 다듬기</button>
+              </div></details>`;
+          }).join("")}
+        </div>
+        <div class="page-actions iv-end">
+          <a class="btn-primary" href="#/interview/new/${k.key}"><i data-lucide="rotate-ccw"></i>다시 연습하기</a>
+          <a class="btn-ghost" href="#/interview"><i data-lucide="layout-grid"></i>다른 면접</a>
+          <button class="btn-ghost" data-iv-del><i data-lucide="trash-2"></i>기록 지우기</button>
+        </div>
+      </div>`;
+    icons();
+    countUp(view);
+    view.onclick = (e) => {
+      const pol = e.target.closest("[data-iv-polish]");
+      if (pol) {
+        const t = turns[Number(pol.dataset.ivPolish)];
+        const quote = `[${k.name}] 질문: ${t.q}\n내 답: ${t.ans || "(답하지 않음)"}`.slice(0, 1500);
+        return ask({ text: t.ans ? "이 면접 답변을 더 좋게 다듬어 주고, 왜 그렇게 고치면 좋은지 알려줘" : "이 면접 질문에 어떻게 답하면 좋을지 구조와 예시 답변을 알려줘", quote });
+      }
+      if (e.target.closest("[data-iv-del]")) {
+        return confirmModal({ title: "이 면접 기록을 지울까요?", text: "질문·답·리포트가 모두 지워져요.", action: "지우기",
+          run: async () => { try { await Store.deleteInterview(d.id); go("/interview"); } catch (err) { toast(err.message); } } });
       }
     };
   }

@@ -119,6 +119,27 @@ class ExamRecord(Base):
     __table_args__ = (Index("ix_exam_records_user_created", "user_id", "created_at"),)
 
 
+class Interview(Base):
+    """AI 면접 한 번 — 질문·받아쓴 답·리포트 (services/interview.py). 녹음은 저장하지 않는다."""
+    __tablename__ = "interviews"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    kind: Mapped[str] = mapped_column(String(20))          # opic · job · admission
+    lang: Mapped[str] = mapped_column(String(8))           # 답변 언어 en · ko
+    setup: Mapped[dict] = mapped_column(JSONB)             # 설정 칸에 적은 것
+    plan: Mapped[list] = mapped_column(JSONB)              # 본 질문 목록
+    # [{q, follow, ans(None=아직), sec, at}]
+    turns: Mapped[list] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(12), server_default="active")  # active · answered · done
+    by_ai: Mapped[bool] = mapped_column(Boolean, server_default="false")      # 질문을 AI 가 만들었는지
+    report: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = created_at()
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (Index("ix_interviews_user_created", "user_id", "created_at"),)
+
+
 class AdminAction(Base):
     """운영자가 한 조치 기록 — 누가 언제 누구에게 무엇을 했는지 (정지·해제·삭제·강제 로그아웃·VOC·공지).
     대상 계정이 지워져도 기록은 남도록 대상은 외래 키 없이 id·이메일로 적는다."""

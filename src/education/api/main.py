@@ -16,7 +16,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from education.api.deps import DB
-from education.api.routers import admin, auth, books, courses, exams, feedback, learning, notifications, projects, sessions, sync, visits
+from education.api.routers import (admin, auth, books, courses, exams, feedback, interviews, learning, notifications, projects,
+                                     sessions, sync, visits)
 from education.config import ROOT, get_settings
 
 # 오류 추적 (Sentry) — .env 에 SENTRY_DSN 이 있을 때만. 개인정보(요청 본문·쿠키 등)는 보내지 않는다
@@ -53,7 +54,7 @@ async def security_headers(request: Request, call_next):
 api = APIRouter(prefix="/api")
 for r in (auth.router, projects.router, projects.material_router, sessions.router, learning.router, sync.router,
           feedback.router, feedback.admin, admin.router, notifications.router, courses.router, books.router,
-          visits.router, exams.router):
+          visits.router, exams.router, interviews.router):
     api.include_router(r)
 
 
