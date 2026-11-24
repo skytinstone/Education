@@ -3182,6 +3182,7 @@
   const IV_ICON = { opic: "languages", job: "briefcase-business", admission: "graduation-cap" };
   const ivVoiceOn = () => { try { return localStorage.getItem("eureka.ivVoice") !== "0"; } catch { return true; } };
   const ivKindsLoad = async () => (ivKinds ??= await Store.interviewKinds());
+  const ivDur = (s) => [Math.floor(s / 60) && `${Math.floor(s / 60)}분`, s % 60 && `${s % 60}초`].filter(Boolean).join(" ");
   const mmssIv = (s) => `${Math.floor(s / 60)}:${String(Math.max(0, Math.floor(s % 60))).padStart(2, "0")}`;
 
   function ivCleanup() {
@@ -3213,7 +3214,7 @@
         <a class="iv-kind panel" href="#/interview/new/${k.key}">
           <span class="iv-kic"><i data-lucide="${IV_ICON[k.key] ?? "mic"}"></i></span>
           <b>${esc(k.name)}</b><p>${esc(k.desc)}</p>
-          <small>${k.mains}문항${k.follow_ups ? ` + 꼬리질문` : ""} · 답변 ${Math.round(k.answer_sec / 60)}분 · ${k.lang === "en" ? "영어로 답해요" : "한국어"}</small>
+          <small>${k.mains}문항${k.follow_ups ? ` + 꼬리질문` : ""} · 답변 ${ivDur(k.answer_sec)} · ${k.lang === "en" ? "영어로 답해요" : "한국어"}</small>
         </a>`).join("")}</div>
       <p class="iv-privacy"><i data-lucide="shield-check"></i>목소리는 녹음하지 않아요. 브라우저가 받아쓴 글만 저장하고, 제출 전에 고칠 수 있어요.${SpeechRec ? "" : " <b>이 브라우저는 음성 인식을 지원하지 않아 글로 답해요 (Chrome·Edge·Safari 권장).</b>"}</p>
       ${rows.length ? `<div class="panel iv-history"><h3>지난 면접</h3>${rows.map((r) => `
@@ -3242,7 +3243,7 @@
           <form id="iv-form">${k.fields.map(field).join("")}
             <label class="check iv-voice"><input type="checkbox" id="iv-voice" ${ivVoiceOn() ? "checked" : ""} /> 질문을 소리로 읽어 주기</label>
             <div class="iv-rules"><span><i data-lucide="list-ordered"></i>${k.mains}문항${k.follow_ups ? ` + 꼬리질문 최대 ${k.follow_ups}개` : ""}</span>
-              <span><i data-lucide="hourglass"></i>준비 ${k.prep_sec}초</span><span><i data-lucide="timer"></i>답변 ${Math.round(k.answer_sec / 60)}분</span></div>
+              <span><i data-lucide="hourglass"></i>준비 ${k.prep_sec}초</span><span><i data-lucide="timer"></i>답변 ${ivDur(k.answer_sec)}</span></div>
             <button class="btn-primary iv-go" type="submit"><i data-lucide="mic"></i>면접 시작</button>
           </form>
         </div>
@@ -3524,7 +3525,11 @@
         <div class="panel iv-score">
           <span>${esc(k.name)} · ${new Date(d.created_at).toLocaleDateString("ko-KR")}</span>
           ${r.level ? `<b class="iv-level">${esc(r.level)}</b><div class="iv-scale">${k.levels.map((l, i) => `<i class="${i === lvIdx ? "on" : i < lvIdx ? "past" : ""}">${esc(l)}</i>`).join("")}</div>`
-            : `<b class="iv-level">${r.score ?? "–"}<small>/100</small></b>`}
+            : `<b class="iv-level">${r.score ?? "–"}<small>/100</small></b>
+              <div class="iv-scale">${[["보완 필요", 0], ["보통", 50], ["좋음", 70], ["합격권", 85]].map(([l, min], i, arr) => {
+                const on = r.score != null && r.score >= min && (i === arr.length - 1 || r.score < arr[i + 1][1]);
+                return `<i class="${on ? "on" : r.score >= min ? "past" : ""}">${l}</i>`;
+              }).join("")}</div>`}
           <p class="iv-by ${r.by_ai ? "ai" : ""}"><i data-lucide="${r.by_ai ? "sparkles" : "ruler"}"></i>${r.by_ai ? "AI 평가" : "측정값으로 어림"}${r.level && r.score != null && r.by_ai ? ` · ${r.score}점` : ""}${k.level_note ? ` · ${esc(k.level_note)}` : ""}</p>
           <p class="iv-sum">${esc(r.summary)}</p>
           <div class="xt-stats iv-metrics">
