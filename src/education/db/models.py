@@ -174,6 +174,7 @@ class Subscription(Base):
     period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, server_default="false")
     next_payment_id: Mapped[str | None] = mapped_column(String(64))      # 다음 달 예약 결제
+    is_test: Mapped[bool] = mapped_column(Boolean, server_default="false")  # PortOne 테스트 채널로 시작한 구독 (매출에서 뺀다)
     created_at: Mapped[datetime] = created_at()
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
@@ -191,6 +192,7 @@ class BillingPayment(Base):
     failure: Mapped[str | None] = mapped_column(Text)
     receipt_url: Mapped[str | None] = mapped_column(Text)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    is_test: Mapped[bool] = mapped_column(Boolean, server_default="false")  # 테스트 채널 결제 (매출에서 뺀다)
     created_at: Mapped[datetime] = created_at()
 
 

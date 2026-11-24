@@ -147,6 +147,11 @@ def card_label(info: IssuedBillingKeyInfo) -> str | None:
     return None
 
 
+def _is_test(p: PaidPayment) -> bool:
+    """PortOne 테스트 채널 결제인지 — 매출 집계에서 뺀다"""
+    return (getattr(p.channel, "type", "") or "").upper() == "TEST"
+
+
 def subscription(db: Session, user: m.User) -> m.Subscription | None:
     return db.scalar(select(m.Subscription).where(m.Subscription.user_id == user.id))
 
@@ -175,7 +180,7 @@ def _schedule_next(db: Session, po: PortOne, sub: m.Subscription, user: m.User) 
         log.error("billing: schedule failed user=%s: %s", user.id, _msg(e))
         sub.next_payment_id = None
         return
-    db.add(m.BillingPayment(id=pid, user_id=user.id, plan=plan.key, amount=plan.price, kind="renewal", status="scheduled"))
+    db.add(m.BillingPayment(id=pid, user_id=user.id, plan=plan.key, amount=plan.price, kind="renewal", status="scheduled", is_test=sub.is_test))
     sub.next_payment_id = pid
 
 
@@ -223,6 +228,7 @@ def subscribe(db: Session, user: m.User, plan_key: str, billing_key: str) -> m.S
         log.error("billing: first payment mismatch %s: %r", pid, getattr(paid, "status", paid))
         raise BillingError(402, "결제를 확인하지 못했어요. 고객센터로 문의해 주세요")
     pay.status, pay.receipt_url, pay.paid_at = "paid", paid.receipt_url, now()
+    pay.is_test = _is_test(paid)
 
     sub = subscription(db, user)
     old_key = unseal(sub.billing_key_sealed) if sub else None
@@ -232,7 +238,7 @@ def subscribe(db: Session, user: m.User, plan_key: str, billing_key: str) -> m.S
         sub = m.Subscription(user_id=user.id)
         db.add(sub)
     start = now()
-    sub.plan, sub.status, sub.cancel_at_period_end = plan.key, "active", False
+    sub.plan, sub.status, sub.cancel_at_period_end, sub.is_test = plan.key, "active", False, pay.is_test
     sub.billing_key_sealed, sub.card_label = seal(billing_key), card_label(info)
     sub.period_start, sub.period_end = start, add_month(start)
     db.flush()
@@ -299,6 +305,7 @@ def sync_payment(db: Session, payment_id: str) -> str:
             db.commit()
             return "mismatch"
         pay.status, pay.receipt_url, pay.paid_at = "paid", p.receipt_url, now()
+        pay.is_test = _is_test(p)
         if pay.kind == "renewal" and sub and sub.next_payment_id == payment_id:
             sub.period_start, sub.period_end = sub.period_end, add_month(sub.period_end)
             sub.status, sub.next_payment_id = "active", None
