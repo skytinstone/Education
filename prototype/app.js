@@ -5150,7 +5150,7 @@
         return row(p.icon, p.name, acc ? `${esc(acc.email ?? "연결됨")} · ${relTime(new Date(acc.created_at).getTime())} 연결` : "연결하면 버튼 하나로 로그인할 수 있어요", action)
           .replace('class="method-icon"', `class="method-icon ${key}"`);
       }),
-    ].join("") + (total <= 1 ? `<p class="mini">로그인 방법이 하나뿐이에요. 다른 방법을 하나 더 연결해 두면 계정을 잃어버릴 걱정이 줄어요</p>` : "");
+    ].join("") + (total <= 1 ? `<p class="mini stx-warn">지금은 로그인 방법이 하나뿐이에요</p>` : "");
     icons();
 
     box.onclick = async (e) => {
@@ -5234,6 +5234,7 @@
     try { b = await Store.billing(); } catch { b = null; }
     if (!$("#billing-box") || !b?.available) return; // 결제 설정 전(베타)에는 카드를 숨긴다
     card.hidden = false;
+    $("#stx-nav-billing")?.removeAttribute("hidden");
     const plan = b.plans.find((p) => p.key === b.plan);
     const sub = b.subscription;
     const paid = b.plans.filter((p) => p.price);
@@ -5245,7 +5246,7 @@
       <p class="mini">${sub.status === "past_due" ? "<b>지난 결제가 실패했어요.</b> 카드를 확인해 주세요. 3일 안에 결제되지 않으면 무료로 바뀌어요."
         : sub.cancel_at_period_end ? `${ymd(sub.period_end)}까지 쓸 수 있고, 그 뒤에는 무료로 바뀌어요.`
         : `다음 결제일은 ${ymd(sub.period_end)}이에요. 언제든 해지할 수 있어요.`}</p>`
-      : `<p class="mini">지금은 <b>무료</b>로 쓰고 있어요. 더 많이 쓰고 싶다면 요금제를 골라 주세요. 매달 같은 날 자동으로 결제되고, 언제든 해지할 수 있어요.</p>
+      : `<p class="mini">지금은 <b>무료</b>로 쓰고 있어요. 더 많이 쓰고 싶다면 요금제를 골라 주세요.</p>
       <div class="bill-plans">${paid.map((p) => `
         <div class="bill-plan"><b>${esc(p.name)}</b><span class="bill-price">${won(p.price)}<small> / 월</small></span>
           <ul>${p.perks.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
@@ -5290,7 +5291,7 @@
       <label class="check nt-auto"><input type="checkbox" data-notion-auto ${s.auto ? "checked" : ""} /> 시험 결과와 AI 면접 리포트를 Notion 에 자동 저장</label>
       <p class="mini">Notion 의 <b>Eureka 학습 기록</b> 페이지 아래 '시험 기록' · 'AI 면접' 데이터베이스에 쌓여요. 오답노트는 오답노트 화면의 Notion 버튼으로 저장해요.</p>`
       : `
-      <div class="settings-row"><span>시험 결과·AI 면접 리포트·오답노트를 내 Notion 에 저장해요</span>
+      <div class="settings-row"><span>아직 연결하지 않았어요</span>
         <button class="btn-primary" data-notion-on><i data-lucide="notebook-pen"></i>Notion 연결</button></div>
       <p class="mini">연결 화면에서 Eureka 가 쓸 페이지를 고를 수 있어요. 연결은 언제든 해제할 수 있어요.</p>`;
     icons();
@@ -5328,85 +5329,102 @@
     }
     const u = Store.state.user;
     view.innerHTML = `
-      <div class="page-head"><div><h1>계정 설정</h1><p>프로필 사진과 내 정보를 관리해요</p></div></div>
+      <div class="stx">
+        <header class="stx-head">
+          <div><h1>계정 설정</h1><p>프로필 · 내 정보 · 연결과 로그인 방법을 관리해요</p></div>
+          <nav class="stx-nav" aria-label="설정 바로가기">
+            <button type="button" data-jump="stx-profile">프로필</button>
+            <button type="button" data-jump="stx-info">내 정보</button>
+            ${Store.mode === "api" ? `<button type="button" data-jump="billing-card" hidden id="stx-nav-billing">요금제</button>
+            <button type="button" data-jump="notion-card">Notion</button>
+            <button type="button" data-jump="stx-login">로그인 방법</button>` : ""}
+            <button type="button" data-jump="stx-account">계정</button>
+          </nav>
+        </header>
 
-      <section class="glass-card settings-card" style="--c:var(--accent)">
-        <h3>프로필 사진</h3>
-        <div class="avatar-current">
-          <span class="avatar xl ${u.avatarType && u.avatarType !== "initial" ? "has-image" : ""}" id="avatar-big">${avatarInner(u)}</span>
-          <div class="avatar-actions">
-            <label class="btn-primary"><i data-lucide="upload"></i>내 사진 올리기<input type="file" id="avatar-file" accept="image/png,image/jpeg,image/webp" hidden /></label>
-            <button class="btn-ghost glassy" data-avatar="initial"><i data-lucide="type"></i>이름 첫 글자</button>
-            <p class="mini">사진은 정사각형으로 맞춰 저장하고, 사진 속 위치·기기 정보는 지워요</p>
+        <section class="stx-sec" id="stx-profile">
+          <div class="stx-label"><h2>프로필 사진</h2><p>사진은 정사각형으로 맞춰 저장하고, 사진 속 위치·기기 정보는 지워요</p></div>
+          <div class="stx-body">
+            <div class="avatar-current">
+              <span class="avatar xl ${u.avatarType && u.avatarType !== "initial" ? "has-image" : ""}" id="avatar-big">${avatarInner(u)}</span>
+              <div class="avatar-actions">
+                <label class="btn-primary"><i data-lucide="upload"></i>내 사진 올리기<input type="file" id="avatar-file" accept="image/png,image/jpeg,image/webp" hidden /></label>
+                <button class="btn-ghost glassy" data-avatar="initial"><i data-lucide="type"></i>이름 첫 글자</button>
+              </div>
+            </div>
+            <p class="settings-sub">Eureka 캐릭터</p>
+            <div class="preset-grid">${Object.entries(PRESETS).map(([k, p]) => `
+              <button class="preset ${u.avatarType === "preset" && u.avatarPreset === k ? "on" : ""}" data-avatar="${k}" title="${p.name}">
+                <span class="avatar lg has-image">${presetSVG(k)}</span><small>${p.name}</small></button>`).join("")}</div>
           </div>
-        </div>
-        <p class="settings-sub">Eureka 캐릭터</p>
-        <div class="preset-grid">${Object.entries(PRESETS).map(([k, p]) => `
-          <button class="preset ${u.avatarType === "preset" && u.avatarPreset === k ? "on" : ""}" data-avatar="${k}" title="${p.name}">
-            <span class="avatar lg has-image">${presetSVG(k)}</span><small>${p.name}</small></button>`).join("")}</div>
-      </section>
+        </section>
 
-      <form class="glass-card settings-card" id="profile-form" novalidate style="--c:var(--accent)">
-        <h3>내 정보</h3>
-        <div class="two">
-          <div class="field"><label for="s-name">이름</label><input id="s-name" value="${esc(u.name)}" maxlength="40" autocomplete="name" /></div>
-          <div class="field"><label for="s-email">이메일</label><input id="s-email" value="${esc(u.email ?? "로컬 모드")}" disabled /></div>
-        </div>
-        <div class="two">
-          <div class="field"><label for="s-birth">생년월일 <small>· 선택</small></label><input id="s-birth" type="date" min="1900-01-01" max="${new Date().toISOString().slice(0, 10)}" value="${u.birthDate ?? ""}" autocomplete="bday" /></div>
-          <div class="field"><label for="s-goal">하루 목표</label><input id="s-goal" type="number" min="1" max="200" value="${u.dailyGoal}" /></div>
-        </div>
-        <div class="two">
-          <div class="field suggest"><label for="s-school">학교 <small>· 선택</small></label>
-            <input id="s-school" value="${esc(u.school ?? "")}" maxlength="80" placeholder="학교 이름으로 검색 (예: 여의도고)" autocomplete="off"
-              role="combobox" aria-autocomplete="list" aria-controls="school-list" aria-expanded="false" />
-            <ul class="suggest-list" id="school-list" role="listbox" hidden></ul>
-            <p class="mini">전국 초·중·고 (나이스) · 목록에 없으면 그대로 적어도 돼요</p></div>
-          <div class="field"><label for="s-major">전공 · 계열 <small>· 선택</small></label>
-            <input id="s-major" value="${esc(u.major ?? "")}" maxlength="80" placeholder="예: 자연계열, 컴퓨터공학과" autocomplete="off" />
-            <div class="quick">${MAJOR_PRESETS.map((x) => `<button type="button" class="tag" data-major="${x}">${x}</button>`).join("")}</div></div>
-        </div>
-        <div class="field"><label for="s-address">주소지 <small>· 선택</small></label>
-          <div class="addr-row">
-            <input id="s-address" value="${esc(u.address ?? "")}" readonly placeholder="주소 검색을 눌러 찾아 주세요" />
-            <button type="button" class="btn-ghost glassy" id="addr-search"><i data-lucide="search"></i>주소 검색</button>
-            <button type="button" class="btn-ghost glassy" id="addr-clear" ${u.address ? "" : "hidden"} aria-label="주소 지우기"><i data-lucide="x"></i></button>
+        <form class="stx-sec" id="profile-form" novalidate>
+          <div class="stx-label" id="stx-info"><h2>내 정보</h2><p>선택 항목은 비워 둬도 돼요</p></div>
+          <div class="stx-body">
+            <div class="two">
+              <div class="field"><label for="s-name">이름</label><input id="s-name" value="${esc(u.name)}" maxlength="40" autocomplete="name" /></div>
+              <div class="field"><label for="s-email">이메일</label><input id="s-email" value="${esc(u.email ?? "로컬 모드")}" disabled /></div>
+            </div>
+            <div class="two">
+              <div class="field"><label for="s-birth">생년월일 <small>· 선택</small></label><input id="s-birth" type="date" min="1900-01-01" max="${new Date().toISOString().slice(0, 10)}" value="${u.birthDate ?? ""}" autocomplete="bday" /></div>
+              <div class="field"><label for="s-goal">하루 목표 (문제 수)</label><input id="s-goal" type="number" min="1" max="200" value="${u.dailyGoal}" /></div>
+            </div>
+            <div class="two">
+              <div class="field suggest"><label for="s-school">학교 <small>· 선택</small></label>
+                <input id="s-school" value="${esc(u.school ?? "")}" maxlength="80" placeholder="학교 이름으로 검색 (예: 여의도고)" autocomplete="off"
+                  role="combobox" aria-autocomplete="list" aria-controls="school-list" aria-expanded="false" />
+                <ul class="suggest-list" id="school-list" role="listbox" hidden></ul>
+                <p class="mini">전국 초·중·고 (나이스) · 목록에 없으면 그대로 적어도 돼요</p></div>
+              <div class="field"><label for="s-major">전공 · 계열 <small>· 선택</small></label>
+                <input id="s-major" value="${esc(u.major ?? "")}" maxlength="80" placeholder="예: 자연계열, 컴퓨터공학과" autocomplete="off" />
+                <div class="quick">${MAJOR_PRESETS.map((x) => `<button type="button" class="tag" data-major="${x}">${x}</button>`).join("")}</div></div>
+            </div>
+            <div class="field"><label for="s-address">주소지 <small>· 선택</small></label>
+              <div class="addr-row">
+                <input id="s-address" value="${esc(u.address ?? "")}" readonly placeholder="주소 검색을 눌러 찾아 주세요" />
+                <button type="button" class="btn-ghost glassy" id="addr-search"><i data-lucide="search"></i>주소 검색</button>
+                <button type="button" class="btn-ghost glassy" id="addr-clear" ${u.address ? "" : "hidden"} aria-label="주소 지우기"><i data-lucide="x"></i></button>
+              </div>
+              <input id="s-address-detail" maxlength="60" placeholder="상세 주소 (선택) · 동·호수까지는 적지 않아도 돼요" autocomplete="off" hidden />
+              <div class="addr-embed" id="addr-embed" hidden></div></div>
+            <div class="settings-foot"><button class="btn-primary" type="submit"><i data-lucide="check"></i>저장</button></div>
           </div>
-          <input id="s-address-detail" maxlength="60" placeholder="상세 주소 (선택) · 동·호수까지는 적지 않아도 돼요" autocomplete="off" hidden />
-          <div class="addr-embed" id="addr-embed" hidden></div></div>
-        <div class="settings-foot"><button class="btn-primary" type="submit"><i data-lucide="check"></i>저장</button></div>
-      </form>
+        </form>
 
-      ${Store.mode === "api" ? `<section class="glass-card settings-card" style="--c:#1F5FE0" id="billing-card" hidden>
-        <h3>요금제와 결제</h3>
-        <div id="billing-box"></div>
-      </section>` : ""}
+        ${Store.mode === "api" ? `<section class="stx-sec" id="billing-card" hidden>
+          <div class="stx-label"><h2>요금제와 결제</h2><p>매달 같은 날 자동으로 결제되고, 언제든 해지할 수 있어요</p></div>
+          <div class="stx-body" id="billing-box"></div>
+        </section>
 
-      ${Store.mode === "api" ? `<section class="glass-card settings-card" style="--c:#0f172a" id="notion-card">
-        <h3>Notion 연결</h3>
-        <div id="notion-box">${skel(1)}</div>
-      </section>` : ""}
+        <section class="stx-sec" id="notion-card">
+          <div class="stx-label"><h2>Notion 연결</h2><p>시험 결과 · AI 면접 리포트 · 오답노트를 내 Notion 에 저장해요</p></div>
+          <div class="stx-body" id="notion-box">${skel(1)}</div>
+        </section>
 
-      ${Store.mode === "api" ? `<section class="glass-card settings-card" style="--c:#22c55e">
-        <h3>로그인 방법</h3>
-        <div id="login-methods">${skel(2)}</div>
-      </section>` : ""}
+        <section class="stx-sec" id="stx-login">
+          <div class="stx-label"><h2>로그인 방법</h2><p>둘 이상 연결해 두면 계정을 잃어버릴 걱정이 줄어요</p></div>
+          <div class="stx-body" id="login-methods">${skel(2)}</div>
+        </section>` : ""}
 
-      <section class="glass-card settings-card" style="--c:#94a3b8">
-        <h3>계정</h3>
-        <div class="settings-row"><span>${Store.mode === "api" ? `${esc(u.email)}로 로그인했어요` : "로컬 모드 (브라우저에만 저장)"}</span>
-          <button class="btn-ghost glassy" id="s-logout"><i data-lucide="log-out"></i>로그아웃</button></div>
-        ${Store.mode === "api" ? `<details class="leave">
-          <summary>회원 탈퇴</summary>
-          <form id="leave-form" novalidate>
-            <p>탈퇴하면 학습 기록, 오답노트, 프로젝트, 암기 카드, 올린 기출 파일이 <b>모두 지워지고 되살릴 수 없어요.</b>
-              장애 복구용 백업에는 최대 90일 남았다가 자동으로 지워져요. <a href="privacy.html#p4" target="_blank" rel="noopener">자세히</a></p>
-            <div class="field"><label for="leave-email">확인을 위해 이메일 <b>${esc(u.email)}</b> 을 입력해 주세요</label>
-              <input id="leave-email" type="email" autocomplete="off" placeholder="${esc(u.email)}" /></div>
-            <div class="settings-foot"><button class="btn-primary danger" type="submit" id="leave-submit" disabled><i data-lucide="user-x"></i>탈퇴하기</button></div>
-          </form>
-        </details>` : ""}
-      </section>`;
+        <section class="stx-sec" id="stx-account">
+          <div class="stx-label"><h2>계정</h2><p>로그아웃과 회원 탈퇴</p></div>
+          <div class="stx-body">
+            <div class="settings-row"><span>${Store.mode === "api" ? `${esc(u.email)}로 로그인했어요` : "로컬 모드 (브라우저에만 저장)"}</span>
+              <button class="btn-ghost glassy" id="s-logout"><i data-lucide="log-out"></i>로그아웃</button></div>
+            ${Store.mode === "api" ? `<details class="leave">
+              <summary>회원 탈퇴</summary>
+              <form id="leave-form" novalidate>
+                <p>탈퇴하면 학습 기록, 오답노트, 프로젝트, 암기 카드, 올린 기출 파일이 <b>모두 지워지고 되살릴 수 없어요.</b>
+                  장애 복구용 백업에는 최대 90일 남았다가 자동으로 지워져요. <a href="privacy.html#p4" target="_blank" rel="noopener">자세히</a></p>
+                <div class="field"><label for="leave-email">확인을 위해 이메일 <b>${esc(u.email)}</b> 을 입력해 주세요</label>
+                  <input id="leave-email" type="email" autocomplete="off" placeholder="${esc(u.email)}" /></div>
+                <div class="settings-foot"><button class="btn-primary danger" type="submit" id="leave-submit" disabled><i data-lucide="user-x"></i>탈퇴하기</button></div>
+              </form>
+            </details>` : ""}
+          </div>
+        </section>
+      </div>`;
 
     const refreshAvatar = () => {
       const big = $("#avatar-big");
@@ -5415,6 +5433,8 @@
       $$(".preset").forEach((b) => b.classList.toggle("on", Store.state.user.avatarType === "preset" && Store.state.user.avatarPreset === b.dataset.avatar));
     };
     view.onclick = async (e) => {
+      const jump = e.target.closest("[data-jump]");
+      if (jump) return document.getElementById(jump.dataset.jump)?.scrollIntoView({ behavior: "smooth", block: "start" });
       const major = e.target.closest("[data-major]");
       if (major) { $("#s-major").value = major.dataset.major; return; }
       const pick = e.target.closest("[data-avatar]");

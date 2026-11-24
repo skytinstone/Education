@@ -1341,3 +1341,99 @@ body.pdf-capture .exam-body { column-count: 1 !important; column-rule: none !imp
 .bill-history ul { list-style: none; margin: 6px 0 0; padding: 0; }
 .bill-history li { display: grid; grid-template-columns: 110px minmax(0, 1fr) auto; gap: 8px; padding: 8px 0; border-top: 1px solid rgba(15, 23, 42, .06); }
 .bill-fail { color: #B42318; cursor: help; }
+
+/* ---------- 계정 설정 (클린) — AI 면접 설정과 같은 선·글자 위주, 왼쪽 제목 · 오른쪽 내용 (app.js renderSettings) ---------- */
+.stx { --x-ink: #14161F; --x-mute: #5C6170; --x-line: #E6E7EC; --x-edge: #D3D5DD; --x-accent: #1F5FE0; --x-accent-2: #174BB8; --x-tint: #EEF3FD;
+  --x-ok: #0A6247; --x-warn: #8F3608;
+  container: stx / inline-size; max-width: 1040px; margin: 0 auto; color: var(--x-ink); word-break: keep-all; overflow-wrap: anywhere; }
+.stx h1, .stx h2, .stx p { margin: 0; }
+.stx button:focus-visible, .stx a:focus-visible, .stx input:focus-visible { outline: 2px solid var(--x-accent); outline-offset: 2px; }
+
+.stx-head { display: flex; flex-direction: column; gap: 18px; padding-bottom: 20px; }
+.stx-head h1 { font-size: 28px; font-weight: 700; letter-spacing: -.01em; }
+.stx-head p { font-size: 15px; color: var(--x-mute); margin-top: 8px; }
+.stx-nav { display: flex; flex-wrap: wrap; gap: 8px; }
+.stx .stx-nav button { min-height: 36px; padding: 0 14px; border: 1px solid var(--x-edge); border-radius: 999px; background: #fff; color: var(--x-ink);
+  font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap; transition: border-color .15s, color .15s, background .15s; }
+.stx .stx-nav button:hover { border-color: var(--x-accent); color: var(--x-accent); }
+.stx .stx-nav button:active { background: var(--x-tint); }
+.stx .stx-nav button[hidden] { display: none; }
+
+.stx-sec { display: grid; grid-template-columns: 240px minmax(0, 1fr); gap: 16px 48px; padding: 32px 0; border-top: 1px solid var(--x-line); scroll-margin-top: 72px; }
+.stx-sec[hidden] { display: none; }
+.stx-label h2 { font-size: 15px; font-weight: 700; }
+.stx-label p { font-size: 13px; line-height: 1.6; color: var(--x-mute); margin-top: 6px; }
+.stx-body { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.stx .mini { font-size: 13px; line-height: 1.6; color: var(--x-mute); }
+.stx .stx-warn { color: var(--x-warn); }
+
+/* 입력 칸 */
+.stx .two { gap: 16px; }
+.stx .field label { font-size: 13px; font-weight: 600; color: var(--x-ink); }
+.stx .field label small { color: var(--x-mute); font-weight: 400; }
+.stx .field input, .stx .field select { height: 44px; padding: 0 14px; border-radius: 10px !important; background-color: #fff !important;
+  box-shadow: inset 0 0 0 1px var(--x-edge) !important; font-size: 15px; color: var(--x-ink); transition: box-shadow .15s; }
+.stx .field input:hover:not(:disabled):not(:focus) { box-shadow: inset 0 0 0 1px #9EA2AF !important; }
+.stx .field input:focus, .stx .field select:focus { background-color: #fff !important; box-shadow: inset 0 0 0 1px var(--x-accent), 0 0 0 3px rgba(31, 95, 224, .15) !important; }
+.stx .field input:disabled, .stx #profile-form .field input:disabled { background-color: #F6F7F9 !important; color: var(--x-mute); box-shadow: inset 0 0 0 1px var(--x-line) !important; }
+.stx .field input.invalid { box-shadow: inset 0 0 0 1px #B42318 !important; }
+.stx .two { align-items: start; }
+.stx .two > .field, .stx-body > .field { margin-top: 0; }  /* 줄 사이 간격은 .stx-body 의 gap 으로만 */
+.stx [hidden] { display: none !important; }
+.stx .quick { gap: 6px; }
+.stx .tag { height: 32px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--x-edge); background: #fff; color: var(--x-ink); font-size: 13px; cursor: pointer; }
+.stx .tag:hover { border-color: var(--x-accent); color: var(--x-accent); background: #fff; }
+.stx .tag:active { background: var(--x-tint); }
+
+/* 버튼 — 기본 동작은 파란색, 그 밖은 선 */
+.stx .btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 44px; padding: 0 20px; border-radius: 10px !important;
+  background: var(--x-accent) !important; color: #fff; box-shadow: none; font-weight: 700; cursor: pointer; }
+.stx .btn-primary:hover:not(:disabled) { background: var(--x-accent-2) !important; }
+.stx .btn-primary.danger { background: #B42318 !important; }
+.stx .btn-primary.danger:hover:not(:disabled) { background: #912018 !important; }
+.stx .btn-primary:disabled, .stx .btn-primary[disabled] { background: #F1F2F5 !important; color: var(--x-mute); opacity: 1; cursor: not-allowed; }
+.stx .btn-ghost, .stx .btn-ghost.glassy { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 40px; padding: 0 14px;
+  border-radius: 10px !important; background: #fff !important; border: 1px solid var(--x-edge) !important; box-shadow: none;
+  -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--x-ink); font-weight: 500; cursor: pointer; white-space: nowrap;
+  transition: border-color .15s, color .15s, background .15s; }
+.stx .btn-ghost:hover:not(:disabled) { background: #fff !important; border-color: var(--x-accent) !important; color: var(--x-accent); }
+.stx .btn-ghost:active:not(:disabled) { background: var(--x-tint) !important; }
+.stx .btn-ghost:disabled { opacity: 1; color: var(--x-mute); background: #F6F7F9 !important; border-color: var(--x-line) !important; cursor: default; }
+.stx .btn-primary svg, .stx .btn-ghost svg { width: 16px; height: 16px; }
+.stx .settings-foot { display: flex; justify-content: flex-end; }
+.stx .addr-row .btn-ghost { height: 44px; }
+
+/* 프로필 사진 */
+.stx .avatar-current { gap: 20px; }
+.stx .avatar-actions .btn-primary, .stx .avatar-actions .btn-ghost { height: 40px; border-radius: 10px; }
+.stx .settings-sub { margin: 4px 0 0; font-size: 13px; font-weight: 600; color: var(--x-ink); }
+.stx .preset { border-radius: 12px; border: 1px solid transparent; transition: background .15s, border-color .15s; }
+.stx .preset:hover { transform: none; background: #F7F9FD; border-color: var(--x-line); }
+.stx .preset.on { background: var(--x-tint); border-color: var(--x-accent); box-shadow: none; }
+.stx .preset.on small { color: var(--x-accent); font-weight: 700; }
+
+/* 한 줄 항목 (Notion · 로그인 방법 · 계정) */
+.stx .settings-row { font-size: 14px; color: var(--x-ink); gap: 12px; }
+.stx .method-row { padding: 14px 0; }
+.stx .method-row + .method-row { border-top: 1px solid var(--x-line); }
+.stx .method-row:first-child { padding-top: 0; }
+.stx .method-row .btn-primary, .stx .method-row .btn-ghost { height: 36px; font-size: 13px; }
+.stx .method-icon { box-shadow: inset 0 0 0 1px var(--x-line); background: #fff; }
+.stx .method-icon.kakao { background: #fee500; box-shadow: none; }
+
+/* 요금제 */
+.stx .bill-plans { margin-top: 0; }
+.stx .bill-plan { border-color: var(--x-line); border-radius: 12px; }
+.stx .bill-plan .btn-primary { width: 100%; }
+
+/* 회원 탈퇴 */
+.stx .leave { margin-top: 4px; padding-top: 16px; border-top: 1px solid var(--x-line); font-size: 14px; color: var(--x-mute); }
+.stx .leave summary { min-height: 32px; display: flex; align-items: center; color: var(--x-mute); }
+.stx .leave summary:hover { color: #B42318; }
+
+@container stx (max-width: 760px) {
+  .stx-sec { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 28px 0; }
+  .stx .two { grid-template-columns: minmax(0, 1fr); }
+  .stx .settings-foot .btn-primary { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { .stx * { transition: none !important; } }
