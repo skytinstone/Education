@@ -957,3 +957,107 @@ body.pdf-capture .exam-body { column-count: 1 !important; column-rule: none !imp
 .iv-hint { display: flex; align-items: flex-start; gap: 6px; margin-top: 6px; font-size: 12px; line-height: 1.55; color: #3b4fd8; }
 .iv-hint svg { width: 13px; height: 13px; flex-shrink: 0; margin-top: 2px; }
 @media (max-width: 760px) { .iv-mat.read { font-size: 15.5px; } .iv-mat.info th { width: 92px; } }
+
+/* ================= AI 면접실: 화상 면접처럼 (app.js ivDrawQuestion) ================= */
+.iv-room { max-width: 1080px; display: flex; flex-direction: column; gap: 14px; min-height: auto; }
+.iv-call { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.iv-tile { position: relative; border-radius: 22px; overflow: hidden; aspect-ratio: 16 / 10; min-height: 0;
+  box-shadow: var(--lg-shadow); outline: 3px solid transparent; outline-offset: -3px; transition: outline-color .25s; }
+/* 면접관 화면 */
+.iv-tile.iv-ai { background: radial-gradient(120% 90% at 30% 20%, #312e81 0%, #1e1b4b 45%, #0f172a 100%); display: grid; place-items: center; }
+.iv-tile.iv-ai.speaking { outline-color: rgba(129, 140, 248, .9); }
+.iv-host { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.iv-host .ai-avatar { width: 96px; height: 96px; }
+.iv-host .ai-avatar .s1 { width: 78px; height: 78px; top: 18px; }
+.iv-host .ai-avatar .s2 { width: 32px; height: 32px; }
+.iv-tile.iv-ai.speaking .iv-host .ai-avatar .s1 { animation: av-twinkle 1.2s ease-in-out infinite, av-hue 3s linear infinite; }
+.iv-tile.iv-ai.speaking .iv-host .ai-avatar .s2 { animation: av-twinkle2 1.2s ease-in-out infinite, av-hue 3s linear infinite; }
+.iv-wave { display: flex; align-items: center; gap: 4px; height: 26px; opacity: .25; transition: opacity .25s; }
+.iv-wave i { width: 4px; height: 100%; border-radius: 2px; background: #a5b4fc; transform: scaleY(.25); }
+.iv-tile.iv-ai.speaking .iv-wave { opacity: 1; }
+.iv-tile.iv-ai.speaking .iv-wave i { animation: iv-wave 1s ease-in-out infinite; }
+.iv-wave i:nth-child(2) { animation-delay: -.15s !important; } .iv-wave i:nth-child(3) { animation-delay: -.3s !important; }
+.iv-wave i:nth-child(4) { animation-delay: -.45s !important; } .iv-wave i:nth-child(5) { animation-delay: -.6s !important; }
+.iv-wave i:nth-child(6) { animation-delay: -.75s !important; } .iv-wave i:nth-child(7) { animation-delay: -.9s !important; }
+@keyframes iv-wave { 50% { transform: scaleY(1); } }
+.iv-name { position: absolute; left: 12px; bottom: 12px; display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px;
+  border-radius: var(--r-pill); background: rgba(15, 23, 42, .55); color: #fff; font-size: 12.5px; font-weight: 600;
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); z-index: 2; }
+.iv-name .ai-avatar { width: 16px; height: 16px; }
+.iv-name .ai-avatar .s1 { width: 13px; height: 13px; top: 3px; }
+.iv-name .ai-avatar .s2 { width: 6px; height: 6px; }
+.iv-talk { position: absolute; top: 12px; right: 12px; padding: 4px 10px; border-radius: var(--r-pill); background: rgba(129, 140, 248, .9);
+  color: #fff; font-size: 11.5px; font-weight: 700; opacity: 0; transition: opacity .25s; z-index: 2; }
+.iv-tile.iv-ai.speaking .iv-talk { opacity: 1; }
+/* 자료가 있는 문항(TOEIC): 면접관 화면 자리에 지문·사진·표를 크게 */
+.iv-tile.iv-ai.has-mat { background: #fff; place-items: stretch; outline-color: transparent; box-shadow: var(--lg-edge), var(--lg-shadow); }
+.iv-tile.iv-ai.has-mat.speaking { outline-color: rgba(129, 140, 248, .9); }
+.iv-tile-mat { width: 100%; height: 100%; overflow: auto; display: grid; place-items: center; padding: 18px 18px 48px; }
+.iv-tile-mat .iv-mat { max-width: none; box-shadow: none !important; }
+.iv-tile.mat-picture .iv-tile-mat { padding: 0; }
+.iv-tile.mat-picture .iv-mat.pic img { width: 100%; height: 100%; aspect-ratio: auto; }
+.iv-tile.mat-picture .iv-mat.pic { width: 100%; height: 100%; border-radius: 0; }
+.iv-tile.mat-read .iv-mat.read { font-size: 16.5px; padding: 0; }
+.iv-tile.has-mat .iv-name { background: rgba(15, 23, 42, .72); }
+/* 내 화면 (기존 .iv-cam 배치를 면접실 타일로) */
+.iv-room .iv-cam { position: relative; top: auto; grid-column: auto; grid-row: auto; margin: 0; width: auto; order: 0; align-self: stretch;
+  aspect-ratio: 16 / 10; border-radius: 22px; z-index: auto; }
+.iv-room .iv-cam.talking { outline-color: rgba(16, 185, 129, .9); }
+.iv-room .iv-cam-bar { left: auto; right: 12px; bottom: 12px; justify-content: flex-end; }
+.iv-name.me { left: 12px; }
+.iv-room .iv-cam .iv-cam-mic { position: absolute; right: 52px; bottom: 0; }
+/* 질문 자막 카드 */
+.iv-qcard { padding: 16px 20px 18px; border-radius: 20px; background: rgba(255, 255, 255, .9); box-shadow: var(--lg-edge), var(--lg-shadow); }
+.iv-qhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.iv-qtext { font-size: clamp(17px, 1.6vw, 20px); line-height: 1.6; font-weight: 600; letter-spacing: -.01em; }
+.iv-qcard .iv-basis { margin-top: 10px; }
+/* 조작 줄 */
+.iv-dock { position: sticky; bottom: 12px; z-index: 5; }
+.iv-dock-in { border-radius: 22px; background: rgba(255, 255, 255, .96); box-shadow: var(--lg-edge), 0 12px 40px rgba(31, 41, 80, .14); }
+.iv-dock-in.prep { display: flex; align-items: center; gap: 16px; padding: 14px 16px 14px 18px; }
+.iv-dock-txt { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.iv-dock-txt b { font-size: 15px; }
+.iv-dock-txt span { font-size: 12.5px; color: var(--ink-3); }
+.iv-go2 { height: 46px; padding: 0 20px; font-size: 14.5px; }
+.iv-dock-in.ans { padding: 12px 14px 12px; display: grid; gap: 10px; }
+.iv-caption { display: grid; gap: 4px; }
+.iv-cap-label { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--ink-3); padding-left: 4px; }
+.iv-rec { width: 7px; height: 7px; border-radius: 50%; background: #e11d48; animation: iv-blink 1.2s ease-in-out infinite; }
+@keyframes iv-blink { 50% { opacity: .25; } }
+.iv-room #iv-text { min-height: 0; height: 84px; max-height: 30vh; padding: 10px 14px; font-size: 16px; line-height: 1.6; resize: vertical; }
+.iv-ctrl { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.iv-tm { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--ink-3); font-variant-numeric: tabular-nums; max-width: 220px; }
+.iv-tm b { font-size: 18px; color: var(--ink); }
+.iv-ctrl-mid { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.iv-ctrl-mid small { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; }
+.iv-room .iv-mic { width: 60px; height: 60px; }
+.iv-ctrl-r { display: flex; justify-content: flex-end; gap: 8px; }
+.iv-ctrl-r .btn-primary, .iv-ctrl-r .btn-ghost { height: 42px; }
+.iv-keys { text-align: center; font-size: 11.5px; color: var(--ink-3); }
+.iv-keys kbd { display: inline-block; padding: 1px 6px; border-radius: 6px; background: #fff; box-shadow: inset 0 0 0 1px rgba(15, 23, 42, .12);
+  font: inherit; font-size: 11px; }
+.iv-keys span { margin: 0 6px; }
+.iv-room .iv-wait { border-radius: 22px; background: rgba(255, 255, 255, .96); box-shadow: var(--lg-edge), var(--lg-shadow); }
+@media (max-width: 900px) {
+  .iv-call { gap: 10px; }
+  .iv-tile, .iv-room .iv-cam { aspect-ratio: 4 / 3; border-radius: 18px; }
+  .iv-host .ai-avatar { width: 64px; height: 64px; } .iv-host .ai-avatar .s1 { width: 52px; height: 52px; top: 12px; } .iv-host .ai-avatar .s2 { width: 22px; height: 22px; }
+  .iv-ctrl { grid-template-columns: auto 1fr; }
+  .iv-tm { grid-column: 1 / -1; max-width: none; flex-direction: row; align-items: center; }
+  .iv-tm .iv-time { flex: 1; }
+  .iv-ctrl-mid { flex-direction: row; gap: 8px; }
+  .iv-room .iv-mic { width: 50px; height: 50px; }
+  .iv-keys { display: none; }
+}
+@media (max-width: 560px) {
+  .iv-call:not(:has(.has-mat)) { grid-template-columns: 1fr 1fr; }
+  .iv-call:has(.has-mat) { grid-template-columns: 1fr; }
+  .iv-call:has(.has-mat) .iv-cam { position: absolute; width: 96px; aspect-ratio: 3 / 4; right: 22px; margin-top: 8px; z-index: 6; }
+  .iv-cam-note { display: none; }
+  .iv-dock-in.prep { flex-wrap: wrap; }
+  .iv-go2 { width: 100%; }
+  .iv-ctrl-r { grid-column: 1 / -1; }
+  .iv-ctrl-r .btn-primary { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .iv-wave i, .iv-rec { animation: none !important; } }
+@media (max-width: 560px) { .iv-host .iv-wave { display: none; } .iv-host { transform: translateY(-8px); } }

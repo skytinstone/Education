@@ -3439,36 +3439,44 @@
     const { d } = iv;
     const k = d.kind_info, t = d.turns[d.current];
     const mainNo = d.turns.slice(0, d.current + 1).filter((x) => !x.follow).length;
+    const mat = t.material;
     view.innerHTML = `
-      <div class="iv with-cam">
+      <div class="iv iv-room">
         <div class="iv-bar">
           <a class="ak-back" href="#/interview" data-iv-leave><i data-lucide="x"></i>그만두기</a>
           <div class="iv-title"><b>${esc(k.name)}</b><span>질문 ${mainNo} / ${d.mains}${t.follow ? " · 꼬리질문" : ""}</span></div>
           <div class="iv-steps" aria-hidden="true">${Array.from({ length: d.mains }, (_, i) => `<i class="${i < mainNo - 1 ? "done" : i === mainNo - 1 ? "cur" : ""}"></i>`).join("")}</div>
           <button class="btn-ghost" data-iv-end title="여기까지 답한 것으로 리포트 받기"><i data-lucide="flag"></i>마치고 리포트</button>
         </div>
-        <div class="iv-stage">
-          <div class="iv-ai" aria-hidden="true"><span class="ai-avatar"><i class="s1"></i><i class="s2"></i></span></div>
-          <div class="iv-q">
-            <span class="iv-tag">${t.part ? esc(t.part) : t.follow ? "꼬리질문" : `질문 ${mainNo}`}</span>
-            <p lang="${d.lang}">${esc(t.q)}</p>
-            ${t.basis ? `<p class="iv-basis"><i data-lucide="file-text"></i><span>${t.q.includes(t.basis.replace(/…$/, "")) ? "내 자기소개서에서 나온 질문이에요"
-              : `자기소개서의 「${esc(t.basis)}」에서 나온 질문이에요`}</span></p>` : ""}
-            ${ivMaterial(t.material, d.lang)}
-            <button type="button" class="iv-say" data-iv-say><i data-lucide="volume-2"></i>다시 듣기</button>
-          </div>
-          <div class="iv-phase" id="iv-phase"></div>
+        <div class="iv-call">
+          <section class="iv-tile iv-ai ${mat ? `has-mat mat-${mat.type}` : ""}" aria-label="AI 면접관">
+            ${mat ? `<div class="iv-tile-mat">${ivMaterial(mat, d.lang)}</div>`
+              : `<div class="iv-host"><span class="ai-avatar"><i class="s1"></i><i class="s2"></i></span>
+                  <span class="iv-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>`}
+            <span class="iv-name"><span class="ai-avatar"><i class="s1"></i><i class="s2"></i></span>AI 면접관</span>
+            <span class="iv-talk">말하는 중</span>
+          </section>
+          <section class="iv-tile iv-cam off" id="iv-cam" aria-label="내 모습">
+            <video autoplay playsinline muted></video>
+            <div class="iv-cam-ph"><i data-lucide="user-round"></i><span class="iv-cam-msg"></span>
+              <button type="button" class="btn-ghost" data-iv-media-retry hidden>다시 시도</button></div>
+            <div class="iv-cam-bar">
+              <span class="iv-cam-mic"><i data-lucide="mic"></i><span class="lv" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span>
+              <button type="button" class="iv-cam-btn" data-iv-cam></button>
+            </div>
+            <span class="iv-cam-note"><i data-lucide="lock"></i>나만 보여요 · 녹화 안 함</span>
+            <span class="iv-name me">나</span>
+          </section>
         </div>
-        <aside class="iv-cam off" id="iv-cam" aria-label="내 모습">
-          <video autoplay playsinline muted></video>
-          <div class="iv-cam-ph"><i data-lucide="user-round"></i><span class="iv-cam-msg"></span>
-            <button type="button" class="btn-ghost" data-iv-media-retry hidden>다시 시도</button></div>
-          <div class="iv-cam-bar">
-            <span class="iv-cam-mic"><i data-lucide="mic"></i><span class="lv" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span>
-            <button type="button" class="iv-cam-btn" data-iv-cam></button>
-          </div>
-          <span class="iv-cam-note"><i data-lucide="lock"></i>나만 보여요 · 녹화 안 함</span>
-        </aside>
+        <div class="iv-qcard">
+          <div class="iv-qhead"><span class="iv-tag">${t.part ? esc(t.part) : t.follow ? "꼬리질문" : `질문 ${mainNo}`}</span>
+            <button type="button" class="iv-say" data-iv-say><i data-lucide="volume-2"></i>다시 듣기</button></div>
+          <p class="iv-qtext" lang="${d.lang}">${esc(t.q)}</p>
+          ${t.basis ? `<p class="iv-basis"><i data-lucide="file-text"></i><span>${t.q.includes(t.basis.replace(/…$/, "")) ? "내 자기소개서에서 나온 질문이에요"
+            : `자기소개서의 「${esc(t.basis)}」에서 나온 질문이에요`}</span></p>` : ""}
+        </div>
+        <div class="iv-dock" id="iv-phase"></div>
+        <p class="iv-keys"><kbd>Space</kbd> ${SpeechRec ? "바로 답하기 · 마이크 켜기/끄기" : "바로 답하기"} <span>·</span> <kbd>Ctrl</kbd>+<kbd>Enter</kbd> 답변 제출</p>
       </div>`;
     icons();
     ivMediaDraw();
@@ -3485,10 +3493,10 @@
     const prepSec = ivPrepSec();
     let left = prepSec;
     $("#iv-phase").innerHTML = `
-      <div class="iv-prep">
+      <div class="iv-dock-in prep">
         <span class="iv-ring" style="--p:1"><b id="iv-prep-n">${left}</b><small>초</small></span>
-        <div><b>생각할 시간이에요</b><p>무엇을, 어떤 순서로 말할지 떠올려 보세요</p></div>
-        <button class="btn-primary" data-iv-start><i data-lucide="mic"></i>바로 답하기</button>
+        <div class="iv-dock-txt"><b>생각할 시간이에요</b><span>무엇을, 어떤 순서로 말할지 떠올려 보세요. 시간이 끝나면 자동으로 답변이 시작돼요</span></div>
+        <button class="btn-primary iv-go2" data-iv-start><i data-lucide="mic"></i>바로 답하기</button>
       </div>`;
     icons();
     clearInterval(iv.timer);
@@ -3510,18 +3518,21 @@
     iv.text = "";
     iv.started = Date.now();
     $("#iv-phase").innerHTML = `
-      <div class="iv-ans">
-        <div class="iv-ans-top">
-          <button type="button" class="iv-mic" data-iv-mic aria-label="말하기 시작·멈추기"><i data-lucide="mic"></i></button>
-          <div class="iv-ans-info"><b id="iv-state">${SpeechRec ? "듣고 있어요" : "글로 답해 주세요"}</b>
-            <span><b id="iv-clock">0:00</b> / ${mmssIv(ansSec)}</span></div>
-          <span class="voice-meter iv-meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+      <div class="iv-dock-in ans">
+        <div class="iv-caption">
+          <span class="iv-cap-label"><i class="iv-rec"></i>${SpeechRec ? "실시간 자막 · 잘못 들은 곳은 고쳐 써도 돼요" : "답을 글로 적어 주세요"}</span>
+          <textarea id="iv-text" lang="${iv.d.lang}" rows="3" maxlength="6000" placeholder="${SpeechRec ? "말하기 시작하면 여기에 바로 글로 적혀요" : "답을 적어 주세요"}"></textarea>
         </div>
-        <i class="iv-time"><em id="iv-time-bar"></em></i>
-        <textarea id="iv-text" lang="${iv.d.lang}" rows="6" maxlength="6000" placeholder="${SpeechRec ? "말하면 여기에 글로 적혀요. 잘못 들은 곳은 고쳐도 돼요" : "답을 적어 주세요"}"></textarea>
-        <div class="iv-ans-actions">
-          <button class="btn-ghost" data-iv-skip>넘어가기</button>
-          <button class="btn-primary" data-iv-submit><i data-lucide="send"></i>답변 제출</button>
+        <div class="iv-ctrl">
+          <div class="iv-tm"><span><b id="iv-clock">0:00</b> / ${mmssIv(ansSec)}</span><i class="iv-time"><em id="iv-time-bar"></em></i></div>
+          <div class="iv-ctrl-mid">
+            <button type="button" class="iv-mic" data-iv-mic aria-label="마이크 켜기·끄기"><i data-lucide="mic"></i></button>
+            <small id="iv-state">${SpeechRec ? "듣고 있어요" : "글로 답해 주세요"}</small>
+          </div>
+          <div class="iv-ctrl-r">
+            <button class="btn-ghost" data-iv-skip>넘어가기</button>
+            <button class="btn-primary" data-iv-submit><i data-lucide="send"></i>답변 제출</button>
+          </div>
         </div>
       </div>`;
     icons();
@@ -3561,7 +3572,7 @@
         if (r.isFinal) fin += r[0].transcript; else interim += r[0].transcript;
       }
       if (fin) iv.text = `${iv.text.trimEnd()} ${fin.trim()}`.trim();
-      if (ta) ta.value = interim ? `${iv.text} ${interim}`.trim() : iv.text;
+      if (ta) { ta.value = interim ? `${iv.text} ${interim}`.trim() : iv.text; ta.scrollTop = ta.scrollHeight; }
     };
     rec.onerror = (e) => {
       if (e.error === "not-allowed" || e.error === "service-not-allowed") {
@@ -3621,6 +3632,16 @@
       if (location.hash.startsWith(`#/interview/${id}`)) renderIvReport(done);
     } catch (err) { toast(err.message); go("/interview"); }
   }
+
+  document.addEventListener("keydown", (e) => {
+    if (!iv || !location.hash.startsWith(`#/interview/${iv.id}`) || $(".backdrop")) return;
+    const typing = e.target.closest?.("textarea, input, [contenteditable]");
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && iv.phase === "answer") { e.preventDefault(); return ivSubmit(); }
+    if (e.code === "Space" && !typing && !e.repeat) {
+      if (iv.phase === "prep") { e.preventDefault(); return ivAnswer(); }
+      if (iv.phase === "answer" && SpeechRec) { e.preventDefault(); $("[data-iv-mic]")?.click(); }
+    }
+  });
 
   function ivClick(e) {
     if (!iv) return;
