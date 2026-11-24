@@ -122,3 +122,16 @@ def test_job_interview_without_ai(client, auth):
     assert len(d["turns"]) == 6 and d["turns"][-1]["q"].startswith("마지막으로")
     rep = client.post(f"/api/interviews/{iid}/finish", headers=auth).json()["report"]
     assert rep["level"] == "" and 0 < rep["score"] <= 100 and rep["metrics"]["rate_unit"] == "음절/분" and rep["metrics"]["rate"]
+
+
+def test_admission_interview_bank(client, auth):
+    import random
+    assert client.post("/api/interviews", json={"kind": "admission", "setup": {"track": "학사편입"}}, headers=auth).status_code == 422
+    qs = interview.ADMISSION.bank({"track": "학사편입", "major": "전자전기공학부", "school": "고려대학교"}, random.Random(1))
+    assert len(qs) == 6 and "고려대학교 전자전기공학부" in qs[1] and "전압" in qs[2]
+    med = interview.ADMISSION.bank({"track": "의·치의학전문대학원", "major": "의학과"}, random.Random(2))
+    assert "의사" in med[1] and any("환자" in q or "의료" in q for q in med[3:])  # 의전원은 윤리·상황 질문이 꼭 하나
+    d = run(client, auth, kind="admission", setup={"track": "대학원", "major": "컴퓨터학과"})
+    assert d["kind_info"]["answer_sec"] == 120 and d["mains"] == 6
+    kinds = [k["key"] for k in client.get("/api/interviews/kinds", headers=auth).json()]
+    assert kinds == ["opic", "job", "admission"]
