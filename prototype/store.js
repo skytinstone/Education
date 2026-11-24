@@ -662,6 +662,7 @@ const Store = (() => {
     startInterview: (kind, setup) => api("/interviews", { method: "POST", body: { kind, setup } }),
     answerInterview: (id, text, sec) => api(`/interviews/${id}/answers`, { method: "POST", body: { text, sec } }),
     finishInterview: (id) => api(`/interviews/${id}/finish`, { method: "POST" }),
+    adjustInterview: (id, choice) => api(`/interviews/${id}/adjust`, { method: "POST", body: { choice } }),
     deleteInterview: (id) => api(`/interviews/${id}`, { method: "DELETE" }),
     ping: (page) => (MODE === "api" ? api("/me/ping", { method: "POST", body: { page } }).catch(() => {}) : Promise.resolve()),
     // 정답 연결 편집 — { manual_answer } · { reset_manual: true } · { number }

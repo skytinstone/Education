@@ -32,10 +32,11 @@ class SetupField:
     key: str
     label: str
     placeholder: str = ""
-    kind: str = "text"            # text · textarea · select
+    kind: str = "text"            # text · textarea · select · multi(여러 개 고르기) · level(설명이 붙은 단계 고르기)
     options: tuple[str, ...] = ()
     required: bool = False
     max_len: int = 200
+    min_pick: int = 0             # multi: 최소로 골라야 하는 개수
 
 
 @dataclass(frozen=True)
@@ -66,48 +67,192 @@ class Kind:
     slots: tuple[Slot, ...] = ()  # 자리마다 파트·시간이 정해진 형식 (AI 역량검사 등)
     fixed: bool = False           # 정해진 시험 형식(지문·사진·표) — 늘 내장 문항을 쓰고 AI 는 평가만
     time_note: str = ""           # 카드에 보일 시간 안내 (문항마다 다를 때)
+    count: Callable[[dict], int] | None = None  # 설정에 따라 본 질문 수가 달라질 때 (OPIc: 자기 평가 1·2단계 12, 3~6단계 15)
+    survey_min: int = 0           # survey_keys 의 multi 칸에서 모두 합쳐 골라야 하는 개수 (OPIc: 12개 이상)
+    survey_keys: tuple[str, ...] = ()
+    adjust_after: int = 0         # 이 번호의 본 질문 뒤에 난이도를 다시 고른다 (OPIc: 7)
+    replays: int = 0              # 다시 듣기 횟수 (0 = 제한 없음, OPIc: 질문 2회 청취 → 1)
+    level_bands: tuple[tuple[str, str], ...] = ()  # 등급별 점수 구간 (TOEIC Speaking)
 
 
-HOME_EN = {"가족과 함께": "with your family", "혼자": "alone", "친구·룸메이트와": "with friends or roommates", "기숙사": "in a dormitory"}
+# ---------------------------------------------------------------- OPIc (실제 시험 구성)
+# 근거: OPIc 공식 안내(opic.co.kr) — Background Survey · Self Assessment 1~6단계 · 12/15문항 ·
+#       1차 약 7문항 뒤 '쉬운 질문 / 비슷한 질문 / 어려운 질문' 난이도 재조정 · 질문 2회 청취 · 문항별 시간 제한 없음(총 40분)
+#       나무위키 OPIc — 설문 4~7번에서 12개 이상 선택, 단계별 문항 구성(3콤보 · 돌발 · 롤플레이 · 어드밴스)
+
+OPIC_JOB = ("사업·회사", "가사", "교사·교육자", "일 경험 없음")
+OPIC_STUDENT = ("네", "아니요")
+OPIC_HOME = ("혼자 개인주택이나 아파트에 거주", "친구나 룸메이트와 함께 거주", "가족과 함께 거주", "학교 기숙사", "군대 막사")
+# 설문 항목 → 질문에 넣을 영어 표현
+OPIC_LEISURE = {"영화 보기": "going to the movies", "공연 보기": "going to concerts and shows", "박물관 가기": "visiting museums",
+                "공원 가기": "going to the park", "캠핑 가기": "camping", "해변 가기": "going to the beach",
+                "카페 가기": "going to cafés", "쇼핑하기": "shopping", "TV·리얼리티쇼 보기": "watching TV",
+                "SNS에 글 올리기": "posting on social media", "봉사활동": "volunteering", "게임하기": "playing video games"}
+OPIC_HOBBY = {"음악 감상": "listening to music", "악기 연주": "playing a musical instrument", "요리하기": "cooking",
+              "독서": "reading", "그림 그리기": "drawing", "글쓰기": "writing", "반려동물 기르기": "taking care of your pet",
+              "사진 찍기": "taking photos"}
+OPIC_SPORT = {"조깅": "jogging", "걷기": "walking", "수영": "swimming", "헬스": "working out at the gym", "요가": "yoga",
+              "자전거": "bike riding", "등산": "hiking", "축구": "soccer", "농구": "basketball", "테니스": "tennis", "골프": "golf",
+              "운동을 전혀 하지 않음": ""}
+OPIC_TRAVEL = {"국내 여행": "traveling in your country", "해외 여행": "traveling abroad", "국내 출장": "business trips in your country",
+               "해외 출장": "business trips abroad", "집에서 보내는 휴가": "spending your vacation at home"}
+# 설문과 상관없이 나오는 '돌발' 주제
+OPIC_SURPRISE = ("recycling", "the weather in your country", "holidays in your country", "technology you use every day",
+                 "public transportation", "restaurants in your neighborhood", "banks", "your health habits", "household chores",
+                 "furniture in your home")
+# Self Assessment — 공식 예시 문구 (1·2단계 12문항, 3~6단계 15문항)
+OPIC_SELF = (
+    "1 · 10단어 이하의 단어로 말할 수 있어요",
+    "2 · 기본적인 물건, 색깔, 요일, 음식, 옷, 숫자 등을 말할 수 있어요",
+    "3 · 나 자신, 직장, 친한 사람과 장소, 일상에 대한 기본 정보를 간단한 문장으로 전할 수 있어요",
+    "4 · 일상, 일·학교, 취미에 대해 간단한 대화를 할 수 있고, 궁금한 것을 물어볼 수도 있어요",
+    "5 · 친숙한 주제와 집, 일·학교, 개인적 관심사에 대해 자신 있게 대화할 수 있고, 어떤 상황이 생겨도 잘 대처할 수 있어요",
+    "6 · 개인적·사회적·전문적인 주제에 대해 의견을 말하고 토론할 수 있으며, 구체적으로 설명할 수 있어요",
+)
+OPIC_ROLEPLAY = (  # (상황, 전화할 곳, 문제, 연락할 사람)
+    ("buy a new phone", "an electronics store", "The phone you bought yesterday stopped working, and you need it for an important call tomorrow.", "the store"),
+    ("book a table for a friend's birthday dinner", "a restaurant", "You can't make it to the restaurant because something urgent came up.", "your friend"),
+    ("join a gym near your home", "the gym", "You found out the gym charged you twice this month.", "the gym manager"),
+    ("plan a weekend trip with a friend", "a travel agency", "Your flight was canceled and you can't leave on the planned day.", "your friend"),
+    ("buy tickets for a concert", "the ticket office", "You bought tickets for the wrong date.", "the ticket office"),
+)
 
 
-def _opic_bank(setup: dict, rnd: random.Random) -> list[str]:
-    hobby = (setup.get("hobbies") or "").split(",")[0].strip()
-    if not hobby or re.search(r"[가-힣]", hobby):  # 영어 질문에 한글을 끼우지 않는다 (AI 가 있으면 AI 가 번역해 묻는다)
-        hobby = "your favorite free-time activity"
-    home = HOME_EN.get(setup.get("home") or "", "")
-    pool = [
-        f"You indicated in the survey that you enjoy {hobby}. Why do you like it? Describe what you usually do, in as much detail as possible.",
-        f"Tell me about a memorable experience related to {hobby}. What happened, who were you with, and why was it so memorable?",
-        "Tell me about your home" + (f" — you said you live {home}" if home else "") + ". What does it look like? Describe your favorite room in detail.",
-        "Describe a typical day for you, from the moment you wake up until you go to bed.",
-        "I'd like to give you a situation to act out. You want to book a table at a restaurant for a friend's birthday. "
-        "Call the restaurant and ask three or four questions to make the reservation.",
-        "Compare how people in your country spent their free time in the past with how they spend it now. What has changed, and why?",
-        "Tell me about a place you like to visit in your neighborhood. What is it like, and what do you do there?",
-        "Talk about a time when something unexpected happened while you were traveling. How did you handle it?",
-    ]
+def opic_level(setup: dict) -> int:
+    v = (setup.get("level") or "").strip()
+    return int(v[0]) if v[:1].isdigit() and 1 <= int(v[0]) <= 6 else 4
+
+
+def opic_count(setup: dict) -> int:
+    if setup.get("length") == "짧은 연습 (1차 세션 7문항)":
+        return 7
+    return 12 if opic_level(setup) <= 2 else 15
+
+
+def _opic_types(level: int) -> list[str]:
+    """단계별 문항 순서. 2~10번은 같은 주제 3문항씩(3콤보), 그 뒤는 롤플레이·어드밴스."""
+    combos = ["describe", "routine", "past"] * 3
+    if level <= 2:
+        return ["intro", *combos, "ask", "ask"]                                        # 12문항
+    if level <= 4:
+        return ["intro", *combos, "rp_ask", "rp_solve", "rp_exp", "describe", "past"]  # 15문항
+    return ["intro", *combos, "rp_ask", "rp_solve", "rp_exp", "compare", "issue"]      # 15문항, 어드밴스 2개
+
+
+def _picked(setup: dict, key: str, table: dict) -> list[str]:
+    out = [table.get(x.strip(), "") for x in (setup.get(key) or "").split(",")]
+    return [x for x in out if x]
+
+
+def _opic_topics(setup: dict, rnd: random.Random) -> list[str]:
+    """3콤보 세 묶음의 주제: 설문에서 고른 것 두 개 + 돌발 하나."""
+    pool = (_picked(setup, "leisure", OPIC_LEISURE) + _picked(setup, "hobby", OPIC_HOBBY)
+            + _picked(setup, "sport", OPIC_SPORT) + _picked(setup, "travel", OPIC_TRAVEL))
     rnd.shuffle(pool)
-    return ["Let's start the interview now. Tell me a little bit about yourself.", *pool[:5]]
+    survey = (pool + ["your free time", "your neighborhood"])[:2]
+    return [survey[0], survey[1], rnd.choice(OPIC_SURPRISE)]
+
+
+def _opic_q(kind: str, topic: str, level: int, rp: tuple, surprise: bool = False) -> str:
+    easy, hard = level <= 2, level >= 5
+    lead = "Let's talk about" if surprise else "You indicated in the survey that you enjoy"
+    if kind == "intro":
+        return "Let's start the interview now. Please tell me a little bit about yourself."
+    if surprise:  # 설문과 상관없는 돌발 주제는 '어디서·누구와'가 아니라 주제 자체를 묻는다
+        if kind == "describe":
+            return f"Let's talk about {topic}. Can you describe {topic} in as much detail as possible?"
+        if kind == "routine":
+            return f"What do you usually do when it comes to {topic}? Tell me about it step by step."
+        return (f"Tell me about a memorable experience you had related to {topic}. "
+                f"What happened, and why do you still remember it?")
+    if kind == "describe":
+        if easy:
+            return f"{lead} {topic}. What do you like about it?"
+        return (f"{lead} {topic}. Describe it in as much detail as possible — where you usually do it, who you do it with, "
+                f"and why you like it." + (" Also explain how it has changed your daily life." if hard else ""))
+    if kind == "routine":
+        if easy:
+            return f"When do you usually enjoy {topic}? Tell me what you do."
+        return f"Tell me about your usual routine when it comes to {topic}. What do you typically do from beginning to end?"
+    if kind == "past":
+        if easy:
+            return f"Tell me about the last time you enjoyed {topic}. What did you do?"
+        return (f"Tell me about a memorable experience related to {topic}. When was it, who were you with, what happened, "
+                f"and why was it so memorable?")
+    if kind == "ask":
+        return f"I also enjoy {topic}. Ask me three or four questions about it."
+    sc, place, problem, who = rp
+    if kind == "rp_ask":
+        return (f"I'd like to give you a situation and ask you to act it out. You want to {sc}. "
+                f"Call {place} and ask three or four questions to get the information you need.")
+    if kind == "rp_solve":
+        return (f"I'm sorry, but there is a problem you need to resolve. {problem} "
+                f"Call {who}, explain the situation, and offer two or three alternatives to solve the problem.")
+    if kind == "rp_exp":
+        return ("That's the end of the situation. Have you ever experienced a similar problem? "
+                "Tell me what happened in detail and how you dealt with it.")
+    if kind == "compare":
+        return (f"How has {topic} changed over the years? Compare what it was like in the past with what it is like now, "
+                f"and explain why you think it has changed.")
+    return (f"What are some issues or concerns people have about {topic} these days? "
+            f"Explain them in detail and tell me what you think should be done.")
+
+
+OPIC_PART = {"intro": "자기소개", "describe": "묘사", "routine": "일상·습관", "past": "경험", "ask": "질문하기",
+             "rp_ask": "롤플레이 · 정보 묻기", "rp_solve": "롤플레이 · 문제 해결", "rp_exp": "롤플레이 · 관련 경험",
+             "compare": "어드밴스 · 비교", "issue": "어드밴스 · 사회 이슈"}
+
+
+def opic_items(setup: dict, rnd: random.Random, level1: int, level2: int | None = None, start: int = 0,
+               topics: list[str] | None = None) -> list[dict]:
+    """OPIc 문항 — 1차 세션(1~7번)은 level1, 2차 세션(8번~)은 다시 고른 level2 기준. start 부터 끝까지 돌려준다."""
+    n = opic_count(setup)
+    l2 = level2 or level1
+    t2 = _opic_types(l2)
+    types = _opic_types(level1)[:7] + [t2[min(i, len(t2) - 1)] for i in range(7, n)]
+    topics = topics or _opic_topics(setup, rnd)
+    rp = rnd.choice(OPIC_ROLEPLAY)
+    out = []
+    for i in range(start, n):
+        kind = types[i]
+        combo = (i - 1) // 3 if 1 <= i <= 9 else None
+        topic = topics[combo] if combo is not None else (topics[0] if kind in ("ask", "compare", "issue") else topics[1])
+        part = OPIC_PART[kind] if combo != 2 else f"돌발 · {OPIC_PART[kind]}"
+        out.append({"q": _opic_q(kind, topic, level1 if i < 7 else l2, rp, surprise=combo == 2),
+                    "part": part, "slot": kind, "topic": topic})
+    return out
+
+
+def _opic_bank(setup: dict, rnd: random.Random) -> list[dict]:
+    lv = opic_level(setup)
+    return opic_items(setup, rnd, lv)
 
 
 OPIC = Kind(
     key="opic", name="OPIc 영어", lang="en",
-    desc="배경 설문에 맞춘 질문에 영어로 2분씩 답해요. 자기소개 · 묘사 · 경험 · 롤플레이 · 비교",
-    mains=6, follow_ups=2, prep_sec=20, answer_sec=120,
+    desc="실제 시험처럼 배경 설문과 자기 평가(1~6단계)로 난이도를 정하고, 7번 문항 뒤에 난이도를 한 번 다시 골라요",
+    mains=15, follow_ups=0, prep_sec=0, answer_sec=180, time_note="문항당 2분 안팎 권장 · 총 40분",
     fields=(
-        SetupField("role", "지금 하는 일", kind="select", options=("학생", "직장인", "구직 중"), required=True),
-        SetupField("home", "사는 곳", kind="select", options=("가족과 함께", "혼자", "친구·룸메이트와", "기숙사")),
-        SetupField("hobbies", "좋아하는 활동 (쉼표로)", "movies, jogging, cafés · 한국어로 적어도 돼요", max_len=120),
-        SetupField("target", "목표 등급", kind="select", options=("IM2", "IM3", "IH", "AL")),
+        SetupField("job", "1. 현재 하시는 일", kind="select", options=OPIC_JOB, required=True),
+        SetupField("student", "2. 지금 학생이세요?", kind="select", options=OPIC_STUDENT, required=True),
+        SetupField("home", "3. 사는 곳", kind="select", options=OPIC_HOME, required=True),
+        SetupField("leisure", "4. 여가 활동 (2개 이상)", kind="multi", options=tuple(OPIC_LEISURE), min_pick=2, max_len=400),
+        SetupField("hobby", "5. 취미·관심사 (1개 이상)", kind="multi", options=tuple(OPIC_HOBBY), min_pick=1, max_len=400),
+        SetupField("sport", "6. 운동 (1개 이상)", kind="multi", options=tuple(OPIC_SPORT), min_pick=1, max_len=400),
+        SetupField("travel", "7. 휴가·출장 (1개 이상)", kind="multi", options=tuple(OPIC_TRAVEL), min_pick=1, max_len=400),
+        SetupField("level", "자기 평가 (Self Assessment)", kind="level", options=OPIC_SELF, required=True, max_len=200),
+        SetupField("length", "분량", kind="select", options=("실전 (12·15문항)", "짧은 연습 (1차 세션 7문항)")),
     ),
     levels=("NL", "NM", "NH", "IL", "IM1", "IM2", "IM3", "IH", "AL"),
     level_note="예상 등급이에요. 실제 OPIc 등급과 다를 수 있어요.",
+    survey_min=12, survey_keys=("leisure", "hobby", "sport", "travel"),
+    adjust_after=7, replays=1, count=opic_count, fixed=True,
     guide=(
-        "OPIc(외국어 말하기 평가) 대비 모의 인터뷰다. 질문은 모두 영어. 배경 설문(하는 일·사는 곳·좋아하는 활동)에 맞춘 "
-        "자기소개, 묘사, 과거 경험, 롤플레이(상황극), 비교·사회 이슈 질문을 섞는다. "
-        "평가는 ACTFL 기준을 따른다: 과제 수행(묘사·서술·비교·문제 해결), 문장 길이와 연결(문장 → 문단), 시제 정확성, "
-        "어휘 다양성, 유창성(머뭇거림·반복), 내용의 구체성. 등급은 NL·NM·NH·IL·IM1·IM2·IM3·IH·AL 중 하나."
+        "OPIc(ACTFL 외국어 말하기 평가) 모의시험이다. 질문은 모두 영어. 자기소개 → 설문 주제 3콤보(묘사·일상·경험) 두 묶음 → 돌발 주제 3콤보 → "
+        "롤플레이(정보 묻기·문제 해결·관련 경험) → 어드밴스(비교·사회 이슈) 순서다. 자기소개(1번)는 등급에 반영하지 않는다. "
+        "평가는 ACTFL 기준: 과제 수행(묘사·서술·비교·문제 해결), 문장 길이와 연결(문장 → 문단), 시제 정확성(특히 경험은 과거 시제), "
+        "어휘 다양성, 유창성(머뭇거림·반복), 내용의 구체성, 롤플레이에서 실제 대화처럼 묻고 대안을 내는지. "
+        "등급은 시험 전체에서 꾸준히 유지한 수준으로 정한다 (NL·NM·NH·IL·IM1·IM2·IM3·IH·AL)."
     ),
     bank=_opic_bank,
 )
@@ -356,15 +501,18 @@ TOEIC = Kind(
     key="toeic", name="TOEIC Speaking", lang="en",
     desc="실제 시험 형식 11문항 — 소리 내어 읽기 · 사진 묘사 · 질문에 답하기 · 표 보고 답하기 · 의견 말하기",
     mains=11, follow_ups=0, prep_sec=45, answer_sec=45, fixed=True, time_note="문항마다 15초~1분",
-    fields=(SetupField("target", "목표 레벨", kind="select", options=("Lv.5", "Lv.6", "Lv.7", "Lv.8")),),
-    levels=("Lv.1", "Lv.2", "Lv.3", "Lv.4", "Lv.5", "Lv.6", "Lv.7", "Lv.8"),
-    level_note="예상 레벨이에요. 실제 TOEIC Speaking 점수와 다를 수 있어요.",
+    fields=(SetupField("target", "목표 등급", kind="select", options=("IM2", "IM3", "IH", "AL", "AM", "AH")),),
+    levels=("NL", "NM", "NH", "IL", "IM1", "IM2", "IM3", "IH", "AL", "AM", "AH"),
+    level_bands=(("NL", "0~30점"), ("NM", "40~50점"), ("NH", "60~80점"), ("IL", "90~100점"), ("IM1", "110점"), ("IM2", "120점"),
+                 ("IM3", "130점"), ("IH", "140~150점"), ("AL", "160~170점"), ("AM", "180~190점"), ("AH", "200점")),
+    level_note="예상 등급이에요. 실제 TOEIC Speaking 점수와 다를 수 있어요. 실제 시험에는 난이도 선택이 없어요.",
     guide=(
         "TOEIC Speaking 모의시험이다 (ETS 형식, 11문항). Part 1(1~2) 소리 내어 읽기: 발음·억양·강세 — 받아쓴 글이라 지문과 "
         "얼마나 같게 읽었는지(빠뜨린·잘못 읽은 단어)로 본다. Part 2(3~4) 사진 묘사: 문법·어휘·연결성, 사진 속 사람·사물·위치를 "
         "얼마나 구체적으로 말했는지. Part 3(5~7) 질문에 답하기: 질문에 맞는 내용·완결성. Part 4(8~10) 표 보고 답하기: 표의 정보를 "
         "정확히 전달했는지(취소된 항목 등 함정 포함). Part 5(11) 의견 말하기: 분명한 입장과 이유·예시, 구성. "
-        "레벨은 Lv.1~Lv.8 (Lv.8 은 거의 원어민 수준, Lv.6 은 대부분의 상황에서 적절히 소통)."
+        "등급은 200점 만점 점수 구간에 맞춘 국내 표기: NL(0~30) NM(40~50) NH(60~80) IL(90~100) IM1(110) IM2(120) IM3(130) "
+        "IH(140~150) AL(160~170) AM(180~190) AH(200)."
     ),
     bank=_toeic_bank,
 )
@@ -595,15 +743,32 @@ def clean_setup(kind: Kind, raw: dict) -> dict:
     out = {}
     for f in kind.fields:
         v = str(raw.get(f.key) or "").strip()[: f.max_len]
-        if f.kind == "select" and v and v not in f.options:
+        if f.kind in ("select", "level") and v and v not in f.options:
             v = ""
+        if f.kind == "multi":
+            picked = [x.strip() for x in v.split(",") if x.strip() in f.options]
+            v = ", ".join(dict.fromkeys(picked))
         if v:
             out[f.key] = v
     return out
 
 
+def picked_count(setup: dict, key: str) -> int:
+    return len([x for x in (setup.get(key) or "").split(",") if x.strip()])
+
+
 def missing_fields(kind: Kind, setup: dict) -> list[str]:
-    return [f.label for f in kind.fields if f.required and not setup.get(f.key)]
+    miss = [f.label for f in kind.fields if f.required and not setup.get(f.key)]
+    miss += [f"{f.label.split('(')[0].strip()} {f.min_pick}개 이상" for f in kind.fields
+             if f.kind == "multi" and picked_count(setup, f.key) < f.min_pick]
+    total = sum(picked_count(setup, k) for k in kind.survey_keys)
+    if kind.survey_min and total < kind.survey_min:
+        miss.append(f"설문 항목 {kind.survey_min}개 이상 (지금 {total}개)")
+    return miss
+
+
+def mains_of(kind: Kind, setup: dict) -> int:
+    return kind.count(setup) if kind.count else kind.mains
 
 
 # ---------------------------------------------------------------- 진행
@@ -638,9 +803,10 @@ def start(db: Session, user: m.User, kind: Kind, setup: dict) -> m.Interview:
         if plan and len(plan.basis) == len(plan.questions):  # 자기소개서 근거를 질문에 붙인다 (자기소개서에 실제로 있는 말만)
             questions = [({"q": q, "basis": b.strip()[:120]} if _in_resume(b, setup.get("resume", "")) else q)
                          for q, b in zip(questions, plan.basis)]
-    by_ai = len(questions) == kind.mains
+    n = mains_of(kind, setup)
+    by_ai = len(questions) == n
     if not by_ai:
-        questions = kind.bank(setup, random.Random())[: kind.mains]
+        questions = kind.bank(setup, random.Random())[:n]
     plan_items = [_item(kind, x, i) for i, x in enumerate(questions)]
     iv = m.Interview(user_id=user.id, kind=kind.key, lang=kind.lang, setup=setup, plan=plan_items,
                      turns=[_turn(plan_items[0])], status="active", by_ai=by_ai)
@@ -676,8 +842,14 @@ def answer(db: Session, user: m.User, iv: m.Interview, text: str, sec: int) -> N
         if f and f.ask and f.question.strip():
             nxt = _turn({"q": f.question.strip()[:600], "part": "꼬리질문", "prep": min(kind.prep_sec, 15),
                          "answer": t.get("answer") or kind.answer_sec, "material": None}, follow=True)
+    mains_done = sum(1 for x in turns if not x.get("follow"))
+    if nxt is None and kind.adjust_after and mains_done == kind.adjust_after and len(iv.plan) > kind.adjust_after \
+            and not iv.setup.get("adjusted"):
+        iv.turns = turns
+        iv.status = "adjust"   # 화면에서 '쉬운 질문 / 비슷한 질문 / 어려운 질문' 을 고르면 2차 세션을 이어 간다
+        db.flush()
+        return
     if nxt is None:
-        mains_done = sum(1 for x in turns if not x.get("follow"))
         if mains_done < len(iv.plan):
             nxt = _turn(_item(kind, iv.plan[mains_done], mains_done))
     if nxt:
@@ -685,6 +857,29 @@ def answer(db: Session, user: m.User, iv: m.Interview, text: str, sec: int) -> N
     else:
         iv.status = "answered"
     iv.turns = turns
+    db.flush()
+
+
+ADJUST = {"easier": -1, "same": 0, "harder": 1}
+ADJUST_LABEL = {"easier": "쉬운 질문", "same": "비슷한 질문", "harder": "어려운 질문"}
+
+
+def adjust(db: Session, user: m.User, iv: m.Interview, choice: str) -> None:
+    """OPIc 난이도 재조정 — 2차 세션(8번~) 문항을 다시 고른 단계로 바꾸고 이어 간다."""
+    kind = KINDS[iv.kind]
+    if iv.status != "adjust" or choice not in ADJUST:
+        return
+    l1 = opic_level(iv.setup)
+    l2 = max(1, min(6, l1 + ADJUST[choice]))
+    plan = [dict(x) if isinstance(x, dict) else {"q": x} for x in iv.plan]
+    topics = [plan[i].get("topic") for i in (1, 4, 7) if i < len(plan)]
+    topics = topics if len(topics) == 3 and all(topics) else None
+    tail = opic_items(iv.setup, random.Random(), l1, l2, start=kind.adjust_after, topics=topics)
+    plan = plan[: kind.adjust_after] + tail
+    iv.plan = plan
+    iv.setup = {**iv.setup, "adjusted": choice, "level2": str(l2)}
+    iv.turns = [*iv.turns, _turn(_item(kind, plan[kind.adjust_after], kind.adjust_after))]
+    iv.status = "active"
     db.flush()
 
 
@@ -736,17 +931,17 @@ def finish(db: Session, user: m.User, iv: m.Interview) -> None:
         level, score = _heuristic_level(kind, metrics)
         tips = []
         if metrics["avg_words"] < (60 if kind.lang == "en" else 45):
-            tips.append("답이 짧아요. 이유 → 구체적인 예 → 느낀 점 순서로 한두 문장씩 더 붙여 보세요")
+            tips.append("답변이 짧아요. 이유 → 구체적인 예 → 느낀 점 순서로 한두 문장씩 더 덧붙여 보세요")
         if metrics["fillers"] >= max(3, metrics["answered"]):
-            tips.append(f"'{', '.join(metrics['top_fillers'][:3])}' 같은 군말이 자주 나와요. 잠깐 멈추는 편이 더 자연스러워요")
+            tips.append(f"'{', '.join(metrics['top_fillers'][:3])}' 같은 머뭇거리는 말이 자주 나와요. 차라리 잠깐 멈추는 편이 더 자연스러워요")
         if metrics["rate"] and metrics["rate"] < (90 if kind.lang == "en" else 200):
-            tips.append("말이 조금 느려요. 같은 답을 두세 번 소리 내 연습하면 빨라져요")
+            tips.append("말하는 속도가 조금 느려요. 같은 답을 두세 번 소리 내어 연습하면 자연스럽게 빨라져요")
         if metrics["skipped"]:
-            tips.append(f"답하지 않은 질문이 {metrics['skipped']}개 있어요. 모르는 주제도 아는 경험에 이어서 답해 보세요")
+            tips.append(f"답하지 않은 질문이 {metrics['skipped']}개 있어요. 잘 모르는 주제라도 아는 경험과 연결해서 답해 보세요")
         if metrics.get("read_acc") is not None and metrics["read_acc"] < 85:
-            tips.append(f"소리 내어 읽기 정확도가 {metrics['read_acc']}%예요. 빠뜨린 단어 없이 끊어 읽을 곳을 정해 천천히 읽어 보세요")
+            tips.append(f"소리 내어 읽기 정확도가 {metrics['read_acc']}%예요. 빠뜨리는 단어가 없도록 끊어 읽을 곳을 미리 정하고 천천히 읽어 보세요")
         report = {"by_ai": False, "level": level, "score": score,
-                  "summary": "AI 평가 없이 말의 양·속도·군말만으로 어림한 결과예요. 내용과 문법은 보지 않았어요.",
+                  "summary": "AI 채점 없이 말한 양과 속도, 머뭇거린 횟수만 보고 추정한 결과예요. 내용과 문법은 평가하지 않았어요.",
                   "strengths": ["모든 질문에 답했어요"] if not metrics["skipped"] and metrics["answered"] else [],
                   "improve": tips or ["좋아요. 다음에는 더 어려운 질문으로 연습해 보세요"],
                   "items": [{"score": None, "feedback": "", "better": ""} for _ in turns]}
