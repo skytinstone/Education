@@ -674,6 +674,12 @@ const Store = (() => {
     notionAuto: (auto) => api("/notion", { method: "PATCH", body: { auto } }).then((s) => ((notionPromise = Promise.resolve(s)), s)),
     notionDisconnect: () => api("/notion", { method: "DELETE" }).then(() => (notionPromise = null)),
     notionExport: (body) => api("/notion/export", { method: "POST", body }),
+    // 자기소개서 파일 → 글 (서버는 파일을 저장하지 않는다)
+    resumeText(file) {
+      const form = new FormData();
+      form.append("file", file, file.name);
+      return api("/interviews/resume-text", { method: "POST", form });
+    },
     adjustInterview: (id, choice) => api(`/interviews/${id}/adjust`, { method: "POST", body: { choice } }),
     deleteInterview: (id) => api(`/interviews/${id}`, { method: "DELETE" }),
     ping: (page) => (MODE === "api" ? api("/me/ping", { method: "POST", body: { page } }).catch(() => {}) : Promise.resolve()),

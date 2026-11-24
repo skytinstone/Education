@@ -1263,7 +1263,10 @@ body.pdf-capture .exam-body { column-count: 1 !important; column-rule: none !imp
 .ivx .ivx-in:focus { outline: none; border-color: var(--x-accent); box-shadow: 0 0 0 3px rgba(31, 95, 224, .15); }
 .ivx-sub { display: flex; gap: 6px; font-size: 13px; line-height: 1.55; color: var(--x-mute); }
 .ivx-sub svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 3px; color: var(--x-accent); }
-.ivx .drive-pick { align-self: flex-start; }
+.ivx-src { display: flex; flex-wrap: wrap; gap: 8px; }
+.ivx .ivx-src .ivx-btn { min-height: 44px; padding: 0 16px; font-size: 14px; font-weight: 500; }
+.ivx .ivx-src .ivx-btn:disabled { color: var(--x-mute); cursor: progress; }
+.ivx .ivx-in.drop { border-color: var(--x-accent); border-style: dashed; background: var(--x-tint); }
 .ivx-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; cursor: pointer; }
 .ivx-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--x-accent); }
 
