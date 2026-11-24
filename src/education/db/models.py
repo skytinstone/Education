@@ -119,6 +119,23 @@ class ExamRecord(Base):
     __table_args__ = (Index("ix_exam_records_user_created", "user_id", "created_at"),)
 
 
+class NotionLink(Base):
+    """사용자의 Notion 연결 — 암호화한 토큰, 저장 공간(페이지·데이터베이스), 이미 저장한 결과 (services/notion.py)."""
+    __tablename__ = "notion_links"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True)
+    token_sealed: Mapped[str] = mapped_column(Text)
+    workspace_name: Mapped[str | None] = mapped_column(String(200))
+    workspace_id: Mapped[str | None] = mapped_column(String(64))
+    root_page_id: Mapped[str | None] = mapped_column(String(64))
+    exam_db_id: Mapped[str | None] = mapped_column(String(64))
+    interview_db_id: Mapped[str | None] = mapped_column(String(64))
+    auto: Mapped[bool] = mapped_column(Boolean, server_default="true")   # 시험·AI 면접 결과를 저절로 저장
+    synced: Mapped[dict] = mapped_column(JSONB, server_default="{}")      # {ref: Notion 페이지 주소}
+    created_at: Mapped[datetime] = created_at()
+
+
 class Interview(Base):
     """AI 면접 한 번 — 질문·받아쓴 답·리포트 (services/interview.py). 녹음은 저장하지 않는다."""
     __tablename__ = "interviews"
