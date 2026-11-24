@@ -1180,3 +1180,9 @@ body.pdf-capture .exam-body { column-count: 1 !important; column-rule: none !imp
 .drive-pick svg { width: 15px; height: 15px; }
 .picker-dialog-bg { z-index: 9998 !important; }
 .picker-dialog { z-index: 9999 !important; }
+
+/* ---------- Notion 연결 카드 · 알림의 버튼 ---------- */
+.nt-ok { width: 16px; height: 16px; color: #10b981; vertical-align: -3px; margin-right: 4px; }
+.nt-auto { margin: 10px 0 4px; font-size: 13.5px; gap: 8px; }
+.toast-act { margin-left: 8px; padding: 4px 10px; border: 0; border-radius: 999px; background: rgba(255,255,255,.18); color: inherit; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.toast.ok .toast-act { background: rgba(16,185,129,.14); color: #047857; }

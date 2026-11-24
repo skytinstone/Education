@@ -137,6 +137,7 @@ const Store = (() => {
   }
 
   // ================= 서버 통신 =================
+  let notionPromise = null;
   async function api(path, { method = "GET", body, form } = {}) {
     const headers = { Authorization: `Bearer ${TOKEN}` };
     if (body !== undefined) headers["Content-Type"] = "application/json";
@@ -662,6 +663,17 @@ const Store = (() => {
     startInterview: (kind, setup) => api("/interviews", { method: "POST", body: { kind, setup } }),
     answerInterview: (id, text, sec) => api(`/interviews/${id}/answers`, { method: "POST", body: { text, sec } }),
     finishInterview: (id) => api(`/interviews/${id}/finish`, { method: "POST" }),
+    // Notion 연결
+    notionStatus(force = false) {
+      if (MODE !== "api") return Promise.resolve(null);
+      if (force) notionPromise = null;
+      notionPromise ??= api("/notion").catch(() => null);
+      return notionPromise;
+    },
+    notionStart: () => api("/notion/start", { method: "POST" }),
+    notionAuto: (auto) => api("/notion", { method: "PATCH", body: { auto } }).then((s) => ((notionPromise = Promise.resolve(s)), s)),
+    notionDisconnect: () => api("/notion", { method: "DELETE" }).then(() => (notionPromise = null)),
+    notionExport: (body) => api("/notion/export", { method: "POST", body }),
     adjustInterview: (id, choice) => api(`/interviews/${id}/adjust`, { method: "POST", body: { choice } }),
     deleteInterview: (id) => api(`/interviews/${id}`, { method: "DELETE" }),
     ping: (page) => (MODE === "api" ? api("/me/ping", { method: "POST", body: { page } }).catch(() => {}) : Promise.resolve()),

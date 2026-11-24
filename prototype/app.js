@@ -86,8 +86,11 @@
   const pct = (x) => (x == null ? "–" : `${Math.round(x * 100)}%`);
 
   // 알림: 아래에서 떠오르고 여러 개면 쌓인다. 아이콘은 문구로 고른다 (오류·주의·완료·안내)
+  // kind 자리에 { action, run } 을 주면 오른쪽에 버튼이 붙는다 (예: Notion 에서 열기)
   function toast(msg, kind) {
     const text = String(msg ?? "");
+    const act = kind && typeof kind === "object" ? kind : null;
+    if (act) kind = undefined;
     kind ??= /못했|실패|오류|에러|없어요|막혔|만료/.test(text) ? "error"
       : /해 주세요|필요해요|까지|기다려|잠시만/.test(text) ? "warn"
       : /했어요|됐어요|완료|저장|보냈|극복|복사/.test(text) ? "ok" : "info";
@@ -98,10 +101,18 @@
     t.className = `toast ${kind}`;
     t.innerHTML = `<i data-lucide="${icon}"></i><span></span><em class="toast-bar"></em>`;
     t.querySelector("span").textContent = text;
+    if (act) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "toast-act";
+      b.textContent = act.action;
+      b.onclick = () => { act.run(); t.remove(); };
+      t.querySelector("span").after(b);
+    }
     stack.append(t);
     lucide.createIcons();
     while (stack.children.length > 3) stack.firstElementChild.remove();
-    const life = Math.min(5200, 2200 + text.length * 35);
+    const life = act ? 7000 : Math.min(5200, 2200 + text.length * 35);
     t.style.setProperty("--life", `${life}ms`);
     setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 260); }, life);
   }
@@ -2666,7 +2677,8 @@
         </div>
       </div>`;
     icons();
-    notionDoc = () => ({ title: r.title, md: mdExam({ title: r.title, when: r.created_at, score: r.score, totalPts: r.total_points,
+    notionDoc = () => ({ kind: "exam", ref: `exam:${r.id}`, props: { score: r.score, correct: `${r.correct} / ${r.total}`, date: r.created_at },
+      title: r.title, md: mdExam({ title: r.title, when: r.created_at, score: r.score, totalPts: r.total_points,
       used: r.used_sec, limit: r.time_limit_sec, items: r.items }) });
     view.onclick = (e) => {
       if (e.target.closest("[data-er-retry]")) return go(`/exam/${r.project_id}?${new URLSearchParams({ m: r.scope || "all", take: "1", per: String(r.per), t: "0", ids: wrong.join(",") })}`);
@@ -3099,9 +3111,12 @@
           </div>
         </div>`;
       icons();
-      notionDoc = () => ({ title: `${subject || p.name}${scopeName ? ` · ${scopeName}` : ""} 시험 결과`,
+      notionDoc = () => ({ kind: "exam", ref: saved?.id ? `exam:${saved.id}` : null,
+        props: { score, correct: `${right.length} / ${list.length}`, date: new Date().toISOString() },
+        title: `${subject || p.name}${scopeName ? ` · ${scopeName}` : ""} 시험 결과`,
         md: mdExam({ title: `${subject || p.name} 시험 결과`, when: Date.now(), score, totalPts, used: usedMs / 1000, limit: limit / 1000,
           items: rows.map((r) => ({ stem: r.q.stem, choices: r.q.choices, my: r.my, answer: r.answer, correct: r.correct, sec: r.sec })) }) });
+      if (saved?.id) notionAuto(notionDoc());
       view.onclick = (e) => {
         if (e.target.closest("[data-xt-retry]")) {
           const q = new URLSearchParams(params);
@@ -3961,7 +3976,10 @@
       </div>`;
     icons();
     countUp(view);
-    notionDoc = () => ({ title: `${k.name} 리포트 ${new Date(d.created_at).toLocaleDateString("ko-KR")}`, md: mdInterview(d) });
+    notionDoc = () => ({ kind: "interview", ref: `interview:${d.id}`,
+      props: { kind_name: k.name, level: r.level ? `${r.level}${k.level_bands?.[r.level] ? ` (${k.level_bands[r.level]})` : ""}` : "", score: r.score ?? undefined, date: d.created_at },
+      title: `${k.name} 리포트 ${new Date(d.created_at).toLocaleDateString("ko-KR")}`, md: mdInterview(d) });
+    notionAuto(notionDoc());
     view.onclick = (e) => {
       const pol = e.target.closest("[data-iv-polish]");
       if (pol) {
@@ -4449,14 +4467,17 @@
         <li><b>Markdown 파일</b> — Notion 왼쪽 메뉴의 <b>설정 → 가져오기 → 텍스트 및 Markdown</b> 에서 받은 .md 파일을 올려요.</li>
         <li>수식은 <code>$...$</code> 그대로 들어가요. Notion 에서 수식을 선택하고 <b>수식으로 바꾸기</b>를 누르면 예쁘게 보여요.</li></ol>` });
   }
-  document.addEventListener("click", (e) => {
+  document.addEventListener("click", async (e) => {
     const b = e.target.closest("[data-notion-export]");
     if (!b || !notionDoc) return;
     e.preventDefault();
     const doc = notionDoc();
     const file = `${doc.title.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 80) || "Eureka"}.md`;
+    const st = await loadNotion();  // 연결 상태는 한 번 받아 두고 다시 쓴다
     openMenu(b, [
       { label: "Notion 으로 내보내기", header: true },
+      st?.connected && { icon: "send", label: `Notion 에 바로 저장 (${st.workspace || "Notion"})`, run: () => notionSave(doc, true) },
+      st?.available && !st.connected && { icon: "link", label: "Notion 계정 연결하기", run: () => go("/settings") },
       { icon: "clipboard-copy", label: "복사해서 Notion 에 붙여넣기", run: async () => {
         try { await navigator.clipboard.writeText(doc.md); toast("복사했어요. Notion 페이지에 붙여 넣어 주세요"); }
         catch { toast("복사하지 못했어요. Markdown 파일 받기를 써 주세요"); } } },
@@ -4468,6 +4489,21 @@
       { icon: "circle-help", label: "Notion 에서 보는 방법", run: notionHelp },
     ]);
   });
+  // Notion 연결 상태 (설정 · 메뉴 · 자동 저장)
+  let notionState = null;
+  const loadNotion = (force) => Store.notionStatus(force).then((s) => (notionState = s));
+  // 바로 저장 — 같은 결과(ref)는 서버가 한 번만 저장한다. loud: 직접 누른 경우 결과를 알린다
+  async function notionSave(doc, loud = false) {
+    try {
+      const r = await Store.notionExport({ kind: doc.kind || "notes", ref: doc.ref || null, title: doc.title, markdown: doc.md, props: doc.props || {} });
+      if (loud || r.created) {
+        toast(r.created ? "Notion 에 저장했어요" : "이미 Notion 에 저장한 결과예요", { action: "Notion 에서 열기", run: () => window.open(r.url, "_blank", "noopener") });
+      }
+      return r;
+    } catch (err) { if (loud) toast(err.message); return null; }
+  }
+  // 시험·AI 면접 결과 화면에서: 연결돼 있고 '자동 저장' 이 켜져 있으면 저절로
+  const notionAuto = (doc) => loadNotion().then((s) => { if (s?.connected && s.auto && doc.ref) notionSave(doc); });
   const NOTION_BTN = '<button type="button" class="btn-ghost" data-notion-export><i data-lucide="notebook-pen"></i>Notion 으로 내보내기</button>';
 
   // ================= 인쇄 · PDF 저장 (따로) =================
@@ -4643,7 +4679,7 @@
       .filter((w) => !noteFilter.project || w.projectId === noteFilter.project)
       .sort((a, b) => (!!a.resolvedAt - !!b.resolvedAt) || b.createdAt - a.createdAt);
     $("#note-count").textContent = `${list.length}문제`;
-    notionDoc = () => ({ title: `오답노트 ${new Date().toLocaleDateString("ko-KR")}`, md: mdNotes(list) });
+    notionDoc = () => ({ kind: "notes", title: `오답노트 ${new Date().toLocaleDateString("ko-KR")}`, md: mdNotes(list) });
     $("#note-list").innerHTML = list.length ? list.map((w) => {
       const p = Store.problem(w.problemId);
       if (!p) return "";
@@ -5077,12 +5113,55 @@
     });
   }
 
+  async function drawNotionCard() {
+    const box = $("#notion-box");
+    if (!box) return;
+    const s = await loadNotion(true);
+    if (!$("#notion-box")) return;
+    if (!s?.available) {
+      box.innerHTML = '<p class="mini">Notion 연결은 준비 중이에요. 그동안 결과 화면의 <b>Notion 으로 내보내기</b>로 복사·파일 저장을 쓸 수 있어요.</p>';
+      return;
+    }
+    box.innerHTML = s.connected ? `
+      <div class="settings-row"><span><i data-lucide="check-circle-2" class="nt-ok"></i><b>${esc(s.workspace || "Notion")}</b> 워크스페이스에 연결했어요</span>
+        <button class="btn-ghost glassy" data-notion-off><i data-lucide="unlink"></i>연결 해제</button></div>
+      <label class="check nt-auto"><input type="checkbox" data-notion-auto ${s.auto ? "checked" : ""} /> 시험 결과와 AI 면접 리포트를 Notion 에 자동 저장</label>
+      <p class="mini">Notion 의 <b>Eureka 학습 기록</b> 페이지 아래 '시험 기록' · 'AI 면접' 데이터베이스에 쌓여요. 오답노트는 오답노트 화면의 Notion 버튼으로 저장해요.</p>`
+      : `
+      <div class="settings-row"><span>시험 결과·AI 면접 리포트·오답노트를 내 Notion 에 저장해요</span>
+        <button class="btn-primary" data-notion-on><i data-lucide="notebook-pen"></i>Notion 연결</button></div>
+      <p class="mini">연결 화면에서 Eureka 가 쓸 페이지를 고를 수 있어요. 연결은 언제든 해제할 수 있어요.</p>`;
+    icons();
+    box.onclick = async (e) => {
+      if (e.target.closest("[data-notion-on]")) {
+        try { location.href = (await Store.notionStart()).url; } catch (err) { toast(err.message); }
+      }
+      if (e.target.closest("[data-notion-off]")) {
+        confirmModal({ title: "Notion 연결을 해제할까요?", text: "이미 저장한 Notion 페이지는 그대로 남아요. 다시 연결하면 이어서 저장해요.", action: "해제",
+          run: async () => { try { await Store.notionDisconnect(); drawNotionCard(); } catch (err) { toast(err.message); } } });
+      }
+    };
+    box.onchange = async (e) => {
+      const t = e.target.closest("[data-notion-auto]");
+      if (!t) return;
+      try { await Store.notionAuto(t.checked); toast(t.checked ? "자동 저장을 켰어요" : "자동 저장을 껐어요"); loadNotion(true); }
+      catch (err) { toast(err.message); t.checked = !t.checked; }
+    };
+  }
+
   function renderSettings(params = new URLSearchParams()) {
     // 계정 설정에서 시작한 간편 로그인 연결의 결과 (#/settings?linked=google 또는 ?link_error=…)
     const done = params.get("linked"), failed = params.get("link_error");
     if (done || failed) {
       const name = PROVIDERS[done ?? params.get("provider")]?.name ?? "간편 로그인";
       toast(done ? `${name} 계정을 연결했어요. 이제 ${name}로도 로그인할 수 있어요` : (LINK_ERRORS[failed] ?? LINK_ERRORS.provider)(name));
+      history.replaceState(null, "", "#/settings");
+    }
+    // Notion 연결의 결과 (#/settings?notion=connected 또는 ?notion_error=…)
+    const nOk = params.get("notion"), nErr = params.get("notion_error");
+    if (nOk || nErr) {
+      toast(nOk ? "Notion 을 연결했어요. 이제 시험 결과와 AI 면접 리포트가 Notion 에 저장돼요"
+        : { denied: "Notion 연결을 취소했어요", state: "연결 시간이 지났어요. 다시 눌러 주세요", token: "Notion 에서 연결을 마치지 못했어요. 다시 시도해 주세요" }[nErr] ?? "Notion 을 연결하지 못했어요");
       history.replaceState(null, "", "#/settings");
     }
     const u = Store.state.user;
@@ -5135,6 +5214,11 @@
           <div class="addr-embed" id="addr-embed" hidden></div></div>
         <div class="settings-foot"><button class="btn-primary" type="submit"><i data-lucide="check"></i>저장</button></div>
       </form>
+
+      ${Store.mode === "api" ? `<section class="glass-card settings-card" style="--c:#0f172a" id="notion-card">
+        <h3>Notion 연결</h3>
+        <div id="notion-box">${skel(1)}</div>
+      </section>` : ""}
 
       ${Store.mode === "api" ? `<section class="glass-card settings-card" style="--c:#22c55e">
         <h3>로그인 방법</h3>
@@ -5235,6 +5319,7 @@
       } catch (err) { toast(err.message); }
     });
     renderLoginMethods();
+    drawNotionCard();
     $("#s-logout").addEventListener("click", () => {
       try { localStorage.removeItem("eureka.token"); localStorage.removeItem("eureka.user"); } catch { /* 무시 */ }
       location.href = "login.html";

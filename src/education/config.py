@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     neis_api_key: str | None = None
     # 책 검색 (선택) — Google Books 키가 있으면 함께 찾는다. 카카오 책 검색은 KAKAO_REST_API_KEY 를 그대로 쓴다
     google_books_api_key: str | None = None
+    # Notion 연결 (선택) — notion.so/my-integrations 에서 '공개 통합'을 만들고 받은 값.
+    # 리디렉션 URI: {public_base_url}/api/notion/callback. 둘 다 있어야 설정 화면에 'Notion 연결'이 켜진다
+    notion_client_id: str | None = None
+    notion_client_secret: str | None = None
 
     # 운영자 — 이 이메일로 로그인한 계정만 피드백 관리·문제 복구를 할 수 있다 (쉼표로 여러 개)
     admin_emails: str = ""
