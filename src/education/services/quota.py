@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from education.config import get_settings
 from education.db import models as m
-from education.services import learning
+from education.services import billing, learning
 
 MESSAGE = "오늘 쓸 수 있는 AI 사용량을 모두 썼어요. 내일 다시 이용해 주세요"
 
@@ -24,12 +24,23 @@ def usage_today(db: Session, user: m.User) -> tuple[float, int]:
     return float(cost), int(calls)
 
 
-def exceeded(db: Session, user: m.User) -> bool:
+def limits(db: Session, user: m.User) -> tuple[float, int]:
+    """하루 한도 (비용 USD, 호출 수) — 구독 요금제가 있으면 그 한도, 없으면 .env 의 기본값. 0 = 제한 없음"""
     s = get_settings()
-    if user.email.lower() in s.admins:
+    plan = billing.plan_of(db, user)
+    if plan.price:
+        # 기본 한도가 0(제한 없음)이면 구독자도 제한 없음, 아니면 둘 중 넉넉한 쪽
+        return (s.ai_daily_limit_usd and max(plan.daily_usd, s.ai_daily_limit_usd),
+                s.ai_daily_limit_calls and max(plan.daily_calls, s.ai_daily_limit_calls))
+    return s.ai_daily_limit_usd, s.ai_daily_limit_calls
+
+
+def exceeded(db: Session, user: m.User) -> bool:
+    if user.email.lower() in get_settings().admins:
         return False
+    max_usd, max_calls = limits(db, user)
     cost, calls = usage_today(db, user)
-    return bool((s.ai_daily_limit_usd and cost >= s.ai_daily_limit_usd) or (s.ai_daily_limit_calls and calls >= s.ai_daily_limit_calls))
+    return bool((max_usd and cost >= max_usd) or (max_calls and calls >= max_calls))
 
 
 def check(db: Session, user: m.User) -> None:

@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     # 리디렉션 URI: {public_base_url}/api/notion/callback. 둘 다 있어야 설정 화면에 'Notion 연결'이 켜진다
     notion_client_id: str | None = None
     notion_client_secret: str | None = None
+    # PortOne V2 월 구독 결제 (services/billing.py). 상점 ID · 채널 키 · API 시크릿이 모두 있어야 요금제 화면이 켜진다.
+    # 테스트 채널 키로 먼저 개발하고, 결제 회사 심사가 끝나면 실연동 값으로 바꾼다. 웹훅: {public_base_url}/api/billing/webhook
+    portone_store_id: str | None = None
+    portone_channel_key: str | None = None
+    portone_api_secret: str | None = None
+    portone_webhook_secret: str | None = None
 
     # 운영자 — 이 이메일로 로그인한 계정만 피드백 관리·문제 복구를 할 수 있다 (쉼표로 여러 개)
     admin_emails: str = ""

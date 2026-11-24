@@ -12,6 +12,7 @@ dependencies = [
     "httpx2>=2.16.0",
     "openai>=3.37.0",
     "pillow>=13.0.0",
+    "portone-server-sdk>=0.21",
     "psycopg[binary]>=3.2",
     "pydantic>=2.7",
     "pydantic-settings>=2.16.1",

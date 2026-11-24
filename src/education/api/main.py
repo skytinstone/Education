@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from education.api.deps import DB
-from education.api.routers import (admin, auth, books, courses, exams, feedback, interviews, learning, notifications, notion,
+from education.api.routers import (admin, auth, billing, books, courses, exams, feedback, interviews, learning, notifications, notion,
                                      projects,
                                      sessions, sync, visits)
 from education.config import ROOT, get_settings
@@ -56,7 +56,7 @@ async def security_headers(request: Request, call_next):
 api = APIRouter(prefix="/api")
 for r in (auth.router, projects.router, projects.material_router, sessions.router, learning.router, sync.router,
           feedback.router, feedback.admin, admin.router, notifications.router, courses.router, books.router,
-          visits.router, exams.router, interviews.router, notion.router):
+          visits.router, exams.router, interviews.router, notion.router, billing.router):
     api.include_router(r)
 
 
