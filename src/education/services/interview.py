@@ -73,6 +73,8 @@ class Kind:
     adjust_after: int = 0         # 이 번호의 본 질문 뒤에 난이도를 다시 고른다 (OPIc: 7)
     replays: int = 0              # 다시 듣기 횟수 (0 = 제한 없음, OPIc: 질문 2회 청취 → 1)
     level_bands: tuple[tuple[str, str], ...] = ()  # 등급별 점수 구간 (TOEIC Speaking)
+    # 설정 화면을 가로 단으로 나눌 때: (제목, 안내, 그 단의 칸들). 앞 단을 마쳐야 다음 단이 열린다
+    steps: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
 
 
 # ---------------------------------------------------------------- OPIc (실제 시험 구성)
@@ -146,10 +148,10 @@ def _picked(setup: dict, key: str, table: dict) -> list[str]:
 
 def _opic_topics(setup: dict, rnd: random.Random) -> list[str]:
     """3콤보 세 묶음의 주제: 설문에서 고른 것 두 개 + 돌발 하나."""
-    pool = (_picked(setup, "leisure", OPIC_LEISURE) + _picked(setup, "hobby", OPIC_HOBBY)
-            + _picked(setup, "sport", OPIC_SPORT) + _picked(setup, "travel", OPIC_TRAVEL))
-    rnd.shuffle(pool)
-    survey = (pool + ["your free time", "your neighborhood"])[:2]
+    cats = [_picked(setup, "leisure", OPIC_LEISURE), _picked(setup, "hobby", OPIC_HOBBY),
+            _picked(setup, "sport", OPIC_SPORT), _picked(setup, "travel", OPIC_TRAVEL)]
+    firsts = [c[0] for c in cats if c]  # 분류마다 처음 고른 것 — 설정 화면의 '이렇게 진행돼요'와 같다
+    survey = (firsts + ["your free time", "your neighborhood"])[:2]
     return [survey[0], survey[1], rnd.choice(OPIC_SURPRISE)]
 
 
@@ -247,6 +249,11 @@ OPIC = Kind(
     level_note="예상 등급이에요. 실제 OPIc 등급과 다를 수 있어요.",
     survey_min=12, survey_keys=("leisure", "hobby", "sport", "travel"),
     adjust_after=7, replays=1, count=opic_count, fixed=True,
+    steps=(
+        ("나에 대해", "하는 일 · 학생 여부 · 사는 곳을 하나씩 골라 주세요", ("job", "student", "home")),
+        ("좋아하는 것", "4~7번에서 모두 합쳐 12개 이상 골라 주세요. 고른 것이 질문 주제가 돼요", ("leisure", "hobby", "sport", "travel")),
+        ("난이도와 진행", "자기 평가 단계로 문항 수와 난이도가 정해져요", ("level", "length")),
+    ),
     guide=(
         "OPIc(ACTFL 외국어 말하기 평가) 모의시험이다. 질문은 모두 영어. 자기소개 → 설문 주제 3콤보(묘사·일상·경험) 두 묶음 → 돌발 주제 3콤보 → "
         "롤플레이(정보 묻기·문제 해결·관련 경험) → 어드밴스(비교·사회 이슈) 순서다. 자기소개(1번)는 등급에 반영하지 않는다. "
