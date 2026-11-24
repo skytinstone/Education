@@ -364,6 +364,7 @@
     view.onclick = null;
     view.onchange = null;
     view.onkeydown = null;
+    notionDoc = null;
     $(".wrap").classList.toggle("wide", page === "project");
     if (!page) { renderHome(params); replayReveal(); }
     else if (page === "chat") renderChat(a);
@@ -2639,6 +2640,7 @@
           ${r.auto_submitted ? '<p class="mini">시간이 다 돼서 저절로 제출된 시험이에요</p>' : ""}
           <div class="page-actions">
             ${wrong.length && r.project_id ? '<button class="btn-primary" data-er-retry><i data-lucide="rotate-ccw"></i>틀린 문항만 다시 풀기</button>' : ""}
+            ${NOTION_BTN}
             <button class="btn-ghost danger-text" data-er-del><i data-lucide="trash-2"></i>기록 삭제</button>
           </div>
         </div>
@@ -2653,6 +2655,8 @@
         </div>
       </div>`;
     icons();
+    notionDoc = () => ({ title: r.title, md: mdExam({ title: r.title, when: r.created_at, score: r.score, totalPts: r.total_points,
+      used: r.used_sec, limit: r.time_limit_sec, items: r.items }) });
     view.onclick = (e) => {
       if (e.target.closest("[data-er-retry]")) return go(`/exam/${r.project_id}?${new URLSearchParams({ m: r.scope || "all", take: "1", per: String(r.per), t: "0", ids: wrong.join(",") })}`);
       if (e.target.closest("[data-er-del]")) return confirmModal({ title: "이 시험 기록을 지울까요?", text: "점수 추이에서도 빠져요. 문제 풀이 기록과 오답노트는 그대로 남아요.",
@@ -3066,6 +3070,7 @@
               <button class="btn-ghost" data-xt-again><i data-lucide="refresh-cw"></i>처음부터 다시</button>
               ${saved ? `<a class="btn-ghost" href="#/project/${p.id}?tab=exams"><i data-lucide="trending-up"></i>점수 추이</a>` : ""}
               ${p.id && !EMBED ? `<a class="btn-ghost" href="#/project/${p.id}"><i data-lucide="folder"></i>프로젝트로</a>` : ""}
+              ${NOTION_BTN}
             </div>
           </div>
           ${anaHTML}
@@ -3083,6 +3088,9 @@
           </div>
         </div>`;
       icons();
+      notionDoc = () => ({ title: `${subject || p.name}${scopeName ? ` · ${scopeName}` : ""} 시험 결과`,
+        md: mdExam({ title: `${subject || p.name} 시험 결과`, when: Date.now(), score, totalPts, used: usedMs / 1000, limit: limit / 1000,
+          items: rows.map((r) => ({ stem: r.q.stem, choices: r.q.choices, my: r.my, answer: r.answer, correct: r.correct, sec: r.sec })) }) });
       view.onclick = (e) => {
         if (e.target.closest("[data-xt-retry]")) {
           const q = new URLSearchParams(params);
@@ -3919,11 +3927,13 @@
         <div class="page-actions iv-end">
           <a class="btn-primary" href="#/interview/new/${k.key}"><i data-lucide="rotate-ccw"></i>다시 연습하기</a>
           <a class="btn-ghost" href="#/interview"><i data-lucide="layout-grid"></i>다른 면접 보기</a>
+          ${NOTION_BTN}
           <button class="btn-ghost" data-iv-del><i data-lucide="trash-2"></i>기록 지우기</button>
         </div>
       </div>`;
     icons();
     countUp(view);
+    notionDoc = () => ({ title: `${k.name} 리포트 ${new Date(d.created_at).toLocaleDateString("ko-KR")}`, md: mdInterview(d) });
     view.onclick = (e) => {
       const pol = e.target.closest("[data-iv-polish]");
       if (pol) {
@@ -4340,6 +4350,98 @@
     if (akAsk.materialId === ctx.materialId && akAsk.problemId === ctx.problemId) renderAsk();
   }
 
+  // ================= Notion 으로 내보내기 =================
+  // 화면마다 notionDoc = () => ({ title, md }) 를 정해 두면 [data-notion-export] 버튼이 메뉴를 연다:
+  // 복사해서 Notion 에 붙여넣기 (제목·표·목록이 블록으로 바뀜) · Markdown 파일 받기 (Notion '가져오기')
+  let notionDoc = null;
+  const mdCell = (v) => String(v ?? "–").replace(/\|/g, "\\|").replace(/\s+/g, " ").trim() || "–";
+  const mdTable = (head, rows) => [`| ${head.join(" | ")} |`, `|${head.map(() => " --- ").join("|")}|`,
+    ...rows.map((r) => `| ${r.map(mdCell).join(" | ")} |`)].join("\n");
+  const mdWhen = (t) => new Date(t).toLocaleString("ko-KR", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const mdClock = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
+  // 시험 결과 (화면에서 본 시험 · 시험 기록)
+  function mdExam({ title, when, score, totalPts, items, used, limit }) {
+    const ans = (it, a) => (a ? (it.choices ? CIRC[Number(a) - 1] ?? a : a) : "–");
+    const st = (it) => (it.correct ? "✅ 맞음" : !it.my ? "⬜ 안 풂" : it.correct === false ? "❌ 틀림" : "❔ 채점 못 함");
+    const right = items.filter((i) => i.correct).length, skipped = items.filter((i) => !i.my).length;
+    const wrong = items.map((it, k) => ({ ...it, k })).filter((it) => it.correct === false);
+    return [
+      `# ${title}`, "", `> Eureka 시험 기록 · ${mdWhen(when)}`, "",
+      mdTable(["점수", "맞힌 문항", "걸린 시간", "안 푼 문항"], [[`${score} / ${totalPts}점`, `${right} / ${items.length}`,
+        `${mdClock(used)}${limit ? ` / ${Math.round(limit / 60)}분` : ""}`, skipped]]), "",
+      "## 문항별 결과", "",
+      mdTable(["번호", "결과", "문제", "내 답", "정답", "걸린 시간"], items.map((it, k) => [k + 1, st(it), it.stem, ans(it, it.my), ans(it, it.answer), mdClock(it.sec || 0)])),
+      ...(wrong.length ? ["", "## 다시 볼 문항", "", ...wrong.map((it) => `- [ ] **${it.k + 1}번** ${mdCell(it.stem)} — 내 답 ${ans(it, it.my)} · 정답 ${ans(it, it.answer)}`)] : []),
+      "",
+    ].join("\n");
+  }
+  // AI 면접 리포트
+  function mdInterview(d) {
+    const k = d.kind_info, r = d.report, mt = r.metrics;
+    const turns = d.turns.filter((t) => t.ans !== null && t.ans !== undefined);
+    const head = r.level ? `${r.level}${k.level_bands?.[r.level] ? ` (${k.level_bands[r.level]})` : ""}` : `${r.score ?? "–"} / 100점`;
+    return [
+      `# ${k.name} 리포트`, "", `> Eureka AI 면접 · ${mdWhen(d.created_at)} · ${r.by_ai ? "AI 채점" : "말한 양과 속도로 추정"}`, "",
+      mdTable([r.level ? "예상 등급" : "점수", "답한 질문", "평균 답변", "말 속도", "머뭇거림"],
+        [[head, `${mt.answered} / ${mt.total}`, mdClock(mt.avg_sec), mt.rate ? `${mt.rate} ${mt.rate_unit}` : "–", `${mt.fillers}번`]]), "",
+      r.summary, "",
+      ...(r.strengths?.length ? ["## 잘한 점", "", ...r.strengths.map((x) => `- ${x}`), ""] : []),
+      ...(r.improve?.length ? ["## 먼저 고칠 점", "", ...r.improve.map((x) => `- [ ] ${x}`), ""] : []),
+      "## 질문별 피드백", "",
+      ...turns.flatMap((t, i) => {
+        const f = r.items?.[i] ?? {};
+        return [`### ${i + 1}. ${t.part || (t.follow ? "꼬리질문" : "질문")}${f.score != null ? ` · ${f.score}점` : ""}`, "",
+          `> ${t.q}`, "", `**내 답** (${mdClock(t.sec || 0)})`, "", t.ans || "_답하지 않았어요_", "",
+          ...(f.feedback ? ["**피드백**", "", f.feedback, ""] : []),
+          ...(f.better ? ["**이렇게 말해 보세요**", "", f.better, ""] : [])];
+      }),
+    ].join("\n");
+  }
+  // 오답노트 (지금 화면에 보이는 목록)
+  function mdNotes(list) {
+    return [
+      "# 오답노트", "", `> Eureka · ${mdWhen(Date.now())} · ${list.length}문제`, "",
+      ...list.flatMap((w, i) => {
+        const p = Store.problem(w.problemId);
+        if (!p) return [];
+        const c = concept(p.conceptIds?.[0]);
+        const why = ERROR_TYPES[w.errorType] && w.errorType !== "unknown" ? ERROR_TYPES[w.errorType] : "";
+        return [`## ${i + 1}. ${c?.name ?? DOMAIN_NAME[p.domain] ?? "문제"}${w.resolvedAt ? " · 극복 ✅" : ""}`, "",
+          p.stem, "",
+          ...(p.choices ? [...p.choices.map((ch, n) => `${n + 1}. ${ch}${String(n + 1) === w.answer ? " ← 내 답" : ""}`), ""] : [`내 답: **${w.answer || "–"}**`, ""]),
+          ...(why ? [`틀린 이유: ${why}`, ""] : []),
+          `- [${w.resolvedAt ? "x" : " "}] 다시 풀어서 맞히기`, ""];
+      }),
+    ].join("\n");
+  }
+  function notionHelp() {
+    formModal({ title: "Notion 에서 보는 방법", submit: "알겠어요", onSubmit: () => {},
+      body: `<ol class="nt-help">
+        <li><b>복사해서 붙여넣기</b> — Notion 페이지를 열고 붙여 넣으면(Ctrl+V) 제목·표·목록·체크박스가 그대로 바뀌어요.</li>
+        <li><b>Markdown 파일</b> — Notion 왼쪽 메뉴의 <b>설정 → 가져오기 → 텍스트 및 Markdown</b> 에서 받은 .md 파일을 올려요.</li>
+        <li>수식은 <code>$...$</code> 그대로 들어가요. Notion 에서 수식을 선택하고 <b>수식으로 바꾸기</b>를 누르면 예쁘게 보여요.</li></ol>` });
+  }
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-notion-export]");
+    if (!b || !notionDoc) return;
+    e.preventDefault();
+    const doc = notionDoc();
+    const file = `${doc.title.replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 80) || "Eureka"}.md`;
+    openMenu(b, [
+      { label: "Notion 으로 내보내기", header: true },
+      { icon: "clipboard-copy", label: "복사해서 Notion 에 붙여넣기", run: async () => {
+        try { await navigator.clipboard.writeText(doc.md); toast("복사했어요. Notion 페이지에 붙여 넣어 주세요"); }
+        catch { toast("복사하지 못했어요. Markdown 파일 받기를 써 주세요"); } } },
+      { icon: "file-down", label: "Markdown 파일 받기 (.md)", run: () => {
+        const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([doc.md], { type: "text/markdown;charset=utf-8" })), download: file });
+        document.body.append(a); a.click(); a.remove();
+        toast(`${file} 을 받았어요. Notion 의 가져오기에서 올려 주세요`); } },
+      "-",
+      { icon: "circle-help", label: "Notion 에서 보는 방법", run: notionHelp },
+    ]);
+  });
+  const NOTION_BTN = '<button type="button" class="btn-ghost" data-notion-export><i data-lucide="notebook-pen"></i>Notion 으로 내보내기</button>';
+
   // ================= 인쇄 · PDF 저장 (따로) =================
   // [data-print] 는 브라우저 인쇄 창, [data-pdf="파일 이름"] 은 인쇄 창 없이 바로 PDF 파일을 내려받는다.
   // PDF 는 화면(기본 #view, data-pdf-target 으로 바꿈)을 그대로 A4 로 옮기고, 인쇄에서 빼는 버튼·도구 줄은 뺀다
@@ -4446,7 +4548,8 @@
         </div>
         <div class="page-actions print-hide">
           <button class="btn-ghost" data-pdf="${esc(proj ? `${proj.name} 오답노트` : "오답노트")}" title="지금 보이는 오답을 PDF 파일로 저장"><i data-lucide="file-down"></i>PDF 저장</button>
-          <button class="btn-ghost" data-print title="지금 보이는 오답을 인쇄"><i data-lucide="printer"></i>인쇄</button></div>
+          <button class="btn-ghost" data-print title="지금 보이는 오답을 인쇄"><i data-lucide="printer"></i>인쇄</button>
+          <button type="button" class="btn-ghost" data-notion-export title="지금 보이는 오답을 Notion 으로"><i data-lucide="notebook-pen"></i>Notion</button></div>
       </div>
       <div class="note-stats" id="note-stats"></div>
       <div class="toolbar glass-bar">
@@ -4512,6 +4615,7 @@
       .filter((w) => !noteFilter.project || w.projectId === noteFilter.project)
       .sort((a, b) => (!!a.resolvedAt - !!b.resolvedAt) || b.createdAt - a.createdAt);
     $("#note-count").textContent = `${list.length}문제`;
+    notionDoc = () => ({ title: `오답노트 ${new Date().toLocaleDateString("ko-KR")}`, md: mdNotes(list) });
     $("#note-list").innerHTML = list.length ? list.map((w) => {
       const p = Store.problem(w.problemId);
       if (!p) return "";
