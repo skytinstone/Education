@@ -2522,7 +2522,7 @@
         <div class="page-actions">
           <button class="btn-ghost" data-exam-shuffle><i data-lucide="shuffle"></i>다시 섞기</button>
           ${list.length ? '<button class="btn-ghost" data-exam-take><i data-lucide="timer"></i>화면에서 시험 보기</button>' : ""}
-          ${list.length ? `<button class="btn-ghost" data-pdf="${esc(`${p.name} 시험지`)}" data-pdf-target=".exam-paper"><i data-lucide="file-down"></i>PDF 저장</button>` : ""}
+          ${list.length ? `<button class="btn-ghost" data-pdf="${esc(`${p.name} 시험지`)}"><i data-lucide="file-down"></i>PDF 저장</button>` : ""}
           <button class="btn-primary" data-print><i data-lucide="printer"></i>인쇄</button>
         </div>
       </div>
@@ -2934,7 +2934,12 @@
       icons();
       // 한 줄 번호판은 지금 문항이 가운데 오게
       const strip = $(".xt-omr"), cur = $(".xt-omr .cur");
-      if (strip && cur && !s.omrAll) strip.scrollLeft = cur.offsetLeft - strip.clientWidth / 2 + cur.offsetWidth / 2;
+      if (strip && cur && !s.omrAll) { // 화면 좌표로 재서 지금 문항을 번호판 가운데로 (offsetLeft 는 번호판 기준이 아님)
+        const sr = strip.getBoundingClientRect(), cr = cur.getBoundingClientRect();
+        strip.style.scrollBehavior = "auto";
+        strip.scrollLeft += cr.left - sr.left - sr.width / 2 + cr.width / 2;
+        strip.style.scrollBehavior = "";
+      }
     }
     const refreshProgress = () => {
       const n = answered();
@@ -3531,6 +3536,7 @@
     "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"];
   const PDF_SKIP = ".print-hide, .toolbar, .glass-bar, .note-actions, .exam-toolbar, .ak-actions, .ak-back, .ak-ask, .ask-pop, .ask-panel, [data-pdf], [data-print], .toast";
   const PDF_KEEP = ".note-item, .ak-item, .ak-cell, .exam-q, .exam-cover, .exam-key, .problem"; // 페이지 사이에서 자르지 않을 덩어리
+  const PDF_BREAK = ".exam-key"; // 새 쪽에서 시작 (시험지 뒤 정답표)
   let pdfLib = null;
   const loadPdfScript = (src) => new Promise((ok, fail) => {
     const sc = document.createElement("script");
@@ -3548,26 +3554,36 @@
     btn.disabled = true;
     btn.innerHTML = '<i data-lucide="loader" class="spin"></i>PDF 만드는 중…';
     icons();
+    // 만드는 동안 화면을 '종이 모드'(glass.css body.pdf-capture: 버튼 숨김 · 시험지 한 단)로 바꿔 두고 잰다 —
+    // 잰 위치와 그린 그림이 같은 배치여야 문항을 쪽 사이에서 자르지 않는다. 그동안은 가림막을 띄운다
+    const veil = document.createElement("div");
+    veil.className = "pdf-veil";
+    veil.innerHTML = '<span><i data-lucide="loader" class="spin"></i>PDF 만드는 중…</span>';
     try {
       await loadPdfLib();
+      document.body.append(veil);
+      icons();
+      document.body.classList.add("pdf-capture");
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       const SCALE = 2, box = target.getBoundingClientRect();
-      // 자르면 안 되는 덩어리의 위·아래 (캔버스 픽셀)
-      const keep = $$(PDF_KEEP, target).filter((el) => !el.closest(PDF_SKIP)).map((el) => {
-        const r = el.getBoundingClientRect();
-        return [(r.top - box.top) * SCALE, (r.bottom - box.top) * SCALE];
-      });
+      const pos = (el) => { const r = el.getBoundingClientRect(); return [(r.top - box.top) * SCALE, (r.bottom - box.top) * SCALE]; };
+      // 자르면 안 되는 덩어리의 위·아래, 새 쪽에서 시작할 곳 (캔버스 픽셀)
+      const keep = $$(PDF_KEEP, target).filter((el) => el.offsetParent).map(pos);
+      const breaks = $$(PDF_BREAK, target).filter((el) => el.offsetParent).map((el) => pos(el)[0] - 4 * SCALE).filter((t) => t > 0);
       const canvas = await window.html2canvas(target, {
         scale: SCALE, useCORS: true, backgroundColor: "#ffffff",
-        ignoreElements: (el) => el.matches?.(PDF_SKIP),
-        onclone: (doc) => doc.body.classList.add("pdf-capture"),
+        ignoreElements: (el) => el.classList?.contains("pdf-veil"),
       });
+      document.body.classList.remove("pdf-capture");
       const pdf = new window.jspdf.jsPDF({ unit: "mm", format: "a4", orientation: "portrait" });
       const M = 10, W = 210 - M * 2, H = 297 - M * 2;
       const pageH = Math.floor((canvas.width * H) / W); // 한 쪽에 들어가는 캔버스 높이
       let y = 0, first = true;
       while (y < canvas.height - 2) {
         let end = Math.min(canvas.height, y + pageH);
-        if (end < canvas.height) {
+        const forced = breaks.filter((t) => t > y + 40 && t < end);
+        if (forced.length) end = Math.min(...forced);
+        else if (end < canvas.height) {
           // 덩어리를 가로지르면 그 덩어리 위에서 자른다 (한 쪽보다 큰 덩어리는 어쩔 수 없이 자름)
           const cut = keep.filter(([t, b]) => t > y + 40 && t < end && b > end).map(([t]) => t);
           if (cut.length) end = Math.min(...cut) - 8 * SCALE;
@@ -3589,6 +3605,8 @@
     } catch (err) {
       toast(err.message || "PDF 를 만들지 못했어요");
     } finally {
+      document.body.classList.remove("pdf-capture");
+      veil.remove();
       btn.disabled = false;
       btn.innerHTML = label;
       icons();
