@@ -3215,6 +3215,7 @@
   let iv = null; // 진행 중인 면접 화면 상태 { id, d, phase, timer, rec, ... }
   const IV_ICON = { opic: "languages", toeic: "headphones", job: "briefcase-business", aicomp: "bot", admission: "graduation-cap" };
   const ivVoiceOn = () => { try { return localStorage.getItem("eureka.ivVoice") !== "0"; } catch { return true; } };
+  const RESUME_ACCEPT = ".pdf,.docx,.hwpx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain";
   const ivLastSetup = (key) => { try { return JSON.parse(localStorage.getItem(`eureka.ivSetup.${key}`) || "null"); } catch { return null; } };
   const ivCountLabel = (k) => (k.survey_min ? "자기 평가에 따라 12·15문항" : `${k.mains}문항`);
   const ivKindsLoad = async () => (ivKinds ??= await Store.interviewKinds());
@@ -3397,7 +3398,12 @@
         : `<input class="ivx-in" id="ivx-f-${f.key}" name="${f.key}" maxlength="${f.max_len}" placeholder="${esc(f.placeholder)}" autocomplete="off" />`;
       return `<section class="ivx-q"><div class="ivx-row"><label class="ivx-h" for="ivx-f-${f.key}">${esc(f.label)}</label>
           ${f.kind === "textarea" ? `<span class="ivx-cnt" data-count-for="${f.key}">0 / ${f.max_len.toLocaleString()}자</span>` : ""}</div>${box}
-          ${f.key === "resume" ? `<button type="button" class="btn-ghost drive-pick" data-drive-resume hidden><i data-lucide="hard-drive"></i>Google Drive 에서 불러오기 (Google 문서·텍스트 파일)</button>
+          ${f.key === "resume" ? `<div class="ivx-src">
+            <button type="button" class="ivx-btn" data-local-resume><i data-lucide="upload"></i>내 컴퓨터에서 불러오기</button>
+            <button type="button" class="ivx-btn" data-drive-resume hidden><i data-lucide="hard-drive"></i>Google Drive 에서 불러오기</button>
+            <input type="file" data-local-resume-file accept="${RESUME_ACCEPT}" hidden />
+          </div>
+          <small class="ivx-sub"><i data-lucide="file-text"></i>PDF · Word(.docx) · 한글(.hwpx) · 텍스트 파일(5MB까지)의 글만 가져와요. 칸에 끌어다 놓아도 돼요.</small>
           <small class="ivx-sub"><i data-lucide="sparkles"></i>자기소개서의 경험·성과 문장을 읽고, 그 문장을 파고드는 질문을 만들어요. 질문마다 어느 문장에서 나왔는지 보여 드려요.</small>` : ""}</section>`;
     };
     const screenOpts = `<section class="ivx-q"><h3>면접 화면</h3>
@@ -3585,20 +3591,45 @@
       } catch (err) { toast(err.message); delete btn.dataset.busy; btn.disabled = false; btn.innerHTML = label; icons(); refresh(); }
     };
     $("[data-iv-again]")?.addEventListener("click", (e) => startWith(ivLastSetup(k.key), e.currentTarget));
-    // 자기소개서를 Google Drive 에서 (Google 문서는 글로 바꿔 넣는다)
+    // 자기소개서 불러오기 — 내 컴퓨터(서버가 글만 뽑아 준다) · Google Drive(Google 문서는 글로 바꿔 넣는다)
+    const resumeTa = $("textarea[name=resume]", form);
+    const fillResume = (name, text) => {
+      resumeTa.value = text.slice(0, Number(resumeTa.maxLength) || 6000);
+      resumeTa.dispatchEvent(new Event("input", { bubbles: true }));
+      toast(`${name} 을 불러왔어요${text.length > resumeTa.value.length ? ` (앞 ${resumeTa.value.length.toLocaleString()}자까지)` : ""}`);
+    };
+    const localBtn = $("[data-local-resume]", form);
+    const localFile = $("[data-local-resume-file]", form);
+    const readLocal = async (file) => {
+      if (!file || localBtn.disabled) return;
+      const label = localBtn.innerHTML;
+      localBtn.disabled = true;
+      localBtn.innerHTML = '<i data-lucide="loader" class="spin"></i>읽는 중…';
+      icons();
+      try { const r = await Store.resumeText(file); fillResume(file.name, r.text); } catch (err) { toast(err.message); }
+      localBtn.disabled = false;
+      localBtn.innerHTML = label;
+      icons();
+    };
+    if (localBtn) {
+      localBtn.onclick = () => localFile.click();
+      localFile.onchange = () => { readLocal(localFile.files[0]); localFile.value = ""; };
+      resumeTa.addEventListener("dragover", (e) => { if (e.dataTransfer?.types.includes("Files")) { e.preventDefault(); resumeTa.classList.add("drop"); } });
+      resumeTa.addEventListener("dragleave", () => resumeTa.classList.remove("drop"));
+      resumeTa.addEventListener("drop", (e) => {
+        if (!e.dataTransfer?.files.length) return;
+        e.preventDefault();
+        resumeTa.classList.remove("drop");
+        readLocal(e.dataTransfer.files[0]);
+      });
+    }
     const resumeBtn = $("[data-drive-resume]", form);
     if (resumeBtn) Store.driveConfig().then((cfg) => {
       if (!cfg) return;
       prepareDrive().catch(() => {});
       resumeBtn.hidden = false;
       resumeBtn.onclick = () => openDrivePicker(cfg, 1, async ([s]) => {
-        try {
-          const text = await s.file;
-          const ta = $("textarea[name=resume]", form);
-          ta.value = text.slice(0, Number(ta.maxLength) || 6000);
-          ta.dispatchEvent(new Event("input", { bubbles: true }));
-          toast(`${s.name} 을 불러왔어요${text.length > ta.value.length ? ` (앞 ${ta.value.length.toLocaleString()}자까지)` : ""}`);
-        } catch (err) { toast(err.message); }
+        try { fillResume(s.name, await s.file); } catch (err) { toast(err.message); }
       }, { title: "자기소개서 고르기 (Google 문서·텍스트 파일)", mimes: "application/vnd.google-apps.document,text/plain", fetch: driveText });
     });
     form.addEventListener("submit", async (e) => {

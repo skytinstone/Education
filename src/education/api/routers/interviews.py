@@ -3,14 +3,16 @@
 녹음 파일은 받지 않는다. 브라우저가 받아쓴 글과 걸린 시간만 온다.
 """
 
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from education.api.deps import DB, CurrentUser, owned
 from education.db import models as m
+from education.services import doc_text
 from education.services import interview as iv_svc
 
 router = APIRouter(prefix="/interviews", tags=["AI 면접"])
@@ -55,6 +57,17 @@ def _detail(iv: m.Interview) -> dict:
     mains_done = sum(1 for t in iv.turns if not t.get("follow") and t.get("ans") is not None)
     return {**_summary(iv), "kind_info": _kind_out(k), "lang": iv.lang, "setup": iv.setup, "by_ai": iv.by_ai,
             "turns": iv.turns, "current": i, "mains": len(iv.plan), "mains_done": mains_done, "report": iv.report}
+
+
+@router.post("/resume-text")
+def resume_text(user: CurrentUser, file: Annotated[UploadFile, File()]) -> dict:
+    """자기소개서 파일(PDF · .docx · .hwpx · .txt)에서 글만 뽑아 돌려준다. 파일은 저장하지 않는다"""
+    data = file.file.read(doc_text.MAX_BYTES + 1)
+    try:
+        text = doc_text.extract(file.filename or "", data)
+    except doc_text.DocTextError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from e
+    return {"name": file.filename, "text": text}
 
 
 @router.get("/kinds")
