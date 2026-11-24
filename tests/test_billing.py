@@ -16,7 +16,7 @@ from education.db import models as m
 from education.services import billing, quota
 
 T = "2026-11-24T00:00:00Z"
-CH = {"type": "TEST", "id": "ch", "key": "ck", "name": "토스페이먼츠", "pgProvider": "TOSSPAYMENTS", "pgMerchantId": "m"}
+CH = {"type": "LIVE", "id": "ch", "key": "ck", "name": "토스페이먼츠", "pgProvider": "TOSSPAYMENTS", "pgMerchantId": "m"}
 WHSEC = "whsec_" + base64.b64encode(b"0123456789abcdef0123456789abcdef").decode()
 
 
@@ -222,3 +222,30 @@ def test_beta_shows_billing_to_admins_only(client, auth, portone, monkeypatch):
     email = client.get("/api/me", headers=auth).json()["email"]
     monkeypatch.setattr(s, "admin_emails", email)
     assert me(client, auth)["available"] is True and subscribe(client, auth).status_code == 200
+
+
+def test_admin_revenue_counts_live_and_hides_test(client, auth, portone, db, monkeypatch):
+    from conftest import signup
+    subscribe(client, auth)  # 실연동 채널(LIVE) 결제 9,900원
+    sub = db.query(m.Subscription).one()
+    assert sub.is_test is False and db.query(m.BillingPayment).filter_by(status="paid").one().is_test is False
+    # 테스트 결제 한 건은 기본 집계에서 빠진다
+    db.add(m.BillingPayment(id="eu-test-1", user_id=sub.user_id, plan="pro", amount=19900, kind="first", status="paid",
+                            paid_at=billing.now(), is_test=True))
+    db.commit()
+    monkeypatch.setattr(get_settings(), "admin_emails", "boss@example.com")
+    admin = signup(client, name="운영자", email="boss@example.com")
+    assert client.get("/api/admin/revenue", headers=auth).status_code == 404  # 운영자가 아니면 있는지도 모르게
+    r = client.get("/api/admin/revenue", headers=admin).json()
+    t, subs = r["totals"], r["subscriptions"]
+    assert t["gross"] == 9900 and t["payments"] == 1 and t["new_subscriptions"] == 1
+    assert t["net_estimate"] == round(9900 / 1.1 * (1 - get_settings().pg_fee_rate))
+    assert subs["mrr"] == 9900 and subs["active"] == 1 and r["months"]["this"] == 9900
+    assert next(p for p in subs["by_plan"] if p["key"] == "plus")["active"] == 1
+    assert r["by_day"][-1]["amount"] == 9900 and [x["is_test"] for x in r["recent"]] == [False]
+    both = client.get("/api/admin/revenue", params={"include_test": True}, headers=admin).json()
+    assert both["totals"]["gross"] == 9900 + 19900
+    # 해지 예약은 MRR 에서 빠지고 따로 센다
+    client.post("/api/billing/cancel", headers=auth)
+    r = client.get("/api/admin/revenue", headers=admin).json()["subscriptions"]
+    assert r["mrr"] == 0 and r["canceling"] == 1

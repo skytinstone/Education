@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from education.api.deps import DB, FORCED_PREFIX, AdminUser, admin_user, is_admin
 from education.config import get_settings
 from education.db import models as m
-from education.services import accounts, audit, learning
+from education.services import accounts, audit, billing, learning
 
 router = APIRouter(prefix="/admin", tags=["운영"], dependencies=[Depends(admin_user)])
 
@@ -506,4 +506,74 @@ def funnel(db: DB, days: int = Query(30, ge=7, le=180)) -> dict:
                   {"key": "activated", "label": "첫 문제 풀이", "count": v.activated},
                   {"key": "returned", "label": "다른 날 다시 옴", "count": v.returned}],
         "cohorts": [{"week": w.isoformat(), "size": n, "week1": k, "rate": (k / n) if n else None} for w, n, k in cohorts],
+    }
+
+
+# ---------- 매출 (월 구독 결제) ----------
+def _month_start(d: date) -> date:
+    return d.replace(day=1)
+
+
+@router.get("/revenue")
+def revenue(db: DB, days: int = Query(30, ge=1, le=365), include_test: bool = False) -> dict:
+    """결제 · 구독 · AI 원가 · 마진. 금액은 원(부가세 포함), AI 비용은 USD 를 usd_krw 로 환산한 추정치."""
+    s = get_settings()
+    P, S, L = m.BillingPayment, m.Subscription, m.LLMCall
+    live = (lambda col: col.is_(False)) if not include_test else (lambda col: literal(True))
+    since = _since_local(db, days)
+    paid_in = (P.status == "paid") & (P.paid_at >= since) & live(P.is_test)
+
+    gross, n_paid = db.execute(select(func.coalesce(func.sum(P.amount), 0), func.count()).where(paid_in)).one()
+    n_failed = db.scalar(select(func.count()).where(P.status == "failed", P.created_at >= since, live(P.is_test))) or 0
+    first = db.scalar(select(func.count()).where(paid_in, P.kind == "first")) or 0
+
+    # 이번 달 · 지난달 (서비스 시간대 달력)
+    today = learning.local_today(db)
+    this_m = _month_start(today)
+    last_m = _month_start(this_m - timedelta(days=1))
+    pday = _local_date(P.paid_at)
+    def month_sum(a: date, b: date) -> int:
+        return int(db.scalar(select(func.coalesce(func.sum(P.amount), 0)).where(
+            P.status == "paid", live(P.is_test), pday >= a, pday < b)) or 0)
+    this_month, last_month = month_sum(this_m, today + timedelta(days=1)), month_sum(last_m, this_m)
+
+    # 지금 구독 중 (해지 예약 포함) · MRR (해지 예약은 빼고)
+    now = billing.now()
+    subs = db.scalars(select(S).where(S.status != "ended", live(S.is_test))).all()
+    active = [x for x in subs if now < (x.period_end if x.cancel_at_period_end else x.period_end + billing.GRACE)]
+    plans = {k: {"name": p.name, "price": p.price, "active": 0, "canceling": 0} for k, p in billing.PLANS.items() if p.price}
+    for x in active:
+        if x.plan in plans:
+            plans[x.plan]["canceling" if x.cancel_at_period_end else "active"] += 1
+    mrr = sum(v["price"] * v["active"] for v in plans.values())
+    past_due = sum(1 for x in active if x.status == "past_due")
+    canceling = sum(v["canceling"] for v in plans.values())
+
+    # 원가: 같은 기간 AI 비용 전체 · 구독자 몫
+    ai_usd = float(db.scalar(select(func.coalesce(func.sum(L.cost_usd), 0)).where(L.created_at >= since)) or 0)
+    sub_users = [x.user_id for x in active]
+    ai_sub_usd = float(db.scalar(select(func.coalesce(func.sum(L.cost_usd), 0)).where(
+        L.created_at >= since, L.user_id.in_(sub_users))) or 0) if sub_users else 0.0
+    gross = int(gross)
+    net = round(gross / 1.1 * (1 - s.pg_fee_rate))  # 부가세 · 결제 수수료를 뺀 추정
+    ai_krw = round(ai_usd * s.usd_krw)
+
+    by_day = {d: {"amount": int(a or 0), "count": c} for d, a, c in db.execute(
+        select(pday, func.sum(P.amount), func.count()).where(paid_in).group_by(pday)).all()}
+    recent = db.execute(select(P, m.User.email).outerjoin(m.User, m.User.id == P.user_id)
+                        .where(P.status.in_(("paid", "failed")), live(P.is_test))
+                        .order_by(P.created_at.desc()).limit(20)).all()
+    return {
+        "days": days, "include_test": include_test, "usd_krw": s.usd_krw, "pg_fee_rate": s.pg_fee_rate,
+        "totals": {"gross": gross, "net_estimate": net, "payments": n_paid, "failed": n_failed, "new_subscriptions": first,
+                   "ai_cost_usd": round(ai_usd, 4), "ai_cost_krw": ai_krw, "margin_krw": net - ai_krw,
+                   "margin_rate": round((net - ai_krw) / net, 4) if net else None},
+        "months": {"this": this_month, "last": last_month},
+        "subscriptions": {"mrr": mrr, "active": sum(v["active"] for v in plans.values()), "canceling": canceling,
+                          "past_due": past_due, "by_plan": [{"key": k, **v} for k, v in plans.items()],
+                          "ai_cost_per_subscriber_krw": round(ai_sub_usd * s.usd_krw / len(active)) if active else None},
+        "by_day": _fill_days(db, by_day, days, {"amount": 0, "count": 0}),
+        "recent": [{"id": p.id, "email": e, "plan": p.plan, "amount": p.amount, "kind": p.kind, "status": p.status,
+                    "failure": p.failure, "receipt_url": p.receipt_url, "is_test": p.is_test,
+                    "at": (p.paid_at or p.created_at).isoformat()} for p, e in recent],
     }

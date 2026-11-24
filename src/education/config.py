@@ -65,6 +65,8 @@ class Settings(BaseSettings):
     portone_api_secret: str | None = None
     portone_webhook_secret: str | None = None
     billing_public: bool = False  # false(베타): 요금제 화면은 운영자(ADMIN_EMAILS)에게만 보인다
+    usd_krw: float = 1400.0      # 운영 콘솔 매출 탭에서 AI 비용(USD)을 원화로 볼 때의 환율 (대략)
+    pg_fee_rate: float = 0.033   # 결제 수수료율 추정 (실제 계약 값으로 바꾼다)
 
     # 운영자 — 이 이메일로 로그인한 계정만 피드백 관리·문제 복구를 할 수 있다 (쉼표로 여러 개)
     admin_emails: str = ""

@@ -115,7 +115,7 @@
   // ================= 운영 콘솔 (운영자 계정만) =================
   // #/(개요) · #/users[/id] · #/ai · #/logins · #/voc
   const FB_STATUS = { open: "접수", reviewing: "확인 중", resolved: "해결" };
-  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["ai", "AI 사용량", "cpu"], ["quality", "문제 품질", "gauge"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"], ["actions", "관리 기록", "scroll-text"]];
+  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["revenue", "매출", "wallet"], ["ai", "AI 사용량", "cpu"], ["quality", "문제 품질", "gauge"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"], ["actions", "관리 기록", "scroll-text"]];
   const METHOD_NAME = { password: "이메일", google: "Google", kakao: "카카오" };
   const PURPOSE_NAME = { generate: "문제 생성", verify: "문제 검증", note_generate: "개념 정리 생성", note_verify: "개념 정리 검증",
     course: "코스 만들기", extract: "기출·교재 분석", essay_grade: "서술형 채점", review: "풀이 확인", explain: "계산·설명 풀이", answer_key: "정답지 풀이", answer_verify: "정답지 검산" };
@@ -130,7 +130,7 @@
   }
   const FAIL_REASON = { bad_credentials: "비밀번호 틀림", suspended: "정지된 계정", throttled: "여러 번 실패해 잠시 막음" };
   const adminState = {
-    days: 30, aiDays: 30,
+    days: 30, aiDays: 30, revDays: 30, revTest: false,
     users: { q: "", state: "all", sort: "recent", offset: 0 },
     actions: { q: "", action: "" },
     logins: { q: "", result: "all", method: "" },
@@ -165,7 +165,7 @@
     ? `<div class="tbl-wrap"><table class="tbl"><thead><tr>${head.map((h) => (h.startsWith("#") ? `<th class="n">${h.slice(1)}</th>` : `<th>${h}</th>`)).join("")}</tr></thead><tbody>${rows.join("")}</tbody></table></div>`
     : `<p class="mini">${empty}</p>`;
 
-  const TAB_DESC = { overview: "가입·이용 현황과 오늘 챙길 것", users: "회원 검색, 상세, 이용 정지·삭제", ai: "AI 호출 비용·토큰·실패",
+  const TAB_DESC = { overview: "가입·이용 현황과 오늘 챙길 것", users: "회원 검색, 상세, 이용 정지·삭제", revenue: "월 구독 결제 매출 · 구독자 · AI 원가와 마진 (부가세·수수료·환율은 추정)", ai: "AI 호출 비용·토큰·실패",
     quality: "AI 가 만든 문제의 검산 통과율과 탈락 이유, 정답지 상태",
     logins: "로그인·가입 기록 (90일 보관)", voc: "의견·문제 신고 확인과 답변, 전체 공지",
     actions: "운영자가 한 조치 — 정지·해제·삭제·강제 로그아웃·VOC·공지 (누가 · 언제 · 누구에게)" };
@@ -187,6 +187,7 @@
     try {
       if (tab === "overview") await adminOverview(body);
       else if (tab === "users") await (id ? adminUser(body, id) : adminUsers(body));
+      else if (tab === "revenue") await adminRevenue(body);
       else if (tab === "ai") await adminAI(body);
       else if (tab === "quality") await adminQuality(body);
       else if (tab === "logins") await adminLogins(body);
@@ -196,6 +197,43 @@
       if (body.isConnected) body.innerHTML = `<p class="mini">${esc(err.message)}</p>`;
     }
     icons();
+  }
+
+  // ---------- 매출 ----------
+  const won = (n) => `${Number(n ?? 0).toLocaleString("ko-KR")}원`;
+  const PAY_STATUS = { paid: ["결제됨", "ok"], failed: ["실패", "bad"] };
+  async function adminRevenue(body) {
+    const r = await Store.adminGet("/revenue", { days: adminState.revDays, include_test: adminState.revTest });
+    if (!body.isConnected) return;
+    const t = r.totals, sb = r.subscriptions;
+    const diff = r.months.last ? Math.round(((r.months.this - r.months.last) / r.months.last) * 100) : null;
+    body.innerHTML = `
+      <div class="panel-row" style="margin-bottom:12px">
+        <div class="seg small">${[7, 30, 90, 365].map((d) => `<button data-revdays="${d}" class="${adminState.revDays === d ? "on" : ""}">${d === 365 ? "1년" : `${d}일`}</button>`).join("")}</div>
+        <label class="mini" style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" data-revtest ${adminState.revTest ? "checked" : ""}/> 테스트 결제 포함</label>
+      </div>
+      <div class="kpis">
+        ${kpi("이번 달 매출", won(r.months.this), `지난달 ${won(r.months.last)}${diff != null ? ` · ${diff >= 0 ? "+" : ""}${diff}%` : ""}`)}
+        ${kpi("MRR (월 반복 매출)", won(sb.mrr), `구독 중 ${num(sb.active)}명 · 해지 예약 ${num(sb.canceling)}명${sb.past_due ? ` · 결제 실패 ${num(sb.past_due)}명` : ""}`, sb.past_due ? "warn" : "")}
+        ${kpi(`${r.days}일 매출`, won(t.gross), `결제 ${num(t.payments)}건 · 신규 구독 ${num(t.new_subscriptions)} · 실패 ${num(t.failed)}건`, t.failed ? "warn" : "")}
+        ${kpi("남는 돈 (추정)", won(t.margin_krw), `부가세·수수료 뺀 ${won(t.net_estimate)} − AI ${won(t.ai_cost_krw)}${t.margin_rate != null ? ` · 마진 ${Math.round(t.margin_rate * 100)}%` : ""}`, t.margin_krw < 0 ? "warn" : "")}
+      </div>
+      <div class="admin-grid">
+        <section class="panel"><h3>일별 매출</h3>${dayBars(r.by_day, "amount", won)}</section>
+        <section class="panel"><h3>요금제별 구독자</h3>
+          ${table(["요금제", "#가격", "#구독 중", "#해지 예약", "#MRR"], sb.by_plan.map((p) => `
+            <tr><td><b>${esc(p.name)}</b></td><td class="n">${won(p.price)}</td><td class="n">${num(p.active)}</td><td class="n">${num(p.canceling)}</td><td class="n">${won(p.price * p.active)}</td></tr>`), "요금제가 없어요")}
+          <p class="mini">구독자 1명당 AI 원가 (${r.days}일): <b>${sb.ai_cost_per_subscriber_krw == null ? "–" : won(sb.ai_cost_per_subscriber_krw)}</b>
+            · AI 비용 ${usd(t.ai_cost_usd)} (1달러 ${num(r.usd_krw)}원으로 환산) · 수수료율 ${(r.pg_fee_rate * 100).toFixed(1)}%</p>
+        </section>
+      </div>
+      <section class="panel"><h3>최근 결제</h3>
+        ${table(["회원", "요금제", "#금액", "구분", "상태", "언제", ""], r.recent.map((p) => { const [st, tone] = PAY_STATUS[p.status] ?? [p.status, ""];
+          return `<tr><td>${esc(p.email ?? "탈퇴한 회원")}${p.is_test ? ' <span class="achip">테스트</span>' : ""}</td><td>${esc(p.plan)}</td><td class="n">${won(p.amount)}</td>
+            <td>${p.kind === "first" ? "첫 결제" : "정기 결제"}</td><td><span class="achip ${tone}" title="${esc(p.failure ?? "")}">${st}</span></td>
+            <td class="nowrap">${ago(p.at)}</td><td>${p.receipt_url ? `<a href="${esc(p.receipt_url)}" target="_blank" rel="noopener">영수증</a>` : ""}</td></tr>`; }),
+          adminState.revTest ? "아직 결제가 없어요" : "아직 실제 결제가 없어요. '테스트 결제 포함'을 켜면 테스트 결제를 볼 수 있어요")}
+      </section>`;
   }
 
   // ---------- 개요 ----------
@@ -560,6 +598,8 @@
     const el = (sel) => e.target.closest(sel);
     let x;
     if ((x = el("[data-days]"))) { adminState.days = Number(x.dataset.days); return rerender(tab); }
+    if ((x = el("[data-revdays]"))) { adminState.revDays = Number(x.dataset.revdays); return rerender(tab); }
+    if (el("[data-revtest]")) { adminState.revTest = !adminState.revTest; return rerender(tab); }
     if ((x = el("[data-aidays]"))) { adminState.aiDays = Number(x.dataset.aidays); return rerender(tab); }
     if ((x = el("[data-lresult]"))) { adminState.logins.result = x.dataset.lresult; return rerender(tab); }
     if (el("[data-lmore]")) return adminLogins($("#admin-body"), true);
