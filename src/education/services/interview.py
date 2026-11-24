@@ -98,7 +98,48 @@ OPIC = Kind(
     bank=_opic_bank,
 )
 
-KINDS: dict[str, Kind] = {k.key: k for k in (OPIC,)}
+
+def _job_bank(setup: dict, rnd: random.Random) -> list[str]:
+    job = setup.get("job") or "지원하신 직무"
+    company = setup.get("company") or "저희 회사"
+    senior = setup.get("career") == "경력"
+    pool = [
+        f"{company}에 지원하신 이유와, 입사 후 {job}로서 가장 먼저 이루고 싶은 것을 말씀해 주세요.",
+        f"{job} 직무와 가장 관련 있는 경험 하나를 골라, 상황·맡은 일·한 행동·결과 순서로 설명해 주세요.",
+        "함께 일하던 사람과 의견이 크게 달랐던 적이 있나요? 어떻게 풀었는지 구체적으로 말씀해 주세요.",
+        "가장 크게 실패했던 경험과, 그 뒤로 일하는 방식에서 무엇이 달라졌는지 말씀해 주세요.",
+        ("이전 회사에서 낸 가장 큰 성과를 숫자로 설명해 주시고, 그 성과에서 본인의 기여가 어디까지였는지 말씀해 주세요."
+         if senior else "본인의 강점 하나와 약점 하나를, 실제 있었던 일로 보여 주세요."),
+        f"5년 뒤 {job}로서 어떤 모습이고 싶은지, 그걸 위해 지금 무엇을 하고 있는지 말씀해 주세요.",
+        "마감이 겹쳐 모든 일을 제때 끝낼 수 없을 때, 우선순위를 어떻게 정하시나요? 실제 예로 말씀해 주세요.",
+    ]
+    rnd.shuffle(pool)
+    return ["먼저 1분 동안 자기소개를 부탁드립니다.", *pool[:4], "마지막으로 하고 싶은 말씀이 있으면 해 주세요."]
+
+
+JOB = Kind(
+    key="job", name="직무 면접", lang="ko",
+    desc="채용 공고와 자기소개서에 맞춘 질문에 1분 30초씩 답해요. 자기소개 · 지원 동기 · 직무 경험 · 협업 · 실패 경험",
+    mains=6, follow_ups=3, prep_sec=15, answer_sec=90,
+    fields=(
+        SetupField("job", "지원 직무", "백엔드 개발자, 마케터, 회계 …", required=True, max_len=60),
+        SetupField("company", "회사 (선택)", "회사 이름", max_len=60),
+        SetupField("career", "구분", kind="select", options=("신입", "경력")),
+        SetupField("jd", "채용 공고 (선택)", "자격 요건 · 우대 사항 · 하는 일을 붙여 넣으면 거기에 맞춰 물어요", kind="textarea", max_len=3000),
+        SetupField("resume", "자기소개서·경력 요약 (선택)", "쓴 내용을 바탕으로 꼬리질문을 해요", kind="textarea", max_len=3000),
+    ),
+    levels=(),
+    guide=(
+        "한국 기업의 구조화 직무 면접이다. 질문은 한국어 존댓말. 1분 자기소개, 지원 동기, 직무 관련 경험(STAR: 상황·과제·행동·결과), "
+        "협업·갈등, 실패와 배운 점, 마지막 한마디를 다룬다. 채용 공고가 있으면 자격 요건·우대 사항을 확인하는 질문을, "
+        "자기소개서가 있으면 그 안의 경험을 파고드는 질문을 섞는다. "
+        "평가 기준: 두괄식(결론 먼저), STAR 구조, 직무 연관성, 구체성(숫자·고유한 사례), 자기소개서와의 일관성, 답변 길이(1분 30초 안팎), "
+        "태도(책임 전가·남 탓 없음). 점수는 100점 만점."
+    ),
+    bank=_job_bank,
+)
+
+KINDS: dict[str, Kind] = {k.key: k for k in (OPIC, JOB)}
 
 
 # ---------------------------------------------------------------- 측정 (AI 없이도)

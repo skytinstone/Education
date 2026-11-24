@@ -104,3 +104,21 @@ def test_flow_with_ai(client, auth, monkeypatch):
     rep = d["report"]
     assert rep["by_ai"] and rep["level"] == "IH" and rep["score"] == 78 and len(rep["items"]) == len(d["turns"])
     assert llm.calls.count("Plan") == 1 and llm.calls.count("Report") == 1
+
+
+KO_ANSWER = ("네 저는 지난 학기에 동아리에서 결제 서버를 맡아 응답 시간을 800밀리초에서 200밀리초로 줄였습니다 "
+             "처음에는 원인을 몰라서 로그를 하나씩 확인했고 결국 데이터베이스 인덱스 문제를 찾아 고쳤습니다 "
+             "이 경험으로 숫자로 문제를 정의하는 습관이 생겼습니다")
+
+
+def test_job_interview_without_ai(client, auth):
+    assert client.post("/api/interviews", json={"kind": "job", "setup": {}}, headers=auth).status_code == 422  # 직무는 필수
+    d = run(client, auth, kind="job", setup={"job": "백엔드 개발자", "company": "유레카", "career": "신입", "jd": "Python, SQL"})
+    assert d["lang"] == "ko" and d["kind_info"]["levels"] == [] and d["turns"][0]["q"].startswith("먼저 1분")
+    assert any("유레카" in q or "백엔드 개발자" in q for q in [t["q"] for t in d["turns"]] + interview.JOB.bank(d["setup"], __import__("random").Random(3)))
+    iid = d["id"]
+    while d["status"] == "active":
+        d = client.post(f"/api/interviews/{iid}/answers", json={"text": KO_ANSWER, "sec": 70}, headers=auth).json()
+    assert len(d["turns"]) == 6 and d["turns"][-1]["q"].startswith("마지막으로")
+    rep = client.post(f"/api/interviews/{iid}/finish", headers=auth).json()["report"]
+    assert rep["level"] == "" and 0 < rep["score"] <= 100 and rep["metrics"]["rate_unit"] == "음절/분" and rep["metrics"]["rate"]
