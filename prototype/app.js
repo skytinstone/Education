@@ -4823,23 +4823,171 @@
 
   function renderLibrary(tab, id) {
     if (tab === "concept") return renderConcept(id);
-    const tabs = [["concepts", "book-open", "개념 노트"], ["cards", "layers", "암기 카드"], ["saved", "bookmark", "저장한 문제"]];
+    if (tab === "course") return renderCourse(id);
+    const tabs = [["concepts", "과목"], ["cards", "암기 카드"], ["saved", "저장한 문제"]];
     view.innerHTML = `
-      <div class="page-head">
-        <div><h1>라이브러리</h1><p>개념, 암기 카드, 저장한 문제를 한곳에서</p></div>
-      </div>
-      <div class="toolbar">
-        <nav class="seg">${tabs.map(([k, ic, label]) => `<a href="#/library/${k}" class="${tab === k ? "on" : ""}">${label}</a>`).join("")}</nav>
-        ${tab === "concepts" ? `<label class="lib-search"><i data-lucide="search"></i><input id="lib-q" placeholder="개념 검색 (예: 치환적분, 몰)" value="${esc(libQuery)}" /></label>` : ""}
-      </div>
-      <div id="lib-body"></div>`;
+      <div class="lh">
+        <header class="lh-top"><h1>라이브러리</h1><p>과목별 개념 레슨으로 깊이 배우고, 암기 카드와 저장한 문제로 다져요</p></header>
+        <div class="lh-toolbar">
+          <nav class="lh-tabs" aria-label="라이브러리">${tabs.map(([k, label]) => `<a href="#/library/${k}" class="${tab === k ? "on" : ""}" ${tab === k ? 'aria-current="page"' : ""}>${label}</a>`).join("")}</nav>
+          ${tab === "concepts" ? `<label class="lh-search"><i data-lucide="search"></i><input id="lib-q" placeholder="개념 검색 (예: 치환적분, 몰)" value="${esc(libQuery)}" aria-label="개념 검색" /></label>` : ""}
+        </div>
+        <div id="lib-body"></div>
+      </div>`;
     if (tab === "concepts") {
-      renderTree();
-      $("#lib-q").addEventListener("input", (e) => { libQuery = e.target.value; renderTree(); });
+      const draw = () => (libQuery.trim() ? renderTree() : renderHub());
+      draw();
+      $("#lib-q").addEventListener("input", (e) => { libQuery = e.target.value; draw(); });
     } else if (tab === "cards") {
       deckIndex = 0; flipped = false;
       renderDeck();
     } else renderSaved();
+    icons();
+  }
+
+  // ================= 라이브러리 — 과목 홈 · 과목 지도 (3단계) =================
+  // 숙련도: 문제 풀이 기록(정답률·푼 수)과 레슨 퀴즈 결과로 정한다
+  const MASTERY = {
+    good: { name: "익힘", cls: "good" }, learning: { name: "익히는 중", cls: "learning" },
+    weak: { name: "약함", cls: "weak" }, new: { name: "아직 안 봄", cls: "new" },
+  };
+  function masteryMap() {
+    const stats = Object.fromEntries(Store.conceptStats().map((s) => [s.conceptId, s]));
+    const quiz = (id) => { try { return JSON.parse(localStorage.getItem(`eureka.lessonQuiz.${id}`) || "null")?.score ?? null; } catch { return null; } };
+    return (id) => {
+      const s = stats[id], q = quiz(id);
+      if (s?.attempts && s.accuracy < 0.6) return "weak";
+      if ((s?.attempts >= 3 && s.accuracy >= 0.8) || (q === 3 && (!s || s.accuracy >= 0.8))) return "good";
+      if (s?.attempts || q != null) return "learning";
+      return "new";
+    };
+  }
+  const conceptsOf = (subjectId) => childrenOf(subjectId).flatMap((u) => childrenOf(u.id).map((c) => ({ ...c, unit: u })));
+  // 오늘 이어서 볼 개념: 약한 개념 → (선수 개념을 다 본) 아직 안 본·익히는 중 개념 → 처음 개념
+  function nextConcept(list, m) {
+    const ready = (c) => c.prerequisites.every((p) => !concept(p) || m(p) !== "new");
+    return list.find((c) => m(c.id) === "weak") ?? list.find((c) => m(c.id) === "learning" && ready(c))
+      ?? list.find((c) => m(c.id) === "new" && ready(c)) ?? list.find((c) => m(c.id) !== "good") ?? null;
+  }
+  const ringSVG = (part, size = 56) => {
+    const r = size / 2 - 5, c = 2 * Math.PI * r;
+    return `<svg class="lh-ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-hidden="true">
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#E6E7EC" stroke-width="6"/>
+      ${part > 0 ? "" : "<!--"}<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#1F5FE0" stroke-width="6" stroke-linecap="round"
+        stroke-dasharray="${(c * part).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 ${size / 2} ${size / 2})"/>${part > 0 ? "" : "-->"}</svg>`;
+  };
+  const mixBar = (counts, total) => `<div class="lh-mix" role="img" aria-label="${Object.entries(counts).map(([k, n]) => `${MASTERY[k].name} ${n}개`).join(", ")}">
+    ${["good", "learning", "weak", "new"].map((k) => counts[k] ? `<i class="${k}" style="flex:${counts[k]}"></i>` : "").join("")}${total ? "" : '<i class="new" style="flex:1"></i>'}</div>`;
+  const countBy = (list, m) => list.reduce((o, c) => ((o[m(c.id)] = (o[m(c.id)] || 0) + 1), o), { good: 0, learning: 0, weak: 0, new: 0 });
+
+  function renderHub() {
+    const m = masteryMap();
+    const studied = new Set([...Store.state.projects.map((p) => p.subjectId), ...Store.conceptStats().map((s) => pathOf(s.conceptId)[0]?.id)].filter(Boolean));
+    const mine = SUBJECTS.filter((s) => studied.has(s.id)), rest = SUBJECTS.filter((s) => !studied.has(s.id));
+    const card = (s) => {
+      const list = conceptsOf(s.id), counts = countBy(list, m), part = list.length ? counts.good / list.length : 0;
+      const course = courseMap[s.id];
+      return `<a class="lh-card" href="#/library/course/${s.id}" style="--c:${COLOR[s.domain]}">
+        <div class="lh-card-top">${ringSVG(part)}<span class="lh-pct">${Math.round(part * 100)}%</span>
+          <div><b>${esc(s.name)}</b><small>${esc([course?.exam, course?.level].filter(Boolean).join(" · ") || DOMAIN_NAME[s.domain] || "")}</small></div></div>
+        ${mixBar(counts, list.length)}
+        <small class="lh-counts">${list.length}개 개념 · 익힘 ${counts.good} · 약함 ${counts.weak} · 안 봄 ${counts.new}</small></a>`;
+    };
+    // 오늘 이어서 볼 개념 (내가 공부하는 과목 중에서)
+    const pickFrom = (mine.length ? mine : SUBJECTS.slice(0, 1)).map((s) => nextConcept(conceptsOf(s.id), m)).filter(Boolean);
+    const pick = pickFrom.find((c) => m(c.id) === "weak") ?? pickFrom[0];
+    $("#lib-body").innerHTML = `
+      ${pick ? `<a class="lh-next" href="#/library/concept/${pick.id}">
+        <span class="lh-eyebrow">${m(pick.id) === "weak" ? "약한 개념부터 다시" : "오늘 이어서 볼 개념"}</span>
+        <b>${esc(pick.name)}</b><small>${esc(pathOf(pick.id).slice(0, -1).map((x) => x.name).join(" › "))}</small>
+        <span class="lh-go">레슨 열기 <i data-lucide="arrow-right"></i></span></a>` : ""}
+      ${mine.length ? `<section class="lh-sec"><h2>내가 공부하는 과목</h2><div class="lh-grid">${mine.map(card).join("")}</div></section>` : ""}
+      <section class="lh-sec"><h2>${mine.length ? "다른 과목" : "과목"}</h2><div class="lh-grid">${rest.map(card).join("")}</div></section>
+      <div id="lh-browse"></div>`;
+    renderBrowse($("#lh-browse"));
+    icons();
+  }
+
+  // 아직 받지 않은 공개 코스 — 누르면 개념 트리를 받아 온다
+  function renderBrowse(box, qy = "") {
+    const others = COURSES.filter((c) => !conceptMap[c.id] && (!qy || `${c.title} ${c.exam} ${c.category}`.toLowerCase().includes(qy)));
+    if (!box || !others.length) return;
+    box.innerHTML = `<section class="lh-sec"><h2>다른 코스 둘러보기 <small>다른 사람들이 출제 범위로 만든 코스예요</small></h2>
+      <div class="course-list">${others.slice(0, 30).map((c) => `
+        <button type="button" class="course-item" data-load-course="${esc(c.id)}" style="--c:${COLOR[c.domain]}">
+          <b><span class="sw"></span>${esc(c.title)}</b><small>${esc([c.exam, c.category, c.level, `${c.units}개 단원`].filter(Boolean).join(" · "))}</small></button>`).join("")}</div></section>`;
+    box.onclick = async (e) => {
+      const b = e.target.closest("[data-load-course]");
+      if (!b) return;
+      b.disabled = true;
+      try { await Store.loadCourse(b.dataset.loadCourse); loadConcepts(); renderHub(); } catch (err) { toast(err.message); b.disabled = false; }
+    };
+  }
+
+  function renderCourse(id) {
+    const s = concept(id);
+    if (!s || s.level !== "subject") return go("/library");
+    const m = masteryMap(), list = conceptsOf(id), counts = countBy(list, m);
+    const part = list.length ? counts.good / list.length : 0;
+    const pick = nextConcept(list, m), course = courseMap[id];
+    view.innerHTML = `
+      <div class="lh">
+        <nav class="lx-crumbs" aria-label="위치"><a href="#/library">라이브러리</a><span>›</span><span>${esc(s.name)}</span></nav>
+        <header class="lh-head">
+          <div class="lh-card-top">${ringSVG(part, 72)}<span class="lh-pct big">${Math.round(part * 100)}%</span>
+            <div><h1>${esc(s.name)}</h1><p>${esc([course?.exam, course?.level, course?.textbook].filter(Boolean).join(" · ") || DOMAIN_NAME[s.domain] || "")}</p></div></div>
+          <ul class="lh-legend">${Object.entries(MASTERY).map(([k, v]) => `<li><i class="${v.cls}"></i>${v.name} <b>${counts[k]}</b></li>`).join("")}</ul>
+        </header>
+        ${pick ? `<a class="lh-next" href="#/library/concept/${pick.id}"><span class="lh-eyebrow">${m(pick.id) === "weak" ? "약한 개념부터 다시" : "다음에 볼 개념"}</span>
+          <b>${esc(pick.name)}</b><small>${esc(pick.unit.name)}</small><span class="lh-go">레슨 열기 <i data-lucide="arrow-right"></i></span></a>` : ""}
+        <p class="lh-help">화살표는 '먼저 알아야 할 개념 → 이어서 배울 개념' 이에요. 개념을 누르면 레슨이 열려요.</p>
+        ${childrenOf(id).map((u, ui) => {
+          const cs = childrenOf(u.id), uc = countBy(cs, m);
+          return `<section class="lh-unit">
+            <header><span class="lh-un">${ui + 1}</span><h2>${esc(u.name)}</h2>${mixBar(uc, cs.length)}<small>익힘 ${uc.good} / ${cs.length}</small></header>
+            <div class="lh-map" data-unit="${esc(u.id)}"><svg class="lh-edges" aria-hidden="true"></svg>
+              ${cs.map((c) => {
+                const outside = c.prerequisites.filter((p) => concept(p) && concept(p).parent_id !== u.id).map((p) => concept(p).name);
+                return `<a class="lh-node ${MASTERY[m(c.id)].cls}${pick?.id === c.id ? " pick" : ""}" href="#/library/concept/${c.id}" data-node="${esc(c.id)}"
+                  title="${esc(MASTERY[m(c.id)].name)}${outside.length ? ` · 먼저: ${esc(outside.join(", "))}` : ""}">
+                  <span class="lh-dot"></span><span class="nm">${esc(c.name)}</span>${outside.length ? `<small>먼저 ${outside.length}개</small>` : ""}</a>`;
+              }).join("")}
+            </div></section>`;
+        }).join("")}
+      </div>`;
+    icons();
+    drawEdges();
+  }
+
+  // 같은 단원 안의 선수 관계를 화살표로 (화면 폭이 바뀌면 다시 그린다)
+  function drawEdges() {
+    $$(".lh-map").forEach((map) => {
+      const draw = () => {
+        const svg = $(".lh-edges", map), box = map.getBoundingClientRect();
+        const pos = Object.fromEntries($$("[data-node]", map).map((n) => {
+          const r = n.getBoundingClientRect();
+          return [n.dataset.node, { x: r.left - box.left, y: r.top - box.top, w: r.width, h: r.height }];
+        }));
+        svg.setAttribute("width", box.width);
+        svg.setAttribute("height", box.height);
+        let out = "";
+        for (const [id, b] of Object.entries(pos)) {
+          for (const p of concept(id)?.prerequisites ?? []) {
+            const a = pos[p];
+            if (!a) continue;
+            const sameRow = Math.abs(a.y - b.y) < 8;
+            const [x1, y1, x2, y2] = sameRow ? [a.x + a.w, a.y + a.h / 2, b.x, b.y + b.h / 2] : [a.x + a.w / 2, a.y + a.h, b.x + b.w / 2, b.y];
+            const mid = sameRow ? `C${(x1 + x2) / 2},${y1} ${(x1 + x2) / 2},${y2}` : `C${x1},${(y1 + y2) / 2} ${x2},${(y1 + y2) / 2}`;
+            const [ex, ey] = sameRow ? [x2 - 3, y2] : [x2, y2 - 3];
+            const head = sameRow ? `M${ex},${ey} l-9,-5.5 l0,11 z` : `M${ex},${ey} l-5.5,-9 l11,0 z`;
+            out += `<path d="M${x1},${y1} ${mid} ${sameRow ? ex - 6 : ex},${sameRow ? ey : ey - 6}" fill="none" stroke="#8FA9E6" stroke-width="1.8"/><path d="${head}" fill="#4F75D4"/>`;
+          }
+        }
+        svg.innerHTML = out;
+      };
+      if (!map._ro) { map._ro = new ResizeObserver(draw); map._ro.observe(map); }
+      draw();
+    });
   }
 
   function renderTree() {
