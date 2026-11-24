@@ -984,7 +984,7 @@ body.work-full-open { overflow: hidden; }
 .ask-quote { display: flex; align-items: flex-start; gap: 6px; padding: 8px 10px; border-radius: 12px; background: rgba(79,107,255,.07);
   font-size: 13px; line-height: 1.6; color: var(--ink-2); }
 .ask-quote > [data-lucide] { width: 14px; height: 14px; flex-shrink: 0; margin-top: 4px; color: var(--accent); }
-.ask-quote span { flex: 1; max-height: 84px; overflow: auto; }
+.ask-quote > span { flex: 1; max-height: 84px; overflow: auto; }
 .ask-quote button { flex-shrink: 0; width: 22px; height: 22px; border-radius: 6px; display: grid; place-items: center; color: var(--ink-3); }
 .ask-quote button:hover { background: rgba(15,23,42,.06); color: var(--ink); }
 .ask-quote button [data-lucide] { width: 14px; height: 14px; }
