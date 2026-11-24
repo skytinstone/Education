@@ -546,6 +546,13 @@ const Store = (() => {
       commit();
       return r;
     },
+    // 개념 레슨 (모두가 같이 보는 레슨) · 개념과 대화하기 · 내 노트에 담기 — 서버 모드에서만
+    getLesson: (conceptId) => (local ? Promise.resolve(null) : api(`/concepts/${conceptId}/lesson`)),
+    createLesson: (conceptId) => api(`/concepts/${conceptId}/lesson`, { method: "POST" }),
+    conceptChat: (conceptId, body) => api(`/concepts/${conceptId}/chat`, { method: "POST", body }),
+    clips: (conceptId) => (local ? Promise.resolve([]) : api(`/concepts/${conceptId}/clips`)),
+    addClip: (conceptId, text, visual) => api(`/concepts/${conceptId}/clips`, { method: "POST", body: { text, visual } }),
+    deleteClip: (id) => api(`/clips/${id}`, { method: "DELETE" }),
     // 코스: 다른 사람이 만든 코스의 개념 트리 받아 오기 / 출제 범위로 새 코스 만들기 (AI, 30초~1분)
     async loadCourse(id) {
       if (local || state.concepts.some((c) => c.id === id)) return;
