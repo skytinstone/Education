@@ -135,3 +135,9 @@ def test_admission_interview_bank(client, auth):
     assert d["kind_info"]["answer_sec"] == 120 and d["mains"] == 6
     kinds = [k["key"] for k in client.get("/api/interviews/kinds", headers=auth).json()]
     assert kinds == ["opic", "job", "admission"]
+
+
+def test_camera_and_mic_allowed_for_interview(client):
+    """AI 면접의 내 모습(카메라)·받아쓰기(마이크)를 서버 헤더가 막지 않는다 — 예전에 camera=() 로 막혀 있었다."""
+    pp = client.get("/api/health").headers["Permissions-Policy"]
+    assert "camera=(self)" in pp and "microphone=(self)" in pp and "geolocation=()" in pp

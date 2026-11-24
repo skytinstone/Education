@@ -930,3 +930,7 @@ body.pdf-capture .exam-body { column-count: 1 !important; column-rule: none !imp
   .iv-cam-mic { height: 24px; padding: 0 6px; }
   .iv-cam-btn { width: 26px; height: 26px; }
 }
+
+/* 카메라 안내가 길 때 (좁은 화면은 3줄까지) */
+.iv-cam-msg { max-width: 220px; }
+@media (max-width: 820px) { .iv-cam-msg { font-size: 10px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; } .iv-cam-ph > svg { display: none; } }
