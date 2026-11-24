@@ -3190,7 +3190,105 @@
     clearInterval(iv.timer);
     iv.stopRec?.();
     try { speechSynthesis.cancel(); } catch { /* 없음 */ }
+    ivMediaStop();
     iv = null;
+  }
+
+  // ---------- 내 모습(카메라)·마이크 입력 — 화면에만 보이고 녹화·전송하지 않는다 ----------
+  // 면접을 시작할 때 권한을 한 번 묻고, 질문이 바뀌어 화면을 다시 그려도 같은 스트림을 다시 붙인다
+  const ivCamOn = () => { try { return localStorage.getItem("eureka.ivCam") !== "0"; } catch { return true; } };
+  const ivCamPref = (on) => { try { localStorage.setItem("eureka.ivCam", on ? "1" : "0"); } catch { /* 무시 */ } };
+  const ivMedia = { stream: null, ctx: null, an: null, raf: 0, cam: false, err: "", asking: false };
+  const IV_VIDEO = { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } };
+  async function ivMediaStart(withCam = ivCamOn()) {
+    ivMediaStop();
+    ivMedia.asking = true;
+    ivMediaDraw();
+    if (!navigator.mediaDevices?.getUserMedia) ivMedia.err = "이 브라우저는 카메라·마이크를 쓸 수 없어요";
+    else {
+      try {
+        ivMedia.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true }, video: withCam ? IV_VIDEO : false });
+        ivMedia.err = "";
+      } catch {
+        try { // 카메라가 없거나 거절했으면 마이크만이라도
+          ivMedia.stream = withCam ? await navigator.mediaDevices.getUserMedia({ audio: true }) : null;
+          ivMedia.err = withCam ? "카메라를 쓸 수 없어요 · 권한을 확인해 주세요" : "마이크 권한을 허용해 주세요";
+        } catch { ivMedia.err = "카메라·마이크 권한을 허용해 주세요 (주소창 왼쪽 자물쇠)"; }
+      }
+    }
+    ivMedia.asking = false;
+    if (!iv) return ivMediaStop(); // 기다리는 동안 면접 화면을 떠났으면
+    ivMedia.cam = Boolean(ivMedia.stream?.getVideoTracks().length);
+    if (withCam && ivMedia.stream && !ivMedia.cam && !ivMedia.err) ivMedia.err = "카메라를 찾지 못했어요";
+    if (ivMedia.stream && !ivMedia.stream.getAudioTracks().length && !ivMedia.err) ivMedia.err = "마이크를 찾지 못했어요";
+    if (ivMedia.stream?.getAudioTracks().length) {
+      try {
+        ivMedia.ctx = new AudioContext();
+        ivMedia.an = ivMedia.ctx.createAnalyser();
+        ivMedia.an.fftSize = 64;
+        ivMedia.ctx.createMediaStreamSource(ivMedia.stream).connect(ivMedia.an);
+      } catch { ivMedia.an = null; }
+    }
+    ivMediaDraw();
+    ivMeterLoop();
+  }
+  function ivMediaStop() {
+    cancelAnimationFrame(ivMedia.raf);
+    ivMedia.stream?.getTracks().forEach((t) => t.stop());
+    ivMedia.ctx?.close().catch(() => {});
+    Object.assign(ivMedia, { stream: null, ctx: null, an: null, cam: false });
+  }
+  function ivMediaDraw() {
+    const box = $("#iv-cam");
+    if (!box) return;
+    const v = $("video", box);
+    if (ivMedia.cam && v.srcObject !== ivMedia.stream) { v.srcObject = ivMedia.stream; v.play?.().catch(() => {}); }
+    if (!ivMedia.cam) v.srcObject = null;
+    box.classList.toggle("off", !ivMedia.cam);
+    box.classList.toggle("nomic", !ivMedia.an && !ivMedia.asking);
+    $(".iv-cam-msg", box).textContent = ivMedia.asking ? "카메라·마이크를 켜는 중…" : ivMedia.err || (ivMedia.cam ? "" : "카메라 꺼짐");
+    $("[data-iv-media-retry]", box).hidden = !ivMedia.err || ivMedia.asking;
+    const b = $("[data-iv-cam]", box);
+    b.innerHTML = `<i data-lucide="${ivMedia.cam ? "video" : "video-off"}"></i>`;
+    b.title = ivMedia.cam ? "카메라 끄기" : "카메라 켜기";
+    b.setAttribute("aria-label", b.title);
+    $(".iv-cam-mic", box).title = ivMedia.an ? "마이크 입력 — 말하면 막대가 움직여요" : "마이크가 연결되지 않았어요";
+    icons();
+  }
+  function ivMeterLoop() {
+    cancelAnimationFrame(ivMedia.raf);
+    if (!ivMedia.an) return;
+    const buf = new Uint8Array(ivMedia.an.frequencyBinCount);
+    const loop = () => {
+      if (!ivMedia.an) return;
+      ivMedia.an.getByteFrequencyData(buf);
+      const level = buf.reduce((a, b) => a + b, 0) / buf.length / 255;
+      $$(".iv-cam .lv i, .iv-meter i").forEach((b, i) => (b.style.transform = `scaleY(${0.2 + (buf[(i % 5) * 3 + 1] / 255) * 1.2})`));
+      $("#iv-cam")?.classList.toggle("talking", level > 0.12);
+      ivMedia.raf = requestAnimationFrame(loop);
+    };
+    loop();
+  }
+  async function ivToggleCam() {
+    if (ivMedia.asking) return;
+    if (ivMedia.cam) {
+      ivMedia.stream.getVideoTracks().forEach((t) => { t.stop(); ivMedia.stream.removeTrack(t); });
+      ivMedia.cam = false;
+      ivMedia.err = "";
+      ivCamPref(false);
+      return ivMediaDraw();
+    }
+    ivCamPref(true);
+    if (!ivMedia.stream) return ivMediaStart(true);
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: IV_VIDEO });
+      s.getVideoTracks().forEach((t) => ivMedia.stream.addTrack(t));
+      ivMedia.cam = true;
+      ivMedia.err = "";
+      const v = $("#iv-cam video");
+      if (v) v.srcObject = null; // 새 영상 트랙을 다시 붙이게
+    } catch { ivMedia.err = "카메라를 쓸 수 없어요 · 권한을 확인해 주세요"; }
+    ivMediaDraw();
   }
   window.addEventListener("hashchange", () => { if (!location.hash.startsWith(`#/interview/${iv?.id}`)) ivCleanup(); });
 
@@ -3242,6 +3340,7 @@
           <div class="iv-sh"><span class="iv-kic"><i data-lucide="${IV_ICON[k.key] ?? "mic"}"></i></span><div><h2>${esc(k.name)}</h2><p>${esc(k.desc)}</p></div></div>
           <form id="iv-form">${k.fields.map(field).join("")}
             <label class="check iv-voice"><input type="checkbox" id="iv-voice" ${ivVoiceOn() ? "checked" : ""} /> 질문을 소리로 읽어 주기</label>
+            <label class="check iv-voice"><input type="checkbox" id="iv-cam-pref" ${ivCamOn() ? "checked" : ""} /> 내 모습 보기 (카메라 · 화면에만 보이고 녹화하지 않아요)</label>
             <div class="iv-rules"><span><i data-lucide="list-ordered"></i>${k.mains}문항${k.follow_ups ? ` + 꼬리질문 최대 ${k.follow_ups}개` : ""}</span>
               <span><i data-lucide="hourglass"></i>준비 ${k.prep_sec}초</span><span><i data-lucide="timer"></i>답변 ${ivDur(k.answer_sec)}</span></div>
             <button class="btn-primary iv-go" type="submit"><i data-lucide="mic"></i>면접 시작</button>
@@ -3266,6 +3365,7 @@
       const miss = k.fields.filter((f) => f.required && !setup[f.key]).map((f) => f.label);
       if (miss.length) return toast(`${miss.join(", ")}을(를) 골라 주세요`);
       try { localStorage.setItem("eureka.ivVoice", $("#iv-voice").checked ? "1" : "0"); } catch { /* 무시 */ }
+      ivCamPref($("#iv-cam-pref").checked);
       const btn = $(".iv-go", form);
       btn.disabled = true;
       btn.innerHTML = '<i data-lucide="loader" class="spin"></i>질문을 준비하는 중…';
@@ -3310,7 +3410,7 @@
     const k = d.kind_info, t = d.turns[d.current];
     const mainNo = d.turns.slice(0, d.current + 1).filter((x) => !x.follow).length;
     view.innerHTML = `
-      <div class="iv">
+      <div class="iv with-cam">
         <div class="iv-bar">
           <a class="ak-back" href="#/interview" data-iv-leave><i data-lucide="x"></i>그만두기</a>
           <div class="iv-title"><b>${esc(k.name)}</b><span>질문 ${mainNo} / ${d.mains}${t.follow ? " · 꼬리질문" : ""}</span></div>
@@ -3326,8 +3426,20 @@
           </div>
           <div class="iv-phase" id="iv-phase"></div>
         </div>
+        <aside class="iv-cam off" id="iv-cam" aria-label="내 모습">
+          <video autoplay playsinline muted></video>
+          <div class="iv-cam-ph"><i data-lucide="user-round"></i><span class="iv-cam-msg"></span>
+            <button type="button" class="btn-ghost" data-iv-media-retry hidden>다시 시도</button></div>
+          <div class="iv-cam-bar">
+            <span class="iv-cam-mic"><i data-lucide="mic"></i><span class="lv" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span></span>
+            <button type="button" class="iv-cam-btn" data-iv-cam></button>
+          </div>
+          <span class="iv-cam-note"><i data-lucide="lock"></i>나만 보여요 · 녹화 안 함</span>
+        </aside>
       </div>`;
     icons();
+    ivMediaDraw();
+    if (!ivMedia.stream && !iv.mediaAsked) { iv.mediaAsked = true; ivMediaStart(); }
     view.onclick = ivClick;
     ivPrep();
     ivSpeak(t.q, d.lang);
@@ -3439,22 +3551,7 @@
     iv.stopRec = stop;
     iv.recOn = true;
     try { rec.start(); } catch { /* 무시 */ }
-    // 소리 크기 막대
-    navigator.mediaDevices?.getUserMedia?.({ audio: true }).then((s) => {
-      if (!want) return s.getTracks().forEach((t) => t.stop());
-      stream = s;
-      ctx = new AudioContext();
-      const an = ctx.createAnalyser();
-      an.fftSize = 64;
-      ctx.createMediaStreamSource(s).connect(an);
-      const buf = new Uint8Array(an.frequencyBinCount), bars = $$(".iv-meter i");
-      const loop = () => {
-        an.getByteFrequencyData(buf);
-        bars.forEach((b, i) => (b.style.transform = `scaleY(${0.25 + (buf[i * 3] / 255) * 1.2})`));
-        raf = requestAnimationFrame(loop);
-      };
-      loop();
-    }).catch(() => {});
+    // 소리 크기 막대는 오른쪽 위 내 모습의 마이크 입력(ivMeterLoop)이 함께 움직인다
   }
   function ivStopRec() { iv?.stopRec?.(); if (iv) iv.recOn = false; }
 
@@ -3495,6 +3592,8 @@
     if (!iv) return;
     if (e.target.closest("[data-iv-say]")) { const t = iv.d.turns[iv.d.current]; return ivSpeak(t.q, iv.d.lang); }
     if (e.target.closest("[data-iv-start]")) return ivAnswer();
+    if (e.target.closest("[data-iv-cam]")) return ivToggleCam();
+    if (e.target.closest("[data-iv-media-retry]")) return ivMediaStart(ivCamOn());
     if (e.target.closest("[data-iv-mic]")) {
       if (!SpeechRec) return toast("이 브라우저는 음성 인식을 지원하지 않아요. 글로 답해 주세요");
       if (iv.recOn) ivStopRec(); else { iv.text = $("#iv-text").value; ivStartRec(); $("#iv-state").textContent = "듣고 있어요"; }
