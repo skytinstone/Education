@@ -4685,34 +4685,38 @@
     noteFilter.domain = params.get("domain") ?? "all";
     noteFilter.project = params.get("project");
     const proj = noteFilter.project && Store.project(noteFilter.project);
+    const domains = (() => { const ds = [...new Set(Store.state.wrongNotes.map((w) => Store.problem(w.problemId)?.domain).filter(Boolean))];
+      return (ds.length ? ds.sort((a, b) => domainOrder(a) - domainOrder(b)) : myDomains()); })();
 
     view.innerHTML = `
-      <div class="page-head">
-        <div>
-          <h1>오답노트</h1>
-          <p>${proj ? `${esc(proj.name)}의 오답 · <a href="#/notes" style="color:inherit">전체 보기</a>` : "틀린 문제를 다시 풀어 맞히면 극복으로 표시돼요"}</p>
+      <div class="nx">
+        <header class="nx-head">
+          <div><h1>오답노트</h1>
+            <p>${proj ? `${esc(proj.name)}의 오답 · <a href="#/notes">전체 보기</a>` : "왜 틀렸는지 진단하고, 때맞춰 다시 풀어 극복해요"}</p></div>
+          <div class="nx-actions print-hide">
+            <button class="nx-btn" data-pdf="${esc(proj ? `${proj.name} 오답노트` : "오답노트")}" title="지금 보이는 오답을 PDF 파일로 저장"><i data-lucide="file-down"></i>PDF</button>
+            <button class="nx-btn" data-print title="지금 보이는 오답을 인쇄"><i data-lucide="printer"></i>인쇄</button>
+            <button type="button" class="nx-btn" data-notion-export title="지금 보이는 오답을 Notion 으로"><i data-lucide="notebook-pen"></i>Notion</button>
+          </div>
+        </header>
+        <section class="nx-dash print-hide" id="note-stats"></section>
+        <section class="nx-today print-hide" id="note-today"></section>
+        <div class="nx-toolbar print-hide">
+          <div class="nx-chips" id="note-domains">
+            <button data-domain="all">전체</button>
+            ${domains.map((d) => `<button data-domain="${d}"><span class="sw" style="background:${COLOR[d]}"></span>${DOMAIN_NAME[d]}</button>`).join("")}
+          </div>
+          <div class="nx-filters">
+            <select class="nx-select" id="note-error" aria-label="틀린 이유">
+              <option value="all">틀린 이유: 전체</option>
+              ${Object.entries(ERROR_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}
+            </select>
+            <label class="nx-check"><input type="checkbox" id="note-open" /> 안 푼 것만</label>
+            <span class="nx-count" id="note-count"></span>
+          </div>
         </div>
-        <div class="page-actions print-hide">
-          <button class="btn-ghost" data-pdf="${esc(proj ? `${proj.name} 오답노트` : "오답노트")}" title="지금 보이는 오답을 PDF 파일로 저장"><i data-lucide="file-down"></i>PDF 저장</button>
-          <button class="btn-ghost" data-print title="지금 보이는 오답을 인쇄"><i data-lucide="printer"></i>인쇄</button>
-          <button type="button" class="btn-ghost" data-notion-export title="지금 보이는 오답을 Notion 으로"><i data-lucide="notebook-pen"></i>Notion</button></div>
-      </div>
-      <div class="note-stats" id="note-stats"></div>
-      <div class="toolbar glass-bar">
-        <div class="seg" id="note-domains">
-          <button data-domain="all">전체</button>
-          ${(() => { const ds = [...new Set(Store.state.wrongNotes.map((w) => Store.problem(w.problemId)?.domain).filter(Boolean))];
-            return (ds.length ? ds.sort((a, b) => domainOrder(a) - domainOrder(b)) : myDomains()); })()
-            .map((d) => `<button data-domain="${d}" style="--c:${COLOR[d]}"><span class="sw"></span>${DOMAIN_NAME[d]}</button>`).join("")}
-        </div>
-        <select class="select" id="note-error" aria-label="틀린 이유">
-          <option value="all">틀린 이유: 전체</option>
-          ${Object.entries(ERROR_TYPES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}
-        </select>
-        <label class="check"><input type="checkbox" id="note-open" /> 안 푼 것만</label>
-        <span class="count" id="note-count"></span>
-      </div>
-      <div class="notes" id="note-list"></div>`;
+        <div class="nx-list" id="note-list"></div>
+      </div>`;
 
     $("#note-error").value = noteFilter.error;
     $("#note-open").checked = noteFilter.openOnly;
@@ -4721,8 +4725,12 @@
     view.onclick = (e) => {
       const dom = e.target.closest("[data-domain]");
       if (dom) { noteFilter.domain = dom.dataset.domain; return renderNoteList(); }
+      const etype = e.target.closest("[data-filter-error]");
+      if (etype) { noteFilter.error = etype.dataset.filterError; $("#note-error").value = noteFilter.error; noteFilter.openOnly = true; $("#note-open").checked = true; renderNoteList(); return $("#note-list")?.scrollIntoView({ behavior: "smooth" }); }
       const retry = e.target.closest("[data-retry]");
       if (retry) return retryModal(retry.dataset.retry);
+      const rx = e.target.closest("[data-prescribe]");
+      if (rx) return prescribe();
       const del = e.target.closest("[data-del-note]");
       if (del) return confirmModal({
         title: "오답노트에서 삭제할까요?", text: "이 문제의 오답 기록이 삭제돼요.",
@@ -4736,67 +4744,123 @@
     };
   }
 
-  // 요약: 남은 오답 · 이번 주 극복 · 가장 많이 틀린 이유
+  const scopedNotes = () => Store.state.wrongNotes.filter((w) => (!noteFilter.project || w.projectId === noteFilter.project) && Store.problem(w.problemId));
+  // 틀린 이유 색 — 이웃끼리 밝기도 다르게 (파랑 · 주황 · 청록 · 남색 · 노랑 · 분홍 · 회색)
+  const ERROR_COLOR = { concept_gap: "#1F5FE0", misapplication: "#E8743B", calculation: "#1BAF7A", misread: "#5B3FD0", trap: "#E0B12E", time_pressure: "#D6457A", unknown: "#C3C7D1" };
+  // 다시 풀 때: 틀린 지 1 · 3 · 7일째 (간격 반복 · 서버 알림과 같은 REVIEW_DAYS). 지난 단계는 오늘 몫으로 넘긴다
+  const reviewStage = (w) => { const age = Math.floor((Date.now() - w.createdAt) / DAY); return { age, due: age >= 1, next: REVIEW_DAYS.find((d) => d > age) ?? null }; };
+
+  function donutSVG(parts, size = 132) {
+    const total = parts.reduce((a, p) => a + p.n, 0) || 1, r = size / 2 - 12, c = 2 * Math.PI * r;
+    let off = 0;
+    const segs = parts.map((p) => {
+      const len = (p.n / total) * c;
+      const s = `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="${p.color}" stroke-width="18"
+        stroke-dasharray="${Math.max(0, len - 2).toFixed(1)} ${c.toFixed(1)}" stroke-dashoffset="${(-off).toFixed(1)}" transform="rotate(-90 ${size / 2} ${size / 2})"/>`;
+      off += len;
+      return s;
+    }).join("");
+    return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="틀린 이유 비율">
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="#F1F2F5" stroke-width="18"/>${segs}
+      <text x="50%" y="48%" text-anchor="middle" class="nx-dn">${parts.reduce((a, p) => a + p.n, 0)}</text>
+      <text x="50%" y="63%" text-anchor="middle" class="nx-dl">남은 오답</text></svg>`;
+  }
+
+  // 대시보드: 숫자 · 틀린 이유 · 약한 개념 · 최근 8주 · 오늘 복습
   function renderNoteStats() {
-    const notes = Store.state.wrongNotes.filter((w) => !noteFilter.project || w.projectId === noteFilter.project);
-    const open = notes.filter((w) => !w.resolvedAt);
+    const notes = scopedNotes(), open = notes.filter((w) => !w.resolvedAt);
     const week = notes.filter((w) => w.resolvedAt && w.resolvedAt > Date.now() - 7 * DAY).length;
-    const counts = {};
-    open.filter((w) => w.errorType !== "unknown").forEach((w) => (counts[w.errorType] = (counts[w.errorType] ?? 0) + 1));
-    const [topType, topN] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] ?? [];
-    $("#note-stats").innerHTML = `
-      <div class="glass-tile"><span>남은 오답</span><b>${open.length}<small>문제</small></b></div>
-      <div class="glass-tile"><span>이번 주 극복</span><b>${week}<small>문제</small></b></div>
-      <div class="glass-tile"><span>가장 많이 틀린 이유</span>
-        <b class="text">${topType ? `${ERROR_TYPES[topType]}<small>${topN}문제</small>` : "<small>아직 분류 전이에요</small>"}</b></div>`;
+    const rate = notes.length ? Math.round((notes.filter((w) => w.resolvedAt).length / notes.length) * 100) : 0;
+    const byType = Object.keys(ERROR_TYPES).map((k) => ({ k, n: open.filter((w) => w.errorType === k).length, color: ERROR_COLOR[k] ?? "#C3C7D1" })).filter((p) => p.n);
+    const byConcept = {};
+    open.forEach((w) => { const cid = Store.problem(w.problemId).conceptIds[0]; if (cid) byConcept[cid] = (byConcept[cid] ?? 0) + 1; });
+    const weak = Object.entries(byConcept).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const maxWeak = weak[0]?.[1] ?? 1;
+    const weeks = [...Array(8)].map((_, i) => {
+      const end = Date.now() - (7 - i) * 7 * DAY, start = end - 7 * DAY;
+      return { made: notes.filter((w) => w.createdAt > start && w.createdAt <= end).length, done: notes.filter((w) => w.resolvedAt > start && w.resolvedAt <= end).length };
+    });
+    const maxW = Math.max(1, ...weeks.flatMap((w) => [w.made, w.done]));
+    $("#note-stats").innerHTML = notes.length ? `
+      <div class="nx-tiles">
+        <div><span>남은 오답</span><b>${open.length}</b></div>
+        <div><span>이번 주 극복</span><b>${week}</b></div>
+        <div><span>극복률</span><b>${rate}<small>%</small></b></div>
+      </div>
+      <div class="nx-card"><h2>왜 틀렸나</h2>
+        ${byType.length ? `<div class="nx-donut">${donutSVG(byType)}<ul>${byType.map((p) => `<li><button type="button" data-filter-error="${p.k}"><i style="background:${p.color}"></i>${ERROR_TYPES[p.k]}<b>${p.n}</b></button></li>`).join("")}</ul></div>
+          <p class="nx-tip">${(() => { const top = byType.filter((p) => p.k !== "unknown").sort((a, b) => b.n - a.n)[0]; return top ? `가장 많은 이유 <b>${ERROR_TYPES[top.k]}</b> · ${{ concept_gap: "개념 레슨부터 다시 보는 게 빨라요", misapplication: "예제를 따라 풀며 언제 쓰는지 익혀 보세요", calculation: "풀이를 한 줄씩 적고 검산하는 습관을 들여요", misread: "조건에 밑줄을 긋고 무엇을 구하는지 먼저 적어요", trap: "자주 틀리는 점을 레슨에서 확인해 보세요", time_pressure: "시간을 재고 짧은 세트로 연습해요" }[top.k] ?? ""}` : "카드의 '틀린 이유'를 골라 두면 원인별로 진단해 드려요"; })()}</p>`
+          : `<p class="nx-tip">남은 오답이 없어요</p>`}
+      </div>
+      <div class="nx-card"><h2>약한 개념</h2>
+        ${weak.length ? `<ul class="nx-weak">${weak.map(([cid, n]) => `<li><a href="#/library/concept/${cid}"><span class="l">${esc(concept(cid)?.name ?? cid)}</span>
+          <span class="track"><i style="width:${(n / maxWeak) * 100}%"></i></span><b>${n}</b></a></li>`).join("")}</ul>
+          <button type="button" class="nx-btn primary" data-prescribe><i data-lucide="pill"></i>약한 개념으로 맞춤 5문제</button>` : `<p class="nx-tip">아직 약한 개념이 없어요</p>`}
+      </div>
+      <div class="nx-card"><h2>최근 8주</h2>
+        <div class="nx-weeks" role="img" aria-label="주별 새 오답과 극복 수">${weeks.map((w, i) => `<div class="wk"><span class="bars"><i class="made" style="height:${(w.made / maxW) * 100}%"></i><i class="done" style="height:${(w.done / maxW) * 100}%"></i></span><small>${i === 7 ? "이번 주" : `${7 - i}주 전`}</small></div>`).join("")}</div>
+        <p class="nx-legend"><span><i class="made"></i>새 오답</span><span><i class="done"></i>극복</span></p>
+      </div>` : "";
+    // 오늘 복습: 틀린 지 하루가 지난, 아직 극복 못 한 오답을 오래된 순으로
+    const due = open.filter((w) => reviewStage(w).due).sort((a, b) => a.createdAt - b.createdAt);
+    $("#note-today").innerHTML = due.length ? `
+      <h2>오늘 다시 풀 오답 <small>${due.length}문제 · 틀린 지 1·3·7일째에 다시 풀면 오래 기억해요</small></h2>
+      <div class="nx-due">${due.slice(0, 6).map((w) => { const p = Store.problem(w.problemId), st = reviewStage(w);
+        return `<button type="button" data-retry="${w.id}"><span class="age">${st.age}일째</span><span class="q" data-math>${esc(plainMath(p.stem).slice(0, 60))}${p.stem.length > 60 ? "…" : ""}</span><span class="go">다시 풀기</span></button>`; }).join("")}</div>` : "";
+  }
+
+  // 처방: 약한 개념으로 맞춤 문제 — 새 대화에서 만든다
+  function prescribe() {
+    const open = scopedNotes().filter((w) => !w.resolvedAt);
+    const byConcept = {};
+    open.forEach((w) => { const cid = Store.problem(w.problemId).conceptIds[0]; if (cid) byConcept[cid] = (byConcept[cid] ?? 0) + 1; });
+    const names = Object.entries(byConcept).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([cid]) => concept(cid)?.name).filter(Boolean);
+    if (!names.length) return toast("남은 오답이 없어요");
+    ask({ projectId: noteFilter.project || null, text: `${names.join(", ")} 개념으로 내가 자주 틀리는 유형 위주로 5문제 내줘`, files: [] });
   }
 
   function renderNoteList() {
     renderNoteStats();
     $$("#note-domains [data-domain]").forEach((b) => b.classList.toggle("on", b.dataset.domain === noteFilter.domain));
-    const list = Store.state.wrongNotes
+    const list = scopedNotes()
       .filter((w) => noteFilter.domain === "all" || Store.problem(w.problemId).domain === noteFilter.domain)
       .filter((w) => noteFilter.error === "all" || w.errorType === noteFilter.error)
       .filter((w) => !noteFilter.openOnly || !w.resolvedAt)
-      .filter((w) => !noteFilter.project || w.projectId === noteFilter.project)
       .sort((a, b) => (!!a.resolvedAt - !!b.resolvedAt) || b.createdAt - a.createdAt);
     $("#note-count").textContent = `${list.length}문제`;
     notionDoc = () => ({ kind: "notes", title: `오답노트 ${new Date().toLocaleDateString("ko-KR")}`, md: mdNotes(list) });
     $("#note-list").innerHTML = list.length ? list.map((w) => {
       const p = Store.problem(w.problemId);
-      if (!p) return "";
       const c = concept(p.conceptIds[0]) ?? { id: "", name: DOMAIN_NAME[p.domain] };
+      const st = reviewStage(w);
       return `
-        <article class="note glass-card ${w.resolvedAt ? "resolved" : ""}" style="--c:${COLOR[p.domain]}">
-          <header class="note-top">
-            <span class="subject-pill"><span class="sw"></span>${esc(subjectOf(c.id)?.name ?? DOMAIN_NAME[p.domain])}</span>
-            ${c.id ? `<a class="concept-link" href="#/library/concept/${c.id}">${esc(c.name)}</a>` : ""}
-            <span class="stars" title="난이도 ${p.difficulty}">${"★".repeat(p.difficulty)}${"☆".repeat(5 - p.difficulty)}</span>
-            ${w.resolvedAt ? '<span class="pill done-pill"><i data-lucide="check"></i>극복</span>' : ""}
+        <article class="nx-note note ${w.resolvedAt ? "resolved" : ""}">
+          <header class="nx-note-top">
+            <span class="nx-subj"><span class="sw" style="background:${COLOR[p.domain]}"></span>${esc(subjectOf(c.id)?.name ?? DOMAIN_NAME[p.domain])}</span>
+            ${c.id ? `<a class="nx-concept" href="#/library/concept/${c.id}">${esc(c.name)}</a>` : ""}
+            <span class="nx-diff" title="난이도 ${p.difficulty}">난이도 ${p.difficulty}</span>
+            ${w.resolvedAt ? '<span class="nx-done"><i data-lucide="check"></i>극복</span>' : st.next ? `<span class="nx-next">${st.next - st.age === 1 ? "내일" : `${st.next - st.age}일 뒤`} 복습</span>` : ""}
             <time>${relTime(w.createdAt)}</time>
           </header>
-          <div class="note-q">
-            <p class="stem" data-math>${esc(p.stem)}</p>
-            ${isShort(p) ? `<div class="note-short"><span class="pill">${TYPE_LABEL[ptype(p)] ?? "단답형"}</span>내 답 <b>${esc((w.answer || "–").length > 80 ? `${w.answer.slice(0, 80)}…` : w.answer || "–")}</b></div>` : `
-            <ol class="note-choices">
-              ${p.choices.map((ch, i) => `<li class="${String(i + 1) === w.answer ? "mine" : ""}"><span class="n">${i + 1}</span><span data-math>${esc(ch)}</span>${String(i + 1) === w.answer ? '<em>내 답</em>' : ""}</li>`).join("")}
-            </ol>`}
-          </div>
-          <footer class="note-foot">
-            <label class="why-select"><i data-lucide="tag"></i>
+          <p class="nx-stem stem" data-math>${esc(p.stem)}</p>
+          ${isShort(p) ? `<div class="nx-short"><span>${TYPE_LABEL[ptype(p)] ?? "단답형"}</span>내 답 <b>${esc((w.answer || "–").length > 80 ? `${w.answer.slice(0, 80)}…` : w.answer || "–")}</b></div>` : `
+          <ol class="nx-choices">
+            ${p.choices.map((ch, i) => `<li class="${String(i + 1) === w.answer ? "mine" : ""}"><span class="n">${i + 1}</span><span data-math>${esc(ch)}</span>${String(i + 1) === w.answer ? "<em>내 답</em>" : ""}</li>`).join("")}
+          </ol>`}
+          <footer class="nx-foot print-hide">
+            <label class="nx-why" style="--dot:${ERROR_COLOR[w.errorType] ?? "#C3C7D1"}"><i></i>
               <select data-set-error="${w.id}" aria-label="틀린 이유">
                 ${Object.entries(ERROR_TYPES).map(([k, v]) => `<option value="${k}" ${w.errorType === k ? "selected" : ""}>${k === "unknown" ? "틀린 이유 고르기" : v}</option>`).join("")}
-              </select>
-            </label>
-            <div class="note-actions">
-              <button class="btn-ghost glassy" disabled title="AI 연결 후 사용할 수 있어요"><i data-lucide="sparkles"></i>변형 문제</button>
-              <button class="icon-btn glassy" data-del-note="${w.id}" title="삭제" aria-label="삭제"><i data-lucide="trash-2"></i></button>
-              <button class="btn-primary" data-retry="${w.id}"><i data-lucide="rotate-ccw"></i>${w.resolvedAt ? "한 번 더 풀기" : "다시 풀기"}</button>
+              </select></label>
+            <div class="nx-acts">
+              ${c.id ? `<a class="nx-btn" href="#/library/concept/${c.id}"><i data-lucide="book-open"></i>개념 레슨</a>` : ""}
+              <button class="nx-btn icon" data-del-note="${w.id}" title="삭제" aria-label="삭제"><i data-lucide="trash-2"></i></button>
+              <button class="nx-btn primary" data-retry="${w.id}"><i data-lucide="rotate-ccw"></i>${w.resolvedAt ? "한 번 더 풀기" : "다시 풀기"}</button>
             </div>
           </footer>
         </article>`;
     }).join("") : `
-      <div class="empty glass-card"><i data-lucide="party-popper"></i><b>${noteFilter.openOnly ? "남은 오답이 없어요" : "오답이 없어요"}</b>문제를 풀다 틀리면 여기에 모여요</div>`;
+      <div class="nx-empty"><i data-lucide="party-popper"></i><b>${noteFilter.openOnly ? "남은 오답이 없어요" : "오답이 없어요"}</b><span>문제를 풀다 틀리면 여기에 모여요</span></div>`;
     icons();
   }
 
