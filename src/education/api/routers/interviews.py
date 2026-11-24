@@ -35,6 +35,7 @@ def _kind_out(k: iv_svc.Kind) -> dict:
             "prep_sec": k.prep_sec, "answer_sec": k.answer_sec, "levels": list(k.levels), "level_note": k.level_note,
             "time_note": k.time_note, "fixed": k.fixed, "survey_min": k.survey_min, "survey_keys": list(k.survey_keys),
             "adjust_after": k.adjust_after, "replays": k.replays, "level_bands": dict(k.level_bands),
+            "steps": [{"title": t, "sub": sub, "keys": list(keys)} for t, sub, keys in k.steps],
             "fields": [{"key": f.key, "label": f.label, "placeholder": f.placeholder, "kind": f.kind,
                         "options": list(f.options), "required": f.required, "max_len": f.max_len, "min_pick": f.min_pick} for f in k.fields]}
 
