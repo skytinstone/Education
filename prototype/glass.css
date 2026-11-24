@@ -694,3 +694,10 @@ body.pdf-capture .note-item, body.pdf-capture .exam-paper {
   -webkit-backdrop-filter: none !important; backdrop-filter: none !important;
 }
 body.pdf-capture .exam-paper { border: 0 !important; }
+
+/* ---------- 대화 화면 간격·폭: 질문·답 한 쌍은 가깝게, 쌍과 쌍 사이는 넓게 ---------- */
+@media (min-width: 1400px) { .chat-view { max-width: 860px; } }
+.thread { gap: 16px; }
+.msg.ai + .msg.user { margin-top: 20px; }               /* 다음 질문 = 새 묶음 */
+.msg.ai .ai-body { font-size: 15px; line-height: 1.7; }
+.msg.ai .ai-text p + p { margin-top: .6em; }
