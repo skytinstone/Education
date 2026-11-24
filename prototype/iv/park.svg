@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" role="img" aria-label="A park on a sunny day">
+  <rect width="600" height="400" fill="#bfe6ff"/>
+  <circle cx="530" cy="60" r="32" fill="#fde047"/>
+  <rect y="210" width="600" height="190" fill="#86efac"/>
+  <!-- 나무 -->
+  <g><rect x="70" y="140" width="18" height="80" fill="#854d0e"/><circle cx="79" cy="125" r="48" fill="#16a34a"/></g>
+  <g><rect x="470" y="150" width="16" height="70" fill="#854d0e"/><circle cx="478" cy="135" r="40" fill="#15803d"/></g>
+  <!-- 연못 -->
+  <ellipse cx="470" cy="300" rx="100" ry="30" fill="#60a5fa"/>
+  <!-- 길 -->
+  <path d="M0 330q200-60 600-40v30q-380-20-600 40z" fill="#e7d3b8"/>
+  <!-- 달리는 남자 -->
+  <circle cx="250" cy="215" r="17" fill="#e0ac69"/><path d="M243 232l-8 48" stroke="#ef4444" stroke-width="22" stroke-linecap="round"/>
+  <path d="M238 240l-26 18M244 240l22 10" stroke="#e0ac69" stroke-width="8" stroke-linecap="round"/>
+  <path d="M236 278l-20 30M238 278l22 24" stroke="#1e293b" stroke-width="10" stroke-linecap="round"/>
+  <!-- 벤치에서 책 읽는 여자 -->
+  <rect x="100" y="270" width="110" height="10" fill="#92400e"/><path d="M108 280v26M202 280v26" stroke="#78350f" stroke-width="6"/>
+  <rect x="100" y="248" width="110" height="8" fill="#92400e"/>
+  <circle cx="150" cy="222" r="15" fill="#f2c9a0"/><path d="M136 218q14-22 28 0v14h-28z" fill="#7c2d12"/>
+  <rect x="134" y="236" width="32" height="36" rx="10" fill="#a855f7"/>
+  <rect x="140" y="244" width="22" height="14" fill="#fff"/>
+  <!-- 공놀이하는 아이 둘 -->
+  <g><circle cx="340" cy="262" r="12" fill="#f2c9a0"/><rect x="330" y="274" width="22" height="28" rx="8" fill="#f59e0b"/></g>
+  <g><circle cx="410" cy="268" r="11" fill="#c68642"/><rect x="400" y="279" width="20" height="26" rx="8" fill="#0ea5e9"/></g>
+  <circle cx="375" cy="300" r="9" fill="#fff" stroke="#ef4444" stroke-width="3"/>
+</svg>

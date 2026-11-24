@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" role="img" aria-label="An office meeting room">
+  <rect width="600" height="400" fill="#eef2f7"/>
+  <!-- 창문과 도시 -->
+  <rect x="330" y="30" width="250" height="170" rx="6" fill="#bfdbfe"/>
+  <g fill="#93c5fd"><rect x="345" y="110" width="30" height="90"/><rect x="385" y="80" width="40" height="120"/><rect x="435" y="120" width="28" height="80"/><rect x="472" y="95" width="36" height="105"/><rect x="518" y="130" width="50" height="70"/></g>
+  <path d="M455 30v170M330 115h250" stroke="#f8fafc" stroke-width="6"/>
+  <!-- 화면과 차트 -->
+  <rect x="40" y="40" width="230" height="140" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="3"/>
+  <g fill="#6366f1"><rect x="70" y="120" width="26" height="40"/><rect x="110" y="100" width="26" height="60"/><rect x="150" y="80" width="26" height="80"/><rect x="190" y="60" width="26" height="100"/></g>
+  <path d="M65 160h170" stroke="#94a3b8" stroke-width="3"/>
+  <!-- 서서 가리키는 사람 -->
+  <circle cx="295" cy="160" r="20" fill="#f2c9a0"/><path d="M285 145q10-14 22 0" fill="#3f3f46"/>
+  <path d="M275 185h40l8 95h-56z" fill="#e11d48"/>
+  <path d="M278 195l-38-55" stroke="#f2c9a0" stroke-width="10" stroke-linecap="round"/>
+  <path d="M285 280v60M305 280v60" stroke="#334155" stroke-width="12" stroke-linecap="round"/>
+  <!-- 탁자 -->
+  <rect x="60" y="270" width="480" height="26" rx="10" fill="#a16207"/>
+  <path d="M110 296v90M490 296v90" stroke="#854d0e" stroke-width="12"/>
+  <!-- 노트북·종이 -->
+  <rect x="120" y="248" width="60" height="22" rx="3" fill="#475569"/><rect x="410" y="248" width="60" height="22" rx="3" fill="#475569"/>
+  <rect x="220" y="258" width="40" height="10" fill="#fff"/><rect x="330" y="258" width="40" height="10" fill="#fff"/>
+  <!-- 앉은 사람들 -->
+  <g><circle cx="150" cy="210" r="18" fill="#c68642"/><rect x="128" y="228" width="44" height="42" rx="12" fill="#2563eb"/></g>
+  <g><circle cx="240" cy="215" r="17" fill="#f2c9a0"/><path d="M224 210q16-22 32 0" fill="#78350f"/><rect x="220" y="232" width="40" height="38" rx="12" fill="#16a34a"/></g>
+  <g><circle cx="360" cy="215" r="17" fill="#e0ac69"/><rect x="340" y="232" width="40" height="38" rx="12" fill="#f59e0b"/></g>
+  <g><circle cx="445" cy="210" r="18" fill="#f2c9a0"/><path d="M428 205q17-24 34 0" fill="#111827"/><rect x="423" y="228" width="44" height="42" rx="12" fill="#7c3aed"/></g>
+  <!-- 화분 -->
+  <rect x="545" y="320" width="34" height="40" rx="4" fill="#b45309"/>
+  <g fill="#22c55e"><ellipse cx="555" cy="300" rx="12" ry="26"/><ellipse cx="570" cy="296" rx="12" ry="30"/><ellipse cx="562" cy="290" rx="9" ry="28"/></g>
+</svg>

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" role="img" aria-label="A cafe">
+  <rect width="600" height="400" fill="#fdf6ec"/>
+  <rect y="300" width="600" height="100" fill="#e7d3b8"/>
+  <!-- 메뉴판 -->
+  <rect x="60" y="30" width="220" height="110" rx="6" fill="#1f2937"/>
+  <g fill="#f8fafc" font-family="sans-serif" font-size="15"><text x="80" y="60">MENU</text><text x="80" y="85">Latte ....... 4.50</text><text x="80" y="105">Americano .. 3.50</text><text x="80" y="125">Tea ......... 3.00</text></g>
+  <!-- 바리스타·카운터 -->
+  <circle cx="170" cy="185" r="20" fill="#f2c9a0"/><path d="M152 180q18-26 36 0" fill="#4b5563"/>
+  <rect x="145" y="205" width="50" height="60" rx="12" fill="#f8fafc"/><rect x="152" y="215" width="36" height="50" fill="#166534"/>
+  <rect x="40" y="250" width="290" height="80" rx="6" fill="#92400e"/>
+  <rect x="60" y="222" width="50" height="30" rx="4" fill="#9ca3af"/><rect x="72" y="208" width="26" height="16" fill="#6b7280"/>
+  <rect x="215" y="236" width="16" height="16" rx="3" fill="#fff"/>
+  <!-- 기다리는 손님 (휴대폰) -->
+  <circle cx="380" cy="180" r="20" fill="#e0ac69"/><path d="M362 172q18-26 36 0" fill="#111827"/>
+  <rect x="356" y="200" width="48" height="80" rx="14" fill="#0ea5e9"/>
+  <rect x="352" y="222" width="12" height="20" rx="2" fill="#111827"/>
+  <path d="M368 280v60M392 280v60" stroke="#1e293b" stroke-width="12" stroke-linecap="round"/>
+  <!-- 창가 둥근 탁자의 두 사람 -->
+  <rect x="440" y="40" width="140" height="150" rx="6" fill="#bae6fd"/><path d="M510 40v150M440 115h140" stroke="#fdf6ec" stroke-width="6"/>
+  <ellipse cx="510" cy="265" rx="55" ry="12" fill="#78350f"/><path d="M510 277v60" stroke="#57534e" stroke-width="8"/>
+  <rect x="490" y="246" width="14" height="18" rx="3" fill="#fff"/><rect x="518" y="246" width="14" height="18" rx="3" fill="#fff"/>
+  <g><circle cx="452" cy="220" r="16" fill="#f2c9a0"/><path d="M437 214q15-22 30 0" fill="#b45309"/><rect x="434" y="236" width="36" height="46" rx="12" fill="#db2777"/></g>
+  <g><circle cx="568" cy="220" r="16" fill="#c68642"/><rect x="550" y="236" width="36" height="46" rx="12" fill="#4d7c0f"/></g>
+</svg>
