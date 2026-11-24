@@ -1174,3 +1174,9 @@ body.pdf-capture .exam-body { column-count: 1 !important; column-rule: none !imp
 .nt-help { margin: 0; padding-left: 20px; display: grid; gap: 10px; font-size: 14px; line-height: 1.7; color: var(--ink-2); }
 .nt-help b { color: var(--ink); }
 .nt-help code { padding: 1px 5px; border-radius: 5px; background: var(--fill); font-size: 12.5px; }
+
+/* ---------- Google Drive 에서 고르기 (기출·교재 올리기 · 자기소개서) ---------- */
+.drive-pick { align-self: flex-start; height: 36px; font-size: 13px; }
+.drive-pick svg { width: 15px; height: 15px; }
+.picker-dialog-bg { z-index: 9998 !important; }
+.picker-dialog { z-index: 9999 !important; }

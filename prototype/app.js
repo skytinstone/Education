@@ -976,20 +976,31 @@
     const blob = await r.blob();
     return new File([blob], native ? `${doc.name}.pdf` : doc.name, { type: native ? "application/pdf" : (doc.mimeType || blob.type) });
   }
-  function openDrivePicker(cfg, left, onPick) {
+  // Google 문서·텍스트 파일을 글로 받기 (자기소개서 불러오기)
+  async function driveText(doc, token) {
+    const native = doc.mimeType === "application/vnd.google-apps.document";
+    const url = native
+      ? `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(doc.id)}/export?mimeType=text/plain`
+      : `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(doc.id)}?alt=media&supportsAllDrives=true`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) throw new Error("Drive 에서 문서를 읽지 못했어요");
+    return (await r.text()).replace(/\r\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  // opts: { title, mimes, fetch(doc, token) } — 없으면 대화 첨부용 (PDF·사진·문서 → 파일)
+  function openDrivePicker(cfg, left, onPick, opts = {}) {
     if (!window.google?.accounts?.oauth2 || !window.google?.picker) {
       prepareDrive().then(() => toast("Google Drive 를 준비했어요. 한 번 더 눌러 주세요"), (e) => toast(e.message));
       return;
     }
     driveToken(cfg).then((token) => {
       const P = google.picker;
-      const view = new P.DocsView(P.ViewId.DOCS).setMimeTypes(DRIVE_MIMES).setIncludeFolders(true).setSelectFolderEnabled(false);
+      const view = new P.DocsView(P.ViewId.DOCS).setMimeTypes(opts.mimes || DRIVE_MIMES).setIncludeFolders(true).setSelectFolderEnabled(false);
       const builder = new P.PickerBuilder().addView(view).addView(new P.DocsUploadView())
         .setOAuthToken(token).setDeveloperKey(cfg.api_key).setAppId(cfg.app_id)
-        .setLocale("ko").setTitle("첨부할 파일 고르기 (PDF·사진·문서)")
+        .setLocale("ko").setTitle(opts.title || "첨부할 파일 고르기 (PDF·사진·문서)")
         .setCallback((data) => {
           if (data.action !== P.Action.PICKED) return;
-          onPick(data.docs.slice(0, left).map((d) => ({ name: d.name, size: d.sizeBytes, file: driveDownload(d, token) })));
+          onPick(data.docs.slice(0, left).map((d) => ({ name: d.name, size: d.sizeBytes, file: (opts.fetch || driveDownload)(d, token) })));
         });
       if (left > 1) builder.enableFeature(P.Feature.MULTISELECT_ENABLED).setMaxItems(left);
       builder.build().setVisible(true);
@@ -3376,6 +3387,7 @@
         ? `<label class="field ${f.key === "resume" ? "iv-resume" : ""}"><span>${esc(f.label)}${f.required ? " *" : ""}
             <small class="iv-count" data-count-for="${f.key}">0 / ${f.max_len.toLocaleString()}자</small></span>
             <textarea name="${f.key}" rows="${f.key === "resume" ? 11 : 5}" maxlength="${f.max_len}" placeholder="${esc(f.placeholder)}"></textarea>
+            ${f.key === "resume" ? '<button type="button" class="btn-ghost drive-pick" data-drive-resume hidden><i data-lucide="hard-drive"></i>Google Drive 에서 불러오기 (Google 문서·텍스트 파일)</button>' : ""}
             ${f.key === "resume" ? '<small class="iv-hint"><i data-lucide="sparkles"></i>자기소개서의 경험·성과 문장을 읽고, 그 문장을 파고드는 질문을 만들어요. 질문마다 어느 문장에서 나왔는지 보여 드려요.</small>' : ""}</label>`
         : `<label class="field"><span>${esc(f.label)}${f.required ? " *" : ""}</span><input name="${f.key}" maxlength="${f.max_len}" placeholder="${esc(f.placeholder)}" autocomplete="off" /></label>`;
     const steps = k.steps?.length ? k.steps : null;
@@ -3505,6 +3517,22 @@
       } catch (err) { toast(err.message); delete btn.dataset.busy; btn.disabled = false; btn.innerHTML = label; icons(); }
     };
     $("[data-iv-again]")?.addEventListener("click", (e) => startWith(ivLastSetup(k.key), e.currentTarget));
+    // 자기소개서를 Google Drive 에서 (Google 문서는 글로 바꿔 넣는다)
+    const resumeBtn = $("[data-drive-resume]", form);
+    if (resumeBtn) Store.driveConfig().then((cfg) => {
+      if (!cfg) return;
+      prepareDrive().catch(() => {});
+      resumeBtn.hidden = false;
+      resumeBtn.onclick = () => openDrivePicker(cfg, 1, async ([s]) => {
+        try {
+          const text = await s.file;
+          const ta = $("textarea[name=resume]", form);
+          ta.value = text.slice(0, Number(ta.maxLength) || 6000);
+          ta.dispatchEvent(new Event("input", { bubbles: true }));
+          toast(`${s.name} 을 불러왔어요${text.length > ta.value.length ? ` (앞 ${ta.value.length.toLocaleString()}자까지)` : ""}`);
+        } catch (err) { toast(err.message); }
+      }, { title: "자기소개서 고르기 (Google 문서·텍스트 파일)", mimes: "application/vnd.google-apps.document,text/plain", fetch: driveText });
+    });
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const setup = {};
@@ -5554,6 +5582,7 @@
         <b>파일을 끌어다 놓거나 눌러서 고르세요</b>
         <span>PDF(30쪽 이하) 또는 사진 · 파일당 20MB까지 · 여러 개 가능</span>
       </label>
+      <button type="button" class="btn-ghost drive-pick" data-drive-pick hidden><i data-lucide="hard-drive"></i>Google Drive 에서 고르기</button>
       <ul class="file-list" data-files></ul>
       <label class="check rights"><input type="checkbox" data-rights /> 본인이 학습용으로 쓸 수 있는 자료예요 <small>(올린 자료와 그것으로 만든 문제는 나에게만 보여요)</small></label>`;
   }
@@ -5575,6 +5604,18 @@
       onChange(files);
     };
     input.addEventListener("change", () => { add(input.files); input.value = ""; });
+    // Google Drive 에서 고르기 (서버에 Drive 설정이 있을 때만 보인다)
+    const driveBtn = $("[data-drive-pick]", root);
+    if (driveBtn) Store.driveConfig().then((cfg) => {
+      if (!cfg) return;
+      prepareDrive().catch(() => {});
+      driveBtn.hidden = false;
+      driveBtn.onclick = () => openDrivePicker(cfg, 10, async (srcs) => {
+        for (const s of srcs) {
+          try { add([await s.file]); } catch (err) { toast(`${s.name}: ${err.message}`); }
+        }
+      }, { title: "올릴 기출·교재 고르기 (PDF·사진·Google 문서)", mimes: [...UPLOAD_TYPES, "application/vnd.google-apps.document", "application/vnd.google-apps.presentation"].join(",") });
+    });
     zone.addEventListener("dragover", (e) => { e.preventDefault(); zone.classList.add("over"); });
     zone.addEventListener("dragleave", () => zone.classList.remove("over"));
     zone.addEventListener("drop", (e) => { e.preventDefault(); zone.classList.remove("over"); add(e.dataTransfer.files); });
