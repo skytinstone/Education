@@ -885,3 +885,48 @@ body.pdf-capture .exam-body { column-count: 1 !important; column-rule: none !imp
 @media (prefers-reduced-motion: reduce) { .iv-mic.on, .iv-ai .ai-avatar i { animation: none !important; } }
 
 .iv-end a { text-decoration: none; }
+
+/* ---------- AI 면접: 오른쪽 위 내 모습 · 마이크 입력 ---------- */
+.iv.with-cam { max-width: 1120px; display: grid; grid-template-columns: minmax(0, 1fr) 260px; grid-template-rows: auto 1fr; column-gap: 24px; align-items: start; }
+.iv.with-cam .iv-bar { grid-column: 1 / -1; }
+.iv.with-cam .iv-stage { grid-column: 1; }
+.iv-cam { grid-column: 2; grid-row: 2; position: sticky; top: 16px; margin-top: 24px; border-radius: 20px; overflow: hidden; background: #0f172a;
+  aspect-ratio: 4 / 3; box-shadow: var(--lg-shadow); outline: 2px solid transparent; transition: outline-color .2s; }
+.iv-cam.talking { outline-color: rgba(16, 185, 129, .85); }
+.iv-cam video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); /* 거울처럼 */ }
+.iv-cam.off video { display: none; }
+.iv-cam-ph { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 14px;
+  color: rgba(255, 255, 255, .75); font-size: 12px; text-align: center; line-height: 1.5; }
+.iv-cam.off .iv-cam-ph { display: flex; }
+.iv-cam-ph > svg { width: 34px; height: 34px; opacity: .6; }
+.iv-cam-ph .btn-ghost { height: 30px; font-size: 12px; padding: 0 12px; background: rgba(255, 255, 255, .92); }
+.iv-cam-bar { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.iv-cam-mic { display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 10px; border-radius: var(--r-pill);
+  background: rgba(15, 23, 42, .55); color: #fff; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.iv-cam-mic > svg { width: 14px; height: 14px; }
+.iv-cam .lv { display: inline-flex; align-items: center; gap: 2px; height: 16px; }
+.iv-cam .lv i { width: 3px; height: 14px; border-radius: 2px; background: #34d399; transform: scaleY(.2); transition: transform .08s; }
+.iv-cam.nomic .iv-cam-mic { background: rgba(225, 29, 72, .8); }
+.iv-cam.nomic .lv { display: none; }
+.iv-cam-btn { width: 32px; height: 32px; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+  background: rgba(15, 23, 42, .55); color: #fff; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.iv-cam-btn:hover { background: rgba(15, 23, 42, .75); }
+.iv-cam-btn svg { width: 15px; height: 15px; }
+.iv-cam.off .iv-cam-btn { background: rgba(225, 29, 72, .85); }
+.iv-cam-note { position: absolute; top: 8px; left: 8px; display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: var(--r-pill);
+  background: rgba(15, 23, 42, .5); color: rgba(255, 255, 255, .85); font-size: 10.5px; }
+.iv-cam-note svg { width: 11px; height: 11px; }
+@media (max-width: 1100px) {
+  .iv.with-cam { grid-template-columns: minmax(0, 1fr) 200px; column-gap: 16px; }
+}
+.iv-cam [data-iv-media-retry][hidden] { display: none; }
+@media (max-width: 820px) { /* 좁은 화면: 상단바 아래 오른쪽에 작게 */
+  .iv.with-cam { display: flex; }
+  .iv-cam { order: 1; position: relative; top: auto; align-self: flex-end; width: 132px; margin: 12px 0 0; border-radius: 14px; }
+  .iv.with-cam .iv-stage { order: 2; padding-top: 12px; }
+  .iv.with-cam .iv-ai { display: none; } /* 내 모습 자리를 주려고 별 아바타는 숨김 */
+  .iv-cam-note, .iv-cam-mic > svg { display: none; }
+  .iv-cam-bar { left: 4px; right: 4px; bottom: 4px; }
+  .iv-cam-mic { height: 24px; padding: 0 6px; }
+  .iv-cam-btn { width: 26px; height: 26px; }
+}
