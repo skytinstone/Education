@@ -1,0 +1,106 @@
+"""AI 면접 모드 — AI 없이(질문 은행 + 측정값 리포트)와 가짜 AI(질문 계획·꼬리질문·리포트) 모두."""
+
+from education.services import interview
+from education.services.llm import LLMResult, Usage
+
+OPIC_SETUP = {"role": "학생", "home": "가족과 함께", "hobbies": "jogging, movies", "target": "IH"}
+LONG_EN = ("I usually go jogging along the river near my house three times a week because it helps me clear my mind "
+           "and stay healthy, and last summer I even ran my first half marathon with my older brother which was amazing")
+
+
+def run(client, auth, kind="opic", setup=OPIC_SETUP) -> dict:
+    r = client.post("/api/interviews", json={"kind": kind, "setup": setup}, headers=auth)
+    assert r.status_code == 201, r.text
+    return r.json()
+
+
+def test_kinds_list(client, auth):
+    kinds = client.get("/api/interviews/kinds", headers=auth).json()
+    opic = next(k for k in kinds if k["key"] == "opic")
+    assert opic["lang"] == "en" and opic["mains"] == 6 and "IH" in opic["levels"]
+    assert any(f["key"] == "role" and f["required"] for f in opic["fields"])
+
+
+def test_start_validates(client, auth):
+    assert client.post("/api/interviews", json={"kind": "nope"}, headers=auth).status_code == 422
+    r = client.post("/api/interviews", json={"kind": "opic", "setup": {"hobbies": "x"}}, headers=auth)
+    assert r.status_code == 422 and "지금 하는 일" in r.json()["detail"]
+    # 고를 수 없는 값은 버린다
+    d = run(client, auth, setup={**OPIC_SETUP, "target": "SUPER"})
+    assert "target" not in d["setup"]
+
+
+def test_flow_without_ai(client, auth):
+    d = run(client, auth)
+    assert d["by_ai"] is False and d["current"] == 0 and d["mains"] == 6
+    assert d["turns"][0]["q"].startswith("Let's start")
+    assert "jogging" in " ".join(interview.OPIC.bank(OPIC_SETUP, __import__("random").Random(1)))
+    iid = d["id"]
+    for i in range(6):
+        text = LONG_EN if i % 2 == 0 else ("um I like like movies" if i == 1 else "")
+        d = client.post(f"/api/interviews/{iid}/answers", json={"text": text, "sec": 60}, headers=auth).json()
+    assert d["status"] == "answered" and d["current"] is None and len(d["turns"]) == 6  # AI 없으면 꼬리질문 없음
+    assert client.post(f"/api/interviews/{iid}/answers", json={"text": "x"}, headers=auth).status_code == 409
+    d = client.post(f"/api/interviews/{iid}/finish", headers=auth).json()
+    rep = d["report"]
+    assert d["status"] == "done" and rep["by_ai"] is False and rep["level"] in interview.OPIC.levels
+    assert rep["metrics"]["skipped"] == 2 and rep["metrics"]["fillers"] >= 2 and rep["metrics"]["rate_unit"] == "단어/분"
+    assert any("답하지 않은 질문" in t for t in rep["improve"])
+    assert len(rep["per"]) == 6
+    rows = client.get("/api/interviews", headers=auth).json()
+    assert rows[0]["id"] == iid and rows[0]["level"] == rep["level"]
+
+
+def test_finish_early_and_owner_only(client, auth):
+    from conftest import signup
+    iid = run(client, auth)["id"]
+    client.post(f"/api/interviews/{iid}/answers", json={"text": LONG_EN, "sec": 40}, headers=auth)
+    d = client.post(f"/api/interviews/{iid}/finish", headers=auth).json()
+    assert d["status"] == "done" and d["report"]["metrics"]["total"] == 1
+    other_auth = signup(client, name="남")
+    assert client.get(f"/api/interviews/{iid}", headers=other_auth).status_code == 404
+    assert client.delete(f"/api/interviews/{iid}", headers=auth).status_code == 204
+
+
+def test_measure():
+    m = interview.measure("음 저는 그 학생이에요 음 그러니까 열심히 해요", 30, "ko")
+    assert m["fillers"] >= 3 and m["syllables"] > 10 and m["rate"]
+    e = interview.measure("Um, I like, you know, movies", 10, "en")
+    assert e["words"] == 6 and e["fillers"] == 3
+
+
+class FakeLLM:
+    def __init__(self):
+        self.calls = []
+
+    def structured(self, *, model, effort, instructions, prompt, schema, max_output_tokens=16000, files=None):
+        self.calls.append(schema.__name__)
+        if schema is interview.Plan:
+            data = interview.Plan(questions=[f"AI question {i + 1}?" for i in range(6)])
+        elif schema is interview.FollowUp:
+            data = interview.FollowUp(ask=True, question="Can you give a specific example?")
+        else:
+            n = prompt.count("질문: ")
+            data = interview.Report(level="IH", score=78, summary="좋아요", strengths=["구체적"], improve=["시제"],
+                                    items=[interview.ItemFeedback(score=70, feedback="좋음", better="Better answer.") for _ in range(n)])
+        return LLMResult(data=data, usage=Usage(model=model))
+
+
+def test_flow_with_ai(client, auth, monkeypatch):
+    llm = FakeLLM()
+    monkeypatch.setattr(interview, "get_llm", lambda: llm)
+    d = run(client, auth)
+    assert d["by_ai"] is True and d["turns"][0]["q"] == "AI question 1?"
+    iid = d["id"]
+    d = client.post(f"/api/interviews/{iid}/answers", json={"text": LONG_EN, "sec": 60}, headers=auth).json()
+    assert d["turns"][-1]["q"] == "AI question 2?"  # 첫 질문(자기소개) 뒤에는 꼬리질문 없음
+    d = client.post(f"/api/interviews/{iid}/answers", json={"text": LONG_EN, "sec": 60}, headers=auth).json()
+    assert d["turns"][-1]["follow"] is True  # 두 번째부터 꼬리질문
+    while d["status"] == "active":
+        d = client.post(f"/api/interviews/{iid}/answers", json={"text": LONG_EN, "sec": 60}, headers=auth).json()
+    follows = [t for t in d["turns"] if t["follow"]]
+    assert len(follows) == interview.OPIC.follow_ups and len(d["turns"]) == 6 + len(follows)
+    d = client.post(f"/api/interviews/{iid}/finish", headers=auth).json()
+    rep = d["report"]
+    assert rep["by_ai"] and rep["level"] == "IH" and rep["score"] == 78 and len(rep["items"]) == len(d["turns"])
+    assert llm.calls.count("Plan") == 1 and llm.calls.count("Report") == 1
