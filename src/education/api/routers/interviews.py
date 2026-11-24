@@ -21,6 +21,10 @@ class InterviewIn(BaseModel):
     setup: dict[str, str] = Field(default_factory=dict, max_length=20)
 
 
+class AdjustIn(BaseModel):
+    choice: str = Field(pattern="^(easier|same|harder)$")  # 쉬운 질문 · 비슷한 질문 · 어려운 질문
+
+
 class AnswerIn(BaseModel):
     text: str = Field(default="", max_length=6000)  # 빈 값 = 넘어가기
     sec: int = Field(default=0, ge=0, le=1800)
@@ -29,9 +33,10 @@ class AnswerIn(BaseModel):
 def _kind_out(k: iv_svc.Kind) -> dict:
     return {"key": k.key, "name": k.name, "desc": k.desc, "lang": k.lang, "mains": k.mains, "follow_ups": k.follow_ups,
             "prep_sec": k.prep_sec, "answer_sec": k.answer_sec, "levels": list(k.levels), "level_note": k.level_note,
-            "time_note": k.time_note, "fixed": k.fixed,
+            "time_note": k.time_note, "fixed": k.fixed, "survey_min": k.survey_min, "survey_keys": list(k.survey_keys),
+            "adjust_after": k.adjust_after, "replays": k.replays, "level_bands": dict(k.level_bands),
             "fields": [{"key": f.key, "label": f.label, "placeholder": f.placeholder, "kind": f.kind,
-                        "options": list(f.options), "required": f.required, "max_len": f.max_len} for f in k.fields]}
+                        "options": list(f.options), "required": f.required, "max_len": f.max_len, "min_pick": f.min_pick} for f in k.fields]}
 
 
 def _summary(iv: m.Interview) -> dict:
@@ -87,6 +92,17 @@ def answer(interview_id: UUID, body: AnswerIn, user: CurrentUser, db: DB) -> dic
     if iv.status != "active":
         raise HTTPException(status.HTTP_409_CONFLICT, "이미 끝난 면접이에요")
     iv_svc.answer(db, user, iv, body.text, body.sec)
+    db.commit()
+    return _detail(iv)
+
+
+@router.post("/{interview_id}/adjust")
+def adjust(interview_id: UUID, body: AdjustIn, user: CurrentUser, db: DB) -> dict:
+    """OPIc 난이도 재조정 — 1차 세션이 끝나면 2차 세션의 난이도를 다시 고른다."""
+    iv = owned(db, m.Interview, interview_id, user)
+    if iv.status != "adjust":
+        raise HTTPException(status.HTTP_409_CONFLICT, "지금은 난이도를 다시 고를 때가 아니에요")
+    iv_svc.adjust(db, user, iv, body.choice)
     db.commit()
     return _detail(iv)
 
