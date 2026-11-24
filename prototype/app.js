@@ -3215,16 +3215,6 @@
   let iv = null; // 진행 중인 면접 화면 상태 { id, d, phase, timer, rec, ... }
   const IV_ICON = { opic: "languages", toeic: "headphones", job: "briefcase-business", aicomp: "bot", admission: "graduation-cap" };
   const ivVoiceOn = () => { try { return localStorage.getItem("eureka.ivVoice") !== "0"; } catch { return true; } };
-  // OPIc 배경 설문 항목 아이콘 (lucide)
-  const IV_PICK_ICON = {
-    "영화 보기": "film", "공연 보기": "music", "박물관 가기": "landmark", "공원 가기": "trees", "캠핑 가기": "tent", "해변 가기": "sun",
-    "카페 가기": "coffee", "쇼핑하기": "shopping-bag", "TV·리얼리티쇼 보기": "tv", "SNS에 글 올리기": "at-sign", "봉사활동": "hand-heart",
-    "게임하기": "gamepad-2", "음악 감상": "headphones", "악기 연주": "guitar", "요리하기": "chef-hat", "독서": "book-open",
-    "그림 그리기": "palette", "글쓰기": "pen-line", "반려동물 기르기": "dog", "사진 찍기": "camera", "조깅": "activity", "걷기": "footprints",
-    "수영": "waves", "헬스": "dumbbell", "요가": "flower-2", "자전거": "bike", "등산": "mountain", "축구": "trophy", "농구": "circle-dot",
-    "테니스": "target", "골프": "flag", "운동을 전혀 하지 않음": "ban", "국내 여행": "map", "해외 여행": "plane", "국내 출장": "briefcase",
-    "해외 출장": "globe", "집에서 보내는 휴가": "sofa",
-  };
   const ivLastSetup = (key) => { try { return JSON.parse(localStorage.getItem(`eureka.ivSetup.${key}`) || "null"); } catch { return null; } };
   const ivCountLabel = (k) => (k.survey_min ? "자기 평가에 따라 12·15문항" : `${k.mains}문항`);
   const ivKindsLoad = async () => (ivKinds ??= await Store.interviewKinds());
@@ -3378,147 +3368,210 @@
     icons();
   }
 
+  // 면접 설정 — 위: 제목과 Step / 가운데: 지금 Step 하나만 넓게(옆으로 미끄러지며 전환) + 오른쪽 미리보기 / 아래: 안내 한 줄과 버튼
+  // Step 이 정해진 종류(OPIc)는 서버의 steps 를 따르고, 나머지는 한 장으로 보여 준다
   async function renderIvSetup(key) {
     const kinds = await ivKindsLoad();
     const k = kinds.find((x) => x.key === key);
     if (!k) return go("/interview");
-    const lastSurvey = (k.survey_keys || []).at(-1);
-    const surveyNote = k.survey_min ? `<p class="iv-survey" id="iv-survey" aria-live="polite">4~7번에서 <b>0</b>개 골랐어요 · ${k.survey_min}개 이상 골라 주세요</p>` : "";
-    const field = (f) => f.kind === "multi"
-      ? `<div class="field iv-multi"><span>${esc(f.label)}<small class="iv-count" data-pick-count="${f.key}">0개</small></span>
-          <div class="iv-icards" data-field="${f.key}" data-multi>${f.options.map((o) =>
-            `<button type="button" class="iv-ic" data-opt="${esc(o)}" aria-pressed="false"><i data-lucide="${IV_PICK_ICON[o] || "circle"}"></i><span>${esc(o)}</span></button>`).join("")}</div></div>${f.key === lastSurvey ? surveyNote : ""}`
-      : f.kind === "level"
-      ? `<div class="field"><span>${esc(f.label)}${f.required ? " *" : ""}<small class="iv-count">고른 단계에 따라 질문 수와 난이도가 정해져요</small></span>
-          <div class="iv-levels" data-field="${f.key}">${f.options.map((o, i) => {
-            const [n, ...rest] = o.split(" · ");
-            return `<button type="button" class="iv-lv" data-opt="${esc(o)}" aria-pressed="false"><b>${esc(n)}단계</b><span>${esc(rest.join(" · "))}</span>
-              <small>${i < 2 ? "12문항 · 쉬운 질문 위주" : i < 4 ? "15문항 · 롤플레이 포함" : "15문항 · 어려운 주제와 어드밴스 질문"}</small></button>`;
-          }).join("")}</div></div>`
-      : f.kind === "select"
-      ? `<label class="field"><span>${esc(f.label)}${f.required ? " *" : ""}</span><div class="iv-opts" data-field="${f.key}">${f.options.map((o) =>
-          `<button type="button" class="iv-opt" data-opt="${esc(o)}">${esc(o)}</button>`).join("")}</div></label>`
-      : f.kind === "textarea"
-        ? `<label class="field ${f.key === "resume" ? "iv-resume" : ""}"><span>${esc(f.label)}${f.required ? " *" : ""}
-            <small class="iv-count" data-count-for="${f.key}">0 / ${f.max_len.toLocaleString()}자</small></span>
-            <textarea name="${f.key}" rows="${f.key === "resume" ? 11 : 5}" maxlength="${f.max_len}" placeholder="${esc(f.placeholder)}"></textarea>
-            ${f.key === "resume" ? '<button type="button" class="btn-ghost drive-pick" data-drive-resume hidden><i data-lucide="hard-drive"></i>Google Drive 에서 불러오기 (Google 문서·텍스트 파일)</button>' : ""}
-            ${f.key === "resume" ? '<small class="iv-hint"><i data-lucide="sparkles"></i>자기소개서의 경험·성과 문장을 읽고, 그 문장을 파고드는 질문을 만들어요. 질문마다 어느 문장에서 나왔는지 보여 드려요.</small>' : ""}</label>`
-        : `<label class="field"><span>${esc(f.label)}${f.required ? " *" : ""}</span><input name="${f.key}" maxlength="${f.max_len}" placeholder="${esc(f.placeholder)}" autocomplete="off" /></label>`;
-    const steps = k.steps?.length ? k.steps : null;
     const fieldOf = (key) => k.fields.find((f) => f.key === key);
-    const opts = `
-            <label class="check iv-voice"><input type="checkbox" id="iv-voice" ${ivVoiceOn() ? "checked" : ""} /> 질문을 소리로 읽어 주기</label>
-            <label class="check iv-voice"><input type="checkbox" id="iv-cam-pref" ${ivCamOn() ? "checked" : ""} /> 내 모습 보기 (카메라 · 화면에만 보이고 녹화하지 않아요)</label>
-            <div class="iv-rules"><span><i data-lucide="list-ordered"></i>${ivCountLabel(k)}${k.follow_ups ? ` + 꼬리질문 최대 ${k.follow_ups}개` : ""}</span>
-              ${k.adjust_after ? `<span><i data-lucide="sliders-horizontal"></i>${k.adjust_after}번 뒤 난이도 다시 고르기</span>` : ""}
-              ${k.replays ? `<span><i data-lucide="volume-2"></i>질문은 ${k.replays + 1}번까지 들을 수 있어요</span>` : ""}
-              ${k.time_note ? `<span><i data-lucide="timer"></i>${esc(k.time_note)}</span>` : `<span><i data-lucide="hourglass"></i>준비 ${k.prep_sec}초</span><span><i data-lucide="timer"></i>답변 ${ivDur(k.answer_sec)}</span>`}</div>
-            <button class="btn-primary iv-go" type="submit"><i data-lucide="mic"></i>면접 시작</button>`;
-    // 단이 정해진 종류(OPIc): 가로로 1단 · 2단 · 3단, 앞 단을 마쳐야 다음 단이 열린다
-    const body = steps ? `<div class="iv-cols">${steps.map((st, i) => `
-          <section class="iv-col" data-step="${i}" aria-labelledby="iv-col-t${i}">
-            <header class="iv-col-head"><span class="iv-col-n">${i + 1}단</span>
-              <div><b id="iv-col-t${i}">${esc(st.title)}</b><small>${esc(st.sub)}</small></div>
-              <span class="iv-col-st" data-step-state="${i}"></span></header>
-            <div class="iv-col-body">${st.keys.map((key) => (fieldOf(key) ? field(fieldOf(key)) : "")).join("")}${i === steps.length - 1 ? `${k.survey_min ? '<div class="iv-plan" id="iv-plan"></div>' : ""}${opts}` : ""}</div>
-            ${i ? `<p class="iv-col-lock"><i data-lucide="lock"></i>${i}단을 마치면 열려요</p>` : ""}
-          </section>`).join("")}</div>` : `${k.fields.map(field).join("")}${opts}`;
+    const surveyKeys = k.survey_keys || [];
+    const steps = k.steps?.length ? k.steps : [{ title: k.name, sub: k.desc, keys: k.fields.map((f) => f.key) }];
+    const multi = steps.length > 1;
+    const last = steps.length - 1;
+    // '(2개 이상)' 은 옆의 개수 표시가 대신 알려 준다
+    const title = (f) => f.label.replace(/\s*\(\d+개 이상\)$/, "");
+    const shortName = (f) => f.label.replace(/^\d+\.\s*/, "").replace(/\s*\(.*\)$/, "");
+    const chip = (o) => `<button type="button" class="ivx-chip" data-opt="${esc(o)}" aria-pressed="false">${esc(o)}</button>`;
+    const field = (f) => {
+      if (f.kind === "multi") return `<section class="ivx-q"><div class="ivx-row"><h3>${esc(title(f))}</h3><span class="ivx-cnt" data-pick-count="${f.key}"></span></div>
+          <div class="ivx-chips" data-field="${f.key}" data-multi>${f.options.map(chip).join("")}</div></section>`;
+      if (f.kind === "select") return `<section class="ivx-q"><h3>${esc(title(f))}</h3><div class="ivx-chips" data-field="${f.key}">${f.options.map(chip).join("")}</div></section>`;
+      if (f.kind === "level") return `<div class="ivx-levels" data-field="${f.key}" aria-label="${esc(f.label)}">${f.options.map((o, i) => {
+        const [n, ...rest] = o.split(" · ");
+        return `<button type="button" class="ivx-level" data-opt="${esc(o)}" aria-pressed="false"><span class="ivx-dot" aria-hidden="true"></span><b>${esc(n)}단계</b><span>${esc(rest.join(" · "))}</span>
+            <small>${i < 2 ? "12문항 · 쉬운 질문 위주" : i < 4 ? "15문항 · 롤플레이 포함" : "15문항 · 어려운 주제와 어드밴스 질문"}</small></button>`;
+      }).join("")}</div>`;
+      const box = f.kind === "textarea"
+        ? `<textarea class="ivx-in" id="ivx-f-${f.key}" name="${f.key}" rows="${f.key === "resume" ? 11 : 5}" maxlength="${f.max_len}" placeholder="${esc(f.placeholder)}"></textarea>`
+        : `<input class="ivx-in" id="ivx-f-${f.key}" name="${f.key}" maxlength="${f.max_len}" placeholder="${esc(f.placeholder)}" autocomplete="off" />`;
+      return `<section class="ivx-q"><div class="ivx-row"><label class="ivx-h" for="ivx-f-${f.key}">${esc(f.label)}</label>
+          ${f.kind === "textarea" ? `<span class="ivx-cnt" data-count-for="${f.key}">0 / ${f.max_len.toLocaleString()}자</span>` : ""}</div>${box}
+          ${f.key === "resume" ? `<button type="button" class="btn-ghost drive-pick" data-drive-resume hidden><i data-lucide="hard-drive"></i>Google Drive 에서 불러오기 (Google 문서·텍스트 파일)</button>
+          <small class="ivx-sub"><i data-lucide="sparkles"></i>자기소개서의 경험·성과 문장을 읽고, 그 문장을 파고드는 질문을 만들어요. 질문마다 어느 문장에서 나왔는지 보여 드려요.</small>` : ""}</section>`;
+    };
+    const screenOpts = `<section class="ivx-q"><h3>면접 화면</h3>
+          <label class="ivx-check"><input type="checkbox" id="iv-voice" ${ivVoiceOn() ? "checked" : ""} /> 질문을 소리로 읽어 주기</label>
+          <label class="ivx-check"><input type="checkbox" id="iv-cam-pref" ${ivCamOn() ? "checked" : ""} /> 내 모습 보기 (카메라 · 화면에만 보이고 녹화하지 않아요)</label></section>`;
+    const panels = steps.map((st, i) => `
+          <section class="ivx-panel" data-step="${i}" aria-label="${multi ? `Step ${i + 1} ` : ""}${esc(st.title)}"><div class="ivx-col">
+            <div><p class="ivx-eyebrow">${multi ? `Step ${i + 1}` : "면접 준비"}</p><h2>${esc(st.title)}</h2>
+              <p class="ivx-desc">${esc(st.sub)}${st.keys.some((x) => surveyKeys.includes(x)) ? ' <strong id="ivx-total"></strong>' : ""}</p></div>
+            ${st.keys.map(fieldOf).filter(Boolean).map(field).join("")}
+            ${i === last ? screenOpts : ""}
+          </div></section>`).join("");
+    // 오른쪽: OPIc 는 고른 대로 채워지는 '내 시험지', 나머지는 진행 방식
+    const info = [
+      ["문항", `${ivCountLabel(k)}${k.follow_ups ? ` + 꼬리질문 최대 ${k.follow_ups}개` : ""}`],
+      ["시간", k.time_note || `준비 ${k.prep_sec}초 · 답변 ${ivDur(k.answer_sec)}`],
+      ["답하는 말", k.lang === "en" ? "영어로 답해요" : "한국어로 답해요"],
+      k.replays && ["다시 듣기", `질문은 ${k.replays + 1}번까지 들을 수 있어요`],
+      k.adjust_after && ["난이도", `${k.adjust_after}번 뒤 다시 골라요`],
+      ["기록", "목소리는 녹음하지 않아요. 받아쓴 글만 저장해요"],
+    ].filter(Boolean);
+    const aside = k.survey_min
+      ? `<div class="ivx-pv-head"><h2>내 시험지</h2><p id="ivx-pv-meta"></p></div><ol class="ivx-slots" id="iv-plan" aria-live="polite"></ol>`
+      : `<div class="ivx-pv-head"><h2>진행 방식</h2><p>${esc(k.name)}</p></div>
+          <ol class="ivx-slots info">${info.map(([a, b]) => `<li class="ivx-slot"><span class="ivx-rng">${a}</span><strong>${esc(b)}</strong></li>`).join("")}</ol>`;
     view.innerHTML = `
-      <div class="iv-setup ${steps ? "wide" : ""}">
-        <a class="ak-back" href="#/interview"><i data-lucide="arrow-left"></i>AI 면접</a>
-        <div class="panel">
-          <div class="iv-sh"><span class="iv-kic"><i data-lucide="${IV_ICON[k.key] ?? "mic"}"></i></span><div><h2>${esc(k.name)}</h2><p>${esc(k.desc)}</p></div>
-            ${steps ? `<ol class="iv-stepper" aria-label="설정 단계">${steps.map((st, i) => `${i ? '<li class="bar" aria-hidden="true"></li>' : ""}<li data-stepper="${i}"><span>${i + 1}</span>${esc(st.title)}</li>`).join("")}</ol>` : ""}</div>
-          ${ivLastSetup(k.key) ? `<button type="button" class="iv-again" data-iv-again><i data-lucide="history"></i>지난 설정으로 바로 시작</button>` : ""}
-          <form id="iv-form">${body}</form>
-        </div>
+      <div class="ivx">
+        <header class="ivx-top">
+          <a class="ivx-back" href="#/interview"><i data-lucide="arrow-left"></i>AI 면접</a>
+          <h1>${esc(k.name)}</h1>
+          ${multi ? `<nav class="ivx-steps" aria-label="설정 순서">${steps.map((st, i) => `<button class="ivx-step" type="button" data-go="${i}"><i></i><span><b>Step ${i + 1}</b>${esc(st.title)}</span></button>`).join("")}</nav>` : ""}
+        </header>
+        <form id="iv-form" class="ivx-form" novalidate>
+          <div class="ivx-work">
+            <div class="ivx-stage"><div class="ivx-track" id="ivx-track">${panels}</div></div>
+            <aside class="ivx-preview" aria-label="${k.survey_min ? "내 시험지 미리보기" : "진행 방식"}">${aside}</aside>
+          </div>
+          <footer class="ivx-bar">
+            <span class="ivx-hint" id="ivx-hint" role="status"></span>
+            <div class="ivx-btns">
+              ${ivLastSetup(k.key) ? '<button type="button" class="ivx-btn ghost" data-iv-again><i data-lucide="history"></i>지난 설정으로 바로 시작</button>' : ""}
+              ${multi ? '<button type="button" class="ivx-btn" id="ivx-prev">이전</button>' : ""}
+              <button type="button" class="ivx-btn primary" id="ivx-next"></button>
+            </div>
+          </footer>
+        </form>
       </div>`;
     icons();
     const form = $("#iv-form");
+    const next = $("#ivx-next");
     const chosen = {};
-    // 단마다 다 골랐는지: 꼭 고를 칸 · 여러 개 고르기의 최소 개수 · 설문 합계
-    const surveyTotal = () => (k.survey_keys || []).reduce((a, x) => a + (chosen[x]?.length || 0), 0);
-    const stepLeft = (st) => {
-      const fs = st.keys.map(fieldOf).filter(Boolean);
-      let left = fs.filter((f) => f.required && !chosen[f.key]).length;
-      left += fs.filter((f) => f.kind === "multi" && (chosen[f.key]?.length || 0) < f.min_pick).length;
-      const needSurvey = k.survey_min && st.keys.some((x) => (k.survey_keys || []).includes(x));
-      return { left, survey: needSurvey ? Math.max(0, k.survey_min - surveyTotal()) : 0 };
+    let cur = 0;
+    const lenField = fieldOf("length");
+    if (lenField?.kind === "select") chosen.length = lenField.options[0]; // 분량은 실전이 기본
+    const val = (key) => {
+      if (key in chosen) return Array.isArray(chosen[key]) ? chosen[key].length : chosen[key];
+      return form.elements[key]?.value.trim() || "";
     };
-    // OPIc '이렇게 진행돼요' — 고른 설문 주제와 자기 평가로 실제 문항 순서를 미리 보여 준다 (서버 opic_items 와 같은 규칙)
-    const ivPlanPreview = () => {
+    const surveyTotal = () => surveyKeys.reduce((a, x) => a + (chosen[x]?.length || 0), 0);
+    // Step 마다 남은 것: 꼭 채울 칸 · 여러 개 고르기의 최소 개수 · 설문 합계
+    const stepState = (st) => {
+      const fs = st.keys.map(fieldOf).filter(Boolean);
+      const left = fs.filter((f) => f.required && !val(f.key)).length;
+      const few = fs.filter((f) => f.kind === "multi" && (chosen[f.key]?.length || 0) < f.min_pick);
+      const survey = k.survey_min && st.keys.some((x) => surveyKeys.includes(x)) ? Math.max(0, k.survey_min - surveyTotal()) : 0;
+      return { left, few, survey, done: !left && !few.length && !survey };
+    };
+    // OPIc '내 시험지' — 고른 내용과 자기 평가로 실제 문항 순서를 미리 보여 준다 (서버 opic_items 와 같은 규칙)
+    const seen = {};
+    const planDraw = () => {
       const box = $("#iv-plan");
       if (!box) return;
-      const lvOpt = chosen.level || "";
-      const lv = Number(lvOpt.charAt(0)) || 0;
+      const lv = Number((chosen.level || "").charAt(0)) || 0;
       const short = (chosen.length || "").startsWith("짧은");
-      const firsts = (k.survey_keys || []).map((x) => (chosen[x] || [])[0]).filter(Boolean);
-      const t1 = firsts[0] || "설문 주제 1", t2 = firsts[1] || "설문 주제 2";
-      const n = short ? 7 : lv && lv <= 2 ? 12 : 15;
-      const rows = [["1", "자기소개", ""], ["2~4", "묘사 · 일상 · 경험", t1], ["5~7", "묘사 · 일상 · 경험", t2]];
+      const firsts = surveyKeys.map((x) => (chosen[x] || [])[0]).filter(Boolean);
+      const me = [chosen.job, chosen.student === "네" ? "학생" : chosen.student === "아니요" ? "학생 아님" : "", chosen.home].filter(Boolean);
+      const pick = "Step 2에서 고른 주제";
+      const rows = [
+        { k: "me", r: "1", t: "자기소개", topic: me.join(" · "), ph: "Step 1에서 고른 내용" },
+        { k: "c1", r: "2~4", t: "묘사 · 일상 · 경험", topic: firsts[0], ph: pick },
+        { k: "c2", r: "5~7", t: "묘사 · 일상 · 경험", topic: firsts[1], ph: pick },
+      ];
       if (!short) {
-        rows.push(["8~10", "돌발 주제 3콤보", "시험 때 정해져요"]);
-        if (lv && lv <= 2) rows.push(["11~12", "질문하기", t1]);
-        else rows.push(["11~13", "롤플레이", "정보 묻기 · 문제 해결 · 관련 경험"], ["14~15", lv >= 5 ? "어드밴스" : "묘사 · 경험", lv >= 5 ? "비교 · 사회 이슈" : t2]);
+        if (k.adjust_after) rows.push({ gate: `${k.adjust_after}번 뒤 난이도 다시 고르기` });
+        rows.push({ k: "c3", r: "8~10", t: "돌발 주제 3콤보", topic: "시험 때 정해져요" });
+        if (!lv) rows.push({ k: "tail", r: "11~", t: "남은 문항", ph: "Step 3에서 난이도를 고르면 정해져요" });
+        else if (lv <= 2) rows.push({ k: "tail", r: "11~12", t: "질문하기", topic: firsts[0], ph: pick });
+        else rows.push({ k: "role", r: "11~13", t: "롤플레이", topic: "정보 묻기 · 문제 해결 · 관련 경험" },
+          { k: "tail", r: "14~15", t: lv >= 5 ? "어드밴스" : "묘사 · 경험", topic: lv >= 5 ? "비교 · 사회 이슈" : firsts[1], ph: pick });
       }
-      box.innerHTML = `<div class="iv-plan-h"><b>이렇게 진행돼요</b><span>${lv ? `${n}문항 · 약 ${Math.round(n * 2.5)}분` : "자기 평가를 고르면 정해져요"}</span></div>
-        <ol>${rows.map(([no, kind, topic]) => `<li><span>${no}</span><b>${kind}</b>${topic ? `<em>${esc(topic)}</em>` : ""}</li>`).join("")}</ol>
-        ${!short && n > 7 ? `<small>7번이 끝나면 남은 질문의 난이도를 다시 골라요</small>` : ""}`;
+      const n = short ? 7 : lv ? (lv <= 2 ? 12 : 15) : 0;
+      $("#ivx-pv-meta").textContent = n ? `${n}문항 · 약 ${Math.round(n * 2.5)}분 · ${short ? "짧은 연습" : `${lv}단계`}` : "자기 평가를 고르면 문항 수가 정해져요";
+      box.innerHTML = rows.map((x) => x.gate ? `<li class="ivx-gate">${esc(x.gate)}</li>`
+        : `<li class="ivx-slot${x.topic ? "" : " blank"}${seen[x.k] !== undefined && seen[x.k] !== `${x.t}${x.topic}` ? " pop" : ""}"><span class="ivx-rng">${x.r}</span><strong>${esc(x.t)}</strong><span class="ivx-topic">${esc(x.topic || x.ph)}</span></li>`).join("");
+      rows.forEach((x) => { if (!x.gate) seen[x.k] = `${x.t}${x.topic}`; });
     };
-    const refreshSteps = () => {
-      if (!steps) return;
-      let open = true;
-      steps.forEach((st, i) => {
-        const col = $(`[data-step="${i}"]`, form);
-        const { left, survey } = stepLeft(st);
-        const done = !left && !survey;
-        col.classList.toggle("locked", !open);
-        col.classList.toggle("done", open && done);
-        const body = $(".iv-col-body", col);
-        if (open) body.removeAttribute("inert"); else body.setAttribute("inert", "");
-        $(`[data-step-state="${i}"]`, form).innerHTML = !open ? "잠김"
-          : done ? '<i data-lucide="check"></i>완료' : survey ? `${survey}개 더` : `${left}개 남음`;
-        const sp = $(`[data-stepper="${i}"]`);
-        if (sp) { sp.classList.toggle("cur", open && !done); sp.classList.toggle("done", open && done); }
-        open = open && done;
+    const refresh = () => {
+      const st = steps.map(stepState);
+      const open = st.map((_, i) => st.slice(0, i).every((s) => s.done));
+      $$("[data-pick-count]", form).forEach((c) => {
+        const f = fieldOf(c.dataset.pickCount);
+        const n = chosen[f.key]?.length || 0;
+        c.textContent = `${n}개 · ${f.min_pick}개 이상`;
+        c.classList.toggle("ok", n >= f.min_pick);
       });
-      ivPlanPreview();
-      const go = $(".iv-go", form);
-      if (go && !go.dataset.busy) go.disabled = !open;
+      const tot = $("#ivx-total");
+      if (tot) tot.textContent = `지금 ${surveyTotal()}개.`;
+      $("#ivx-track").style.transform = `translateX(-${cur * 100}%)`;
+      $$(".ivx-panel", form).forEach((p, i) => { p.classList.toggle("on", i === cur); p.inert = i !== cur; });
+      $$(".ivx-step").forEach((b, i) => {
+        b.classList.toggle("on", i === cur);
+        b.classList.toggle("done", st[i].done && open[i]);
+        b.disabled = !open[i];
+        if (i === cur) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current");
+      });
+      const s = st[cur];
+      const hint = $("#ivx-hint");
+      hint.textContent = s.done
+        ? (cur === last ? "준비가 끝났어요" : s.survey === 0 && steps[cur].keys.some((x) => surveyKeys.includes(x)) ? `${surveyTotal()}개를 골랐어요` : "모두 골랐어요")
+        : s.left ? `${s.left}개 남았어요`
+        : s.survey ? `${s.survey}개 더 골라 주세요`
+        : `${s.few.map(shortName).join(", ")}에서 더 골라 주세요`;
+      hint.classList.toggle("ok", s.done);
+      const prev = $("#ivx-prev");
+      if (prev) prev.hidden = cur === 0;
+      if (!next.dataset.busy) {
+        next.disabled = !s.done;
+        next.innerHTML = cur === last ? '<i data-lucide="mic"></i>면접 시작하기' : `Step ${cur + 2}로 이동`;
+      }
+      planDraw();
       icons();
+    };
+    const goStep = (i) => {
+      cur = Math.max(0, Math.min(last, i));
+      $(".ivx-panel.on", form)?.scrollTo?.(0, 0);
+      refresh();
     };
     form.addEventListener("input", (e) => {
       const ta = e.target.closest("textarea[name]");
       const c = ta && $(`[data-count-for="${ta.name}"]`, form);
       if (c) c.textContent = `${ta.value.length.toLocaleString()} / ${Number(ta.maxLength).toLocaleString()}자`;
+      refresh();
     });
     form.addEventListener("click", (e) => {
       const o = e.target.closest("[data-opt]");
       if (!o) return;
       const box = o.closest("[data-field]");
       const key = box.dataset.field;
+      const was = stepState(steps[cur]).done;
       if (box.hasAttribute("data-multi")) { // 여러 개 고르기
         const set = new Set(chosen[key] || []);
         set.has(o.dataset.opt) ? set.delete(o.dataset.opt) : set.add(o.dataset.opt);
         chosen[key] = [...set];
-        o.classList.toggle("on", set.has(o.dataset.opt));
         o.setAttribute("aria-pressed", set.has(o.dataset.opt));
-        const c = $(`[data-pick-count="${key}"]`, form);
-        if (c) c.textContent = `${set.size}개`;
-        const total = (k.survey_keys || []).reduce((a, x) => a + (chosen[x]?.length || 0), 0);
-        const sv = $("#iv-survey");
-        if (sv) {
-          sv.innerHTML = `4~7번에서 <b>${total}</b>개 골랐어요 · ${total >= k.survey_min ? "좋아요, 충분해요" : `${k.survey_min - total}개 더 골라 주세요`}`;
-          sv.classList.toggle("ok", total >= k.survey_min);
-        }
-        return refreshSteps();
+      } else {
+        // 다시 누르면 고르기 취소 — 분량은 하나가 늘 골라져 있게
+        chosen[key] = chosen[key] === o.dataset.opt && key !== "length" ? "" : o.dataset.opt;
+        $$("[data-opt]", box).forEach((x) => x.setAttribute("aria-pressed", x.dataset.opt === chosen[key]));
       }
-      chosen[key] = chosen[key] === o.dataset.opt ? "" : o.dataset.opt;
-      $$("[data-opt]", box).forEach((x) => { x.classList.toggle("on", x.dataset.opt === chosen[key]); x.setAttribute("aria-pressed", x.dataset.opt === chosen[key]); });
-      refreshSteps();
+      refresh();
+      // 하나씩 고르는 칸만 있는 Step 은 다 고르면 다음 Step 으로 저절로 넘어간다
+      const at = cur;
+      const allSelect = steps[at].keys.map(fieldOf).filter(Boolean).every((f) => f.kind === "select");
+      if (multi && at < last && allSelect && !was && stepState(steps[at]).done) setTimeout(() => { if (cur === at && stepState(steps[at]).done) goStep(at + 1); }, 380);
     });
-    refreshSteps();
+    $$(".ivx-step").forEach((b) => b.addEventListener("click", () => goStep(Number(b.dataset.go))));
+    $("#ivx-prev")?.addEventListener("click", () => goStep(cur - 1));
+    next.addEventListener("click", () => {
+      if (next.disabled) return;
+      if (cur < last) goStep(cur + 1);
+      else form.requestSubmit();
+    });
+    $$("[data-field]", form).forEach((box) => $$("[data-opt]", box).forEach((x) => x.setAttribute("aria-pressed", x.dataset.opt === chosen[box.dataset.field])));
+    refresh();
     const startWith = async (setup, btn) => {
       btn.disabled = true;
       btn.dataset.busy = "1";
@@ -3529,7 +3582,7 @@
         const d = await Store.startInterview(k.key, setup);
         try { localStorage.setItem(`eureka.ivSetup.${k.key}`, JSON.stringify(setup)); } catch { /* 무시 */ }
         go(`/interview/${d.id}`);
-      } catch (err) { toast(err.message); delete btn.dataset.busy; btn.disabled = false; btn.innerHTML = label; icons(); }
+      } catch (err) { toast(err.message); delete btn.dataset.busy; btn.disabled = false; btn.innerHTML = label; icons(); refresh(); }
     };
     $("[data-iv-again]")?.addEventListener("click", (e) => startWith(ivLastSetup(k.key), e.currentTarget));
     // 자기소개서를 Google Drive 에서 (Google 문서는 글로 바꿔 넣는다)
@@ -3553,16 +3606,14 @@
       const setup = {};
       Object.entries(chosen).forEach(([key, v]) => { const x = Array.isArray(v) ? v.join(", ") : v; if (x) setup[key] = x; });
       $$("input[name], textarea[name]", form).forEach((x) => { if (x.value.trim()) setup[x.name] = x.value.trim(); });
-      const name = (f) => f.label.replace(/^\d+\.\s*/, "").replace(/\s*\(.*\)$/, "");
-      const miss = k.fields.filter((f) => f.required && !setup[f.key]).map(name);
-      const few = k.fields.filter((f) => f.kind === "multi" && (chosen[f.key]?.length || 0) < f.min_pick).map((f) => `${name(f)} ${f.min_pick}개 이상`);
-      const total = (k.survey_keys || []).reduce((a, x) => a + (chosen[x]?.length || 0), 0);
+      const miss = k.fields.filter((f) => f.required && !setup[f.key]).map(shortName);
+      const few = k.fields.filter((f) => f.kind === "multi" && (chosen[f.key]?.length || 0) < f.min_pick).map((f) => `${shortName(f)} ${f.min_pick}개 이상`);
       if (miss.length) return toast(`${miss.join(", ")} 항목을 골라 주세요`);
       if (few.length) return toast(`${few.join(", ")} 골라 주세요`);
-      if (k.survey_min && total < k.survey_min) return toast(`설문 4~7번에서 ${k.survey_min}개 이상 골라 주세요 (지금 ${total}개)`);
+      if (k.survey_min && surveyTotal() < k.survey_min) return toast(`설문 4~7번에서 ${k.survey_min}개 이상 골라 주세요 (지금 ${surveyTotal()}개)`);
       try { localStorage.setItem("eureka.ivVoice", $("#iv-voice").checked ? "1" : "0"); } catch { /* 무시 */ }
       ivCamPref($("#iv-cam-pref").checked);
-      return startWith(setup, $(".iv-go", form));
+      return startWith(setup, next);
     });
   }
 

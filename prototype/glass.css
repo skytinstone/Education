@@ -1186,3 +1186,130 @@ body.pdf-capture .exam-body { column-count: 1 !important; column-rule: none !imp
 .nt-auto { margin: 10px 0 4px; font-size: 13.5px; gap: 8px; }
 .toast-act { margin-left: 8px; padding: 4px 10px; border: 0; border-radius: 999px; background: rgba(255,255,255,.18); color: inherit; font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .toast.ok .toast-act { background: rgba(16,185,129,.14); color: #047857; }
+
+/* ---------- AI 면접 설정 (클린) — 위: 제목·Step / 가운데: Step 하나 + 오른쪽 미리보기 / 아래: 안내·버튼 (app.js renderIvSetup) ---------- */
+.ivx { --x-ink: #14161F; --x-mute: #5C6170; --x-line: #E6E7EC; --x-edge: #D3D5DD; --x-accent: #1F5FE0; --x-accent-2: #174BB8; --x-tint: #EEF3FD;
+  --x-ok: #0A6247; --x-warn: #8F3608;
+  max-width: 1280px; margin: 0 auto; height: calc(100dvh - 140px); min-height: 540px;
+  display: grid; grid-template-rows: auto minmax(0, 1fr); background: #fff; color: var(--x-ink);
+  border: 1px solid var(--x-line); border-radius: 16px; overflow: hidden; }
+.ivx h1, .ivx h2, .ivx h3, .ivx p { margin: 0; }
+.ivx button:focus-visible, .ivx a:focus-visible, .ivx .ivx-in:focus-visible { outline: 2px solid var(--x-accent); outline-offset: 2px; }
+
+.ivx-top { display: flex; align-items: center; gap: 24px; padding: 0 28px; min-height: 64px; border-bottom: 1px solid var(--x-line); }
+.ivx-back { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; font-size: 14px; color: var(--x-mute); text-decoration: none; }
+.ivx-back:hover { color: var(--x-ink); }
+.ivx-back svg { width: 16px; height: 16px; }
+.ivx-top h1 { font-size: 16px; font-weight: 700; letter-spacing: 0; }
+.ivx-steps { margin-left: auto; display: flex; gap: 8px; }
+.ivx .ivx-step { display: flex; flex-direction: column; gap: 8px; width: 168px; padding: 10px 0 12px; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.ivx-step i { display: block; height: 3px; border-radius: 2px; background: var(--x-line); transition: background .3s; }
+.ivx-step.on i, .ivx-step.done i { background: var(--x-accent); }
+.ivx-step span { font-size: 13px; color: var(--x-mute); }
+.ivx-step b { font-weight: 700; color: var(--x-ink); margin-right: 6px; }
+.ivx-step.on span, .ivx-step.on b { color: var(--x-accent); }
+.ivx .ivx-step:disabled { cursor: not-allowed; }
+.ivx-step:disabled b { color: var(--x-mute); }
+
+.ivx-form { min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+.ivx-work { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
+.ivx-stage { min-width: 0; min-height: 0; overflow: hidden; }
+.ivx-track { height: 100%; display: flex; transition: transform .55s cubic-bezier(.3, .7, .2, 1); }
+.ivx-panel { flex: 0 0 100%; min-width: 0; height: 100%; overflow-y: auto; padding: 44px 32px 40px; }
+.ivx-col { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 24px; }
+.ivx-eyebrow { font-size: 13px; font-weight: 700; color: var(--x-accent); }
+.ivx-col h2 { font-size: 28px; font-weight: 700; letter-spacing: -.01em; margin-top: 8px; }
+.ivx-desc { font-size: 15px; line-height: 1.6; color: var(--x-mute); margin-top: 8px; }
+.ivx-desc strong { color: var(--x-ink); }
+.ivx-q { display: flex; flex-direction: column; gap: 12px; padding-top: 24px; border-top: 1px solid var(--x-line); }
+.ivx-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.ivx-q h3, .ivx-h { font-size: 15px; font-weight: 700; }
+.ivx-cnt { font-size: 13px; color: var(--x-mute); white-space: nowrap; }
+.ivx-cnt.ok { color: var(--x-ok); }
+.ivx-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ivx .ivx-chip { min-height: 44px; padding: 0 16px; border: 1px solid var(--x-edge); border-radius: 10px; background: #fff; color: var(--x-ink);
+  font: inherit; font-size: 14px; font-weight: 500; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.ivx .ivx-chip:hover { border-color: var(--x-accent); color: var(--x-accent); }
+.ivx .ivx-chip:active { background: var(--x-tint); }
+.ivx .ivx-chip[aria-pressed="true"] { background: var(--x-accent); border-color: var(--x-accent); color: #fff; }
+
+/* 자기 평가: 카드 대신 한 줄씩 */
+.ivx-levels { display: flex; flex-direction: column; border-top: 1px solid var(--x-line); }
+.ivx .ivx-level { display: grid; grid-template-columns: 20px 56px minmax(0, 1fr); gap: 4px 14px; align-items: start; padding: 16px 8px;
+  border: 0; border-bottom: 1px solid var(--x-line); background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; transition: background .15s; }
+.ivx .ivx-level:hover { background: #F7F9FD; }
+.ivx .ivx-level:active { background: var(--x-tint); }
+.ivx .ivx-level[aria-pressed="true"] { background: var(--x-tint); }
+.ivx-level .ivx-dot { width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; border: 1.5px solid #9EA2AF; display: grid; place-items: center; box-sizing: border-box; }
+.ivx-level[aria-pressed="true"] .ivx-dot { border-color: var(--x-accent); }
+.ivx-level[aria-pressed="true"] .ivx-dot::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--x-accent); }
+.ivx-level b { font-size: 15px; }
+.ivx-level[aria-pressed="true"] b { color: var(--x-accent); }
+.ivx-level > span:not(.ivx-dot) { font-size: 14px; line-height: 1.55; color: #2E3140; }
+.ivx-level small { grid-column: 3; font-size: 13px; color: var(--x-mute); }
+.ivx-levels + .ivx-q { border-top: 0; padding-top: 0; }
+
+/* 글로 쓰는 칸 · 체크 */
+.ivx .ivx-in { width: 100%; box-sizing: border-box; min-height: 48px; padding: 12px 14px; border: 1px solid var(--x-edge); border-radius: 10px;
+  background: #fff; color: var(--x-ink); font: inherit; font-size: 15px; line-height: 1.6; resize: vertical; transition: border-color .15s, box-shadow .15s; }
+.ivx .ivx-in:focus { outline: none; border-color: var(--x-accent); box-shadow: 0 0 0 3px rgba(31, 95, 224, .15); }
+.ivx-sub { display: flex; gap: 6px; font-size: 13px; line-height: 1.55; color: var(--x-mute); }
+.ivx-sub svg { width: 14px; height: 14px; flex-shrink: 0; margin-top: 3px; color: var(--x-accent); }
+.ivx .drive-pick { align-self: flex-start; }
+.ivx-check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 14px; cursor: pointer; }
+.ivx-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--x-accent); }
+
+/* 오른쪽: 내 시험지 · 진행 방식 — 선과 글자만 */
+.ivx-preview { min-height: 0; border-left: 1px solid var(--x-line); display: flex; flex-direction: column; }
+.ivx-pv-head { padding: 28px 28px 16px; }
+.ivx-pv-head h2 { font-size: 15px; font-weight: 700; }
+.ivx-pv-head p { font-size: 13px; color: var(--x-mute); margin-top: 6px; }
+.ivx-slots { list-style: none; margin: 0; padding: 0 28px 28px; overflow-y: auto; }
+.ivx-slot { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 2px 8px; padding: 14px 0; border-top: 1px solid var(--x-line); }
+.ivx-slots.info .ivx-slot { grid-template-columns: 72px minmax(0, 1fr); }
+.ivx-rng { grid-row: span 2; font-size: 13px; font-weight: 700; color: var(--x-mute); padding-top: 1px; }
+.ivx-slots.info .ivx-rng { grid-row: auto; }
+.ivx-slot strong { font-size: 14px; font-weight: 700; line-height: 1.5; }
+.ivx-slots.info .ivx-slot strong { font-weight: 500; }
+.ivx-topic { font-size: 14px; font-weight: 500; color: var(--x-accent); }
+.ivx-slot.blank strong { color: var(--x-mute); font-weight: 500; }
+.ivx-slot.blank .ivx-topic { font-size: 13px; font-weight: 400; color: var(--x-mute); }
+.ivx-slot.pop .ivx-topic { animation: ivxPop .5s ease; }
+@keyframes ivxPop { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.ivx-gate { padding: 10px 0 10px 56px; border-top: 1px solid var(--x-line); font-size: 13px; color: var(--x-mute); }
+
+/* 아래: 안내 한 줄과 버튼 — 고르거나 누르면 파란색 */
+.ivx-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 12px 28px; min-height: 72px; border-top: 1px solid var(--x-line); background: #fff; }
+.ivx-hint { font-size: 14px; font-weight: 500; color: var(--x-warn); }
+.ivx-hint.ok { color: var(--x-ok); }
+.ivx-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.ivx .ivx-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 48px; padding: 0 24px;
+  border: 1px solid var(--x-edge); border-radius: 10px; background: #fff; color: var(--x-ink); font: inherit; font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.ivx .ivx-btn svg { width: 16px; height: 16px; }
+.ivx .ivx-btn:hover { border-color: var(--x-accent); color: var(--x-accent); }
+.ivx .ivx-btn:active { background: var(--x-tint); }
+.ivx .ivx-btn.ghost { border-color: transparent; padding: 0 14px; color: var(--x-mute); font-weight: 500; }
+.ivx .ivx-btn.ghost:hover { color: var(--x-accent); }
+.ivx .ivx-btn.primary { border-color: var(--x-accent); background: var(--x-accent); color: #fff; }
+.ivx .ivx-btn.primary:hover { border-color: var(--x-accent-2); background: var(--x-accent-2); color: #fff; }
+.ivx .ivx-btn.primary:disabled { border-color: var(--x-line); background: #F1F2F5; color: var(--x-mute); cursor: not-allowed; }
+.ivx .ivx-btn[hidden] { display: none; }
+
+@media (max-width: 1100px) { .ivx-work { grid-template-columns: minmax(0, 1fr) 280px; } .ivx .ivx-step { width: 120px; } }
+@media (max-width: 860px) {
+  .ivx { height: auto; min-height: 0; display: block; overflow: visible; border: 0; border-radius: 0; }
+  .ivx-top { flex-wrap: wrap; padding: 0 0 8px; gap: 4px 16px; }
+  .ivx-step span { display: flex; flex-direction: column; gap: 2px; }
+  .ivx-steps { margin-left: 0; width: 100%; }
+  .ivx .ivx-step { flex: 1; width: auto; }
+  .ivx-form, .ivx-work { display: block; }
+  .ivx-track { transform: none !important; display: block; height: auto; }
+  .ivx-panel { display: none; height: auto; overflow: visible; padding: 24px 0 32px; }
+  .ivx-panel.on { display: block; }
+  .ivx-preview { border-left: 0; border-top: 1px solid var(--x-line); }
+  .ivx-pv-head, .ivx-slots { padding-left: 0; padding-right: 0; }
+  .ivx-slots { overflow: visible; }
+  .ivx-bar { position: sticky; bottom: -40px; z-index: 2; padding: 12px 0 52px; margin-bottom: -40px; } /* 화면 아래 여백(40px)까지 덮는다 */
+}
+@media (prefers-reduced-motion: reduce) { .ivx-track, .ivx-step i { transition: none; } .ivx-slot.pop .ivx-topic { animation: none; } }
