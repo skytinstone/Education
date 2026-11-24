@@ -4,9 +4,9 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Eureka | AI 시험 에이전트</title>
-<meta name="description" content="말하면 문제가 나오고, 틀리면 이유를 알려 주고, 약한 개념은 다시 채워 줘요. 검산을 마친 문제만 도착하는 시험 준비 AI, Eureka와 함께 수능 수학·과학을 제대로 준비해 보세요." />
-<meta property="og:title" content="Eureka — 시험 준비를 AI로" />
-<meta property="og:description" content="말하면 문제가 나오고, 틀리면 이유를 알려 주고, 약한 개념은 다시 채워 줘요. 검산을 마친 문제만 도착하는 시험 준비 AI, Eureka와 함께 수능 수학·과학을 제대로 준비해 보세요." />
+<meta name="description" content="문제 풀이부터 실전 시험, AI 면접까지. 검산을 마친 문제와 내 약점을 기억하는 AI Education Agent, Eureka." />
+<meta property="og:title" content="Eureka — AI Education Agent" />
+<meta property="og:description" content="문제 풀이부터 실전 시험, AI 면접까지. 검산을 마친 문제와 내 약점을 기억하는 AI Education Agent, Eureka." />
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Eureka" />
 <meta property="og:locale" content="ko_KR" />
@@ -300,6 +300,13 @@
   .verify .kicker { color: #9fb0ff; }
   .verify .sub { color: rgba(255,255,255,.72); }
   .points { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 48px; }
+  .points.four { grid-template-columns: repeat(4, 1fr); }
+  .extras.five { grid-template-columns: repeat(5, 1fr); margin-top: 48px; }
+  .iv-points { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 22px; }
+  .iv-points span { display: inline-flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: 999px; background: rgba(255,255,255,.7);
+    box-shadow: inset 0 0 0 1px var(--line); font-size: 14px; font-weight: 600; color: var(--ink-2); }
+  .iv-points [data-lucide] { width: 16px; height: 16px; color: var(--accent); }
+  .course-note + .course-note { margin-top: 10px; }
   .point { padding: 22px; border-radius: 18px; background: rgba(255,255,255,.06); box-shadow: inset 0 0 0 1px rgba(255,255,255,.1); }
   .point [data-lucide] { width: 24px; height: 24px; color: #9fb0ff; }
   .point b { display: block; margin-top: 14px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
@@ -382,6 +389,8 @@
     .hero { padding-top: 112px; }
     .demo { max-width: 560px; width: 100%; margin: 0 auto; }
     .extras { grid-template-columns: repeat(2, 1fr); }
+    .extras.five { grid-template-columns: repeat(3, 1fr); }
+    .points.four { grid-template-columns: repeat(2, 1fr); }
     .subjects { grid-template-columns: repeat(3, 1fr); }
   }
   @media (max-width: 760px) {
@@ -394,14 +403,15 @@
     .features, .steps, .promises { grid-template-columns: 1fr; }
     .feature { padding: 22px; }
     .verify { padding: 48px 22px; border-radius: 24px; }
-    .points { grid-template-columns: 1fr; }
+    .points, .points.four { grid-template-columns: 1fr; }
+    .extras.five { grid-template-columns: repeat(2, 1fr); }
     .subjects { grid-template-columns: repeat(2, 1fr); }
     .choices { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .final { border-radius: 24px; padding: 64px 20px; }
     footer.site nav { margin-left: 0; }
   }
   @media (max-width: 480px) {
-    .extras { grid-template-columns: 1fr; }
+    .extras, .extras.five { grid-template-columns: 1fr; }
     .hero .cta .btn { flex: 1; }
     .bar-row { grid-template-columns: 6.5em 1fr 2.6em; }
   }
@@ -419,7 +429,8 @@
     </a>
     <nav class="nav-links" aria-label="페이지 안내">
       <a href="#features">기능</a>
-      <a href="#verify">문제 품질</a>
+      <a href="#agent">AI Education Agent</a>
+      <a href="#interview">AI 면접</a>
       <a href="#how">학습 흐름</a>
       <a href="#subjects">과목</a>
       <a href="#faq">자주 묻는 질문</a>
@@ -440,9 +451,9 @@
     <canvas id="hero-dots" aria-hidden="true"></canvas>
     <div class="wrap">
       <div class="pitch">
-        <span class="eyebrow reveal"><i></i>시험 준비를 위한 AI</span>
+        <span class="eyebrow reveal"><i></i>AI Education Agent</span>
         <h1 class="reveal">시험 준비를<br /><em>AI</em>로, 제대로.</h1>
-        <p class="lead reveal">말하면 문제가 나오고, 틀리면 이유를 알려 주고, <br />약한 곳은 다시 채워 줘요. 모든 문제는 검산을 마친 뒤에 도착해요.</p>
+        <p class="lead reveal">말하면 문제가 나오고, 틀리면 이유를 알려 줘요. <br />실전 시험도, AI 면접도. 모든 문제는 검산을 마친 뒤에 도착해요.</p>
         <div class="cta reveal" data-guest>
           <a class="btn btn-dark btn-lg" href="/app/login.html#signup">지금 시작하기 <i data-lucide="arrow-right" class="arrow"></i></a>
           <a class="btn btn-light btn-lg" href="#features">더 알아보기</a>
@@ -481,7 +492,7 @@
         </div>
         <div class="reply step off" id="demo-reply">
           <span class="ai" aria-hidden="true"><i class="s1"></i><i class="s2"></i></span>
-          <p><b>정답이에요!</b> <span class="sel" id="demo-sel"><span class="math">t = x²</span>으로 치환하면 <span class="math">dt = 2x dx</span><span class="reply-pop"><i data-lucide="reply"></i>답글</span></span>, 구간도 0 → 1 그대로라 <span class="math">∫ e<sup>t</sup> dt = e − 1</span>. 이 개념 정답률이 <b>58%에서 64%</b>로 올랐어요.</p>
+          <p><b>정답이에요!</b> <span class="sel" id="demo-sel"><span class="math">t = x²</span>으로 치환하면 <span class="math">dt = 2x dx</span><span class="reply-pop"><i data-lucide="reply"></i>답글</span></span>, 구간도 0 → 1 그대로라 <span class="math">∫ e<sup>t</sup> dt = e − 1</span>.</p>
         </div>
         <div class="ask quote step off" id="demo-quote">
           <q><span class="math">t = x²</span>으로 치환하면 <span class="math">dt = 2x dx</span></q>
@@ -518,7 +529,7 @@
         <article class="feature reveal">
           <span class="num">02</span>
           <h3>틀린 문제는, 이유까지.</h3>
-          <p>틀린 문제는 오답노트에 저절로 담기고, 왜 틀렸는지도 함께 남아요. 같은 개념을 다르게 묻는 문제로 다시 확인해요.</p>
+          <p>틀린 문제는 오답노트에 저절로 담기고, 왜 틀렸는지도 함께 남아요. 이유가 쌓이면, 내 실수 습관이 보여요.</p>
           <div class="viz tags">
             <span class="tag" style="--c:var(--bad)">개념 부족</span>
             <span class="tag" style="--c:var(--warn)">적용 실수</span>
@@ -560,7 +571,7 @@
         <article class="feature reveal">
           <span class="num">05</span>
           <h3>물어보면, 이어서 답해요.</h3>
-          <p>방금 푼 문제와 앞서 나눈 대화를 기억하고 답해요. 문제만 내는 게 아니라 개념 질문, 내 시험 현황까지. 답에서 궁금한 부분을 드래그해 답글을 달면 그 부분만 더 깊게 설명해요.</p>
+          <p>방금 푼 문제도, 앞서 나눈 대화도 기억해요. 개념 질문도, 내 시험 현황도 편하게 물어보세요. 궁금한 부분을 드래그해 답글을 달면, 딱 그 부분만 더 깊게.</p>
           <div class="viz" aria-label="이어지는 대화와 답글 예시">
             <div class="mini-q me"><i data-lucide="message-square"></i>아까 그 3번 문제, 왜 ③이 아니야?</div>
             <div class="mini-a"><span class="ai" aria-hidden="true"><i class="s1"></i><i class="s2"></i></span>③은 구간을 바꾸지 않아서 생긴 함정이에요…</div>
@@ -571,7 +582,7 @@
         <article class="feature reveal">
           <span class="num">06</span>
           <h3>말 한마디로, 시험 모드.</h3>
-          <p>"시험 모드로 진입해줘"라고 말하면 오른쪽에 시험 화면이 열려요. 대화는 그대로 두고 실전처럼 시간을 재며 풀고, 제출하면 바로 채점해 틀린 문제는 오답노트로 보내요. 화면은 접고 펼치고, 드래그로 넓힐 수 있어요.</p>
+          <p>"시험 모드로 진입해줘." 이 한마디면 대화 옆에 시험 화면이 열려요. 시간을 재며 풀고, 제출하면 바로 채점. 개념별 결과와 먼저 다시 볼 문항까지 정리해 드려요.</p>
           <div class="viz">
             <div class="split" aria-label="대화 옆에 열린 시험 화면 예시">
               <div class="chat"><span style="width:70%"></span><span style="width:52%"></span><span class="me">시험 모드로 진입해줘</span></div>
@@ -599,31 +610,75 @@
           <p>내 오답을 바탕으로 개념을 정리하고, 외울 건 카드로 만들어요.</p>
         </div>
         <div class="extra reveal">
-          <span class="ic"><i data-lucide="bell-ring"></i></span>
-          <h4>잊기 전에 알림</h4>
-          <p>복습할 날, 시험 D-day, 연속 학습. 잊기 전에 먼저 알려 드려요.</p>
+          <span class="ic"><i data-lucide="printer"></i></span>
+          <h4>시험지, 인쇄 그대로.</h4>
+          <p>올린 기출로 실제 시험지를 만들어 인쇄하거나 PDF로 저장해요.</p>
         </div>
         <div class="extra reveal">
-          <span class="ic"><i data-lucide="book-marked"></i></span>
-          <h4>내 교재에 맞춰</h4>
-          <p>쓰고 있는 교재를 고르면, 그 범위와 스타일대로 문제를 내요.</p>
+          <span class="ic"><i data-lucide="link"></i></span>
+          <h4>Notion · Google Drive</h4>
+          <p>자료는 Drive에서 불러오고, 결과는 Notion에 저절로 쌓여요.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <!-- ===================== 문제 품질 ===================== -->
-  <section class="block" id="verify" style="padding-top: 24px">
+  <!-- ===================== AI 면접 ===================== -->
+  <section class="block" id="interview" style="padding-top: 24px">
+    <div class="wrap">
+      <div class="center">
+        <div class="kicker reveal">AI 면접</div>
+        <h2 class="reveal">면접관은 AI.<br />긴장감은 실전.</h2>
+        <p class="sub reveal">질문을 듣고, 말로 답하세요. 꼬리질문까지 이어서 묻고, 끝나면 리포트로 돌려드려요.</p>
+      </div>
+      <div class="extras five">
+        <div class="extra reveal">
+          <span class="ic"><i data-lucide="languages"></i></span>
+          <h4>OPIc 영어</h4>
+          <p>배경 설문부터 7번 뒤 난이도 재조정까지. 실제 시험 그대로.</p>
+        </div>
+        <div class="extra reveal">
+          <span class="ic"><i data-lucide="headphones"></i></span>
+          <h4>TOEIC Speaking</h4>
+          <p>11문항, 5파트, 문항별 시간까지. 소리 내어 읽기는 정확도로.</p>
+        </div>
+        <div class="extra reveal">
+          <span class="ic"><i data-lucide="briefcase-business"></i></span>
+          <h4>직무 면접</h4>
+          <p>자기소개서를 읽고, 내 경험을 파고드는 질문을 던져요.</p>
+        </div>
+        <div class="extra reveal">
+          <span class="ic"><i data-lucide="bot"></i></span>
+          <h4>AI 역량검사</h4>
+          <p>자기소개부터 상황 대처 롤플레이까지. 요즘 기업 면접 그대로.</p>
+        </div>
+        <div class="extra reveal">
+          <span class="ic"><i data-lucide="graduation-cap"></i></span>
+          <h4>편입·의전원 면접</h4>
+          <p>전공 구술부터 의료 윤리 상황 질문까지.</p>
+        </div>
+      </div>
+      <div class="iv-points reveal">
+        <span><i data-lucide="scan-face"></i>내 모습과 실시간 자막</span>
+        <span><i data-lucide="gauge"></i>예상 등급 · 말 속도 · 머뭇거림 리포트</span>
+        <span><i data-lucide="shield-check"></i>목소리와 영상은 녹화하지 않아요</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== AI Education Agent ===================== -->
+  <section class="block" id="agent" style="padding-top: 24px">
     <div class="wrap">
       <div class="verify">
         <canvas id="verify-dots" aria-hidden="true"></canvas>
-        <div class="kicker reveal">문제 품질</div>
-        <h2 class="reveal">검산을 마친 문제만<br />도착해요.</h2>
-        <p class="sub reveal">AI가 문제를 분석하고, 한 번 더 검산해요. <br />합격에 가까워지는 고퀄리티 문제만 보내 드려요.</p>
-        <div class="points">
-          <div class="point reveal"><i data-lucide="search-check"></i><b>꼼꼼한 분석</b><p>개념, 난이도, 출제 의도까지 살펴요.</p></div>
-          <div class="point reveal"><i data-lucide="badge-check"></i><b>한 번 더 검산</b><p>정답과 조건이 정확한 문제만 통과해요.</p></div>
-          <div class="point reveal"><i data-lucide="trophy"></i><b>합격을 향한 문제</b><p>시험장 수준 그대로, 실력이 되는 문제.</p></div>
+        <div class="kicker reveal">AI Education Agent</div>
+        <h2 class="reveal">시키기 전에,<br />이미 챙겨요.</h2>
+        <p class="sub reveal">답만 하는 챗봇이 아니에요. <br />내 목표와 기록을 보고, 지금 무엇을 할지 스스로 판단해요.</p>
+        <div class="points four">
+          <div class="point reveal"><i data-lucide="ear"></i><b>알아듣고.</b><p>문제를 낼지, 설명할지, 시험을 볼지. 말의 뜻부터 파악해요.</p></div>
+          <div class="point reveal"><i data-lucide="badge-check"></i><b>검산하고.</b><p>새로 만든 문제는 다른 AI가 처음부터 다시 풀어 봐요. 맞는 문제만 도착해요.</p></div>
+          <div class="point reveal"><i data-lucide="brain"></i><b>기억하고.</b><p>약한 개념, 시험 D-day, 다시 풀 문제. 먼저 알려 드려요.</p></div>
+          <div class="point reveal"><i data-lucide="link"></i><b>이어지고.</b><p>자료는 Google Drive에서 불러오고, 결과는 Notion에 정리해요.</p></div>
         </div>
       </div>
     </div>
@@ -658,7 +713,7 @@
         <div class="stepc reveal">
           <span class="n">3</span>
           <h4>잊기 전에 다시</h4>
-          <p>틀린 문제는 1일, 3일, 7일 뒤에 다시 풀자고 알려 드려요. 맞히면 오답노트에서 졸업이에요.</p>
+          <p>틀린 문제는 1일, 3일, 7일 뒤에 다시 풀자고 알려 드려요. 다시 풀어 맞히면, '극복'.</p>
           <div class="timeline" aria-hidden="true">
             <span class="dot x"></span><span class="seg-line"></span><span class="dot"></span><span class="seg-line"></span><span class="dot"></span><span class="seg-line"></span><span class="dot"></span>
           </div>
@@ -681,10 +736,14 @@
         <div class="subj reveal" style="--c:var(--biology)"><b>생명과학I</b><small>항상성과 몸의 기능<br />유전 · 생태계</small></div>
         <div class="subj reveal" style="--c:var(--earth)"><b>지구과학I</b><small>고체 지구 · 대기와 해양<br />우주</small></div>
       </div>
-      <div class="soon reveal"><span>준비 중</span><span class="tag">CPA</span><span class="tag">의전원</span><span class="tag">대학 전공</span><span class="tag">영어</span><span class="tag">한국어</span></div>
+      <div class="soon reveal"><span>준비 중</span><span class="tag">CPA</span><span class="tag">대학 전공</span><span class="tag">한국어</span></div>
       <div class="course-note reveal">
         <i data-lucide="network"></i>
-        <span><b>찾는 시험이 없나요?</b> 시험 이름과 교재, 범위만 알려 주세요. 나만을 위한 코스를 만들어 드려요.</span>
+        <span><b>찾는 시험이 없나요?</b> 시험 이름과 교재, 범위만 알려 주세요. 그 시험에 맞춘 코스를 만들어 드려요.</span>
+      </div>
+      <div class="course-note reveal">
+        <i data-lucide="mic"></i>
+        <span><b>영어 말하기와 면접은?</b> <a href="#interview">AI 면접</a>에서 준비해요.</span>
       </div>
     </div>
   </section>
@@ -698,7 +757,7 @@
         <div class="promise reveal"><i data-lucide="lock"></i><div><h4>내 기록은 나에게만</h4><p>풀이 기록, 오답노트, 대화는 내 계정에서만 보여요. 다른 사람은 볼 수 없어요.</p></div></div>
         <div class="promise reveal"><i data-lucide="file-lock-2"></i><div><h4>올린 기출도 나만</h4><p>직접 올린 기출과, 그걸 바탕으로 만든 문제는 나에게만 보여요.</p></div></div>
         <div class="promise reveal"><i data-lucide="copyright"></i><div><h4>원문은 보여 주지 않아요</h4><p>기출 원문은 출제 스타일을 읽는 데만 쓰고, 화면에는 새로 만든 문제만 나와요.</p></div></div>
-        <div class="promise reveal"><i data-lucide="image-off"></i><div><h4>사진 속 정보는 지워요</h4><p>프로필 사진에 담긴 촬영 위치나 기기 정보는 저장하지 않아요.</p></div></div>
+        <div class="promise reveal"><i data-lucide="mic-off"></i><div><h4>목소리와 영상은 녹화하지 않아요</h4><p>AI 면접의 내 모습과 목소리는 화면에서만 쓰고, 받아쓴 글만 저장해요.</p></div></div>
       </div>
     </div>
   </section>
@@ -713,15 +772,23 @@
       <div class="faq">
         <details class="reveal">
           <summary>AI가 만든 문제, 정말 믿어도 되나요?<i data-lucide="plus"></i></summary>
-          <p>네. AI가 만든 문제는 그대로 나가지 않아요. 한 번 더 검산해서 정답과 조건이 정확한 문제만 보여 드려요. 그래도 이상한 문제가 있다면 문제 화면에서 신고해 주세요. 바로 확인할게요.</p>
+          <p>네. 새로 만든 문제는 그대로 나가지 않아요. 다른 AI가 처음부터 다시 풀어 검산하고, 정답과 조건이 맞는 문제만 보여 드려요. 그래도 이상한 문제가 있다면 문제 화면에서 신고해 주세요. 바로 확인할게요.</p>
         </details>
         <details class="reveal">
           <summary>문제 말고 개념 질문도 할 수 있나요?<i data-lucide="plus"></i></summary>
           <p>네. Eureka는 앞서 나눈 대화와 방금 푼 문제를 기억하고 답해요. "아까 그 문제 왜 틀렸어?", "치환적분은 언제 써?"처럼 편하게 물어보세요. 답에서 궁금한 부분을 드래그해 답글을 달면 그 부분만 더 깊고 자세하게 설명해 드려요.</p>
         </details>
         <details class="reveal">
+          <summary>AI 면접은 어떻게 진행되고, 녹음되나요?<i data-lucide="plus"></i></summary>
+          <p>질문을 들려 드리면 말로 답해요. 브라우저가 받아쓴 글을 보고 다음 질문과 꼬리질문이 이어져요. 끝나면 예상 등급이나 점수, 말 속도, 질문별 피드백과 모범 답변을 리포트로 드려요. 목소리와 영상은 녹화하지 않고, 받아쓴 글만 저장해요.</p>
+        </details>
+        <details class="reveal">
+          <summary>Notion이나 Google Drive와 연결할 수 있나요?<i data-lucide="plus"></i></summary>
+          <p>네. 기출과 자기소개서는 Google Drive에서 바로 불러올 수 있어요. 설정에서 Notion을 연결하면 시험 결과와 AI 면접 리포트가 내 Notion에 저절로 쌓여요. 연결하지 않아도 결과를 복사해 Notion에 붙여 넣을 수 있어요.</p>
+        </details>
+        <details class="reveal">
           <summary>어떤 과목을 공부할 수 있나요?<i data-lucide="plus"></i></summary>
-          <p>지금은 수능 수학(수학I·II, 미적분, 확률과 통계)과 과학탐구 네 과목(물리학I, 화학I, 생명과학I, 지구과학I)을 공부할 수 있어요. 다른 시험도 이름과 교재, 범위만 알려 주시면 나만의 코스를 만들어 드려요. CPA, 의전원, 대학 전공, 영어, 한국어 코스도 준비하고 있어요.</p>
+          <p>지금은 수능 수학(수학I·II, 미적분, 확률과 통계)과 과학탐구 네 과목(물리학I, 화학I, 생명과학I, 지구과학I)을 공부할 수 있어요. 다른 시험도 이름과 교재, 범위만 알려 주시면 그 시험에 맞춘 코스를 만들어 드려요. 영어 말하기와 면접은 AI 면접에서 준비할 수 있고, CPA, 대학 전공, 한국어 코스도 준비하고 있어요.</p>
         </details>
         <details class="reveal">
           <summary>교육과정이 바뀌면 어떻게 되나요?<i data-lucide="plus"></i></summary>
@@ -733,7 +800,7 @@
         </details>
         <details class="reveal">
           <summary>휴대폰에서도 쓸 수 있나요?<i data-lucide="plus"></i></summary>
-          <p>네. 앱 설치 없이 휴대폰, 태블릿, PC 브라우저에서 바로 쓸 수 있어요. 태블릿에서는 서술형 풀이를 펜으로 써서 어디서 틀렸는지 확인받을 수도 있어요.</p>
+          <p>네. 앱 설치 없이 휴대폰, 태블릿, PC 브라우저에서 바로 쓸 수 있어요. 태블릿에서는 서술형 풀이를 펜으로 써서 어디서 틀렸는지 확인받을 수도 있어요. AI 면접은 마이크와 카메라를 쓰기 때문에 Chrome, Edge, Safari에서 가장 잘 동작해요.</p>
         </details>
       </div>
     </div>
@@ -746,7 +813,7 @@
         <canvas id="final-dots" aria-hidden="true"></canvas>
         <div class="kicker reveal">Eureka</div>
         <h2 class="reveal">다음 시험,<br />이번엔 다르게.</h2>
-        <p class="sub reveal">Eureka와 함께라면, 공부가 달라져요.</p>
+        <p class="sub reveal">문제 풀이부터 실전 시험, AI 면접까지. 한곳에서.</p>
         <div class="cta reveal" data-guest>
           <a class="btn btn-dark btn-lg" href="/app/login.html#signup">지금 시작하기 <i data-lucide="arrow-right" class="arrow"></i></a>
           <a class="btn btn-light btn-lg" href="/app/login.html">로그인</a>
