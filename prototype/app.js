@@ -2646,7 +2646,7 @@
         <div class="panel xt-table"><h3>문항별 결과 · 걸린 시간</h3>
           ${r.items.map((it, k) => `<div class="xt-row ${it.correct ? "ok" : it.correct === false ? "bad" : ""}">
             <b>${k + 1}</b><span class="xt-st"><i data-lucide="${it.correct ? "circle-check" : it.correct === false ? "circle-x" : "circle-help"}"></i>${it.correct ? "맞음" : !it.my ? "안 풂" : it.correct === false ? "틀림" : "채점 못 함"}</span>
-            <span class="xt-stem1" data-math>${esc((it.stem || "").slice(0, 80))}</span>
+            <span class="xt-stem1" data-math>${esc((it.stem || "").replace(/\s+/g, " "))}</span>
             <span class="xt-ans">내 답 <b data-math>${esc(label(it, it.my))}</b> · 정답 <b data-math>${esc(label(it, it.answer))}</b></span>
             <span class="xt-secbar ${it.sec > avg * 1.5 ? "slow" : ""}"><i style="width:${(it.sec / maxSec) * 100}%"></i><em>${mmss(it.sec)}</em></span></div>`).join("")}
         </div>
@@ -2834,6 +2834,10 @@
   window.addEventListener("message", (e) => {
     if (e.origin !== location.origin || !e.data?.type) return;
     if (e.data.type === "eureka:pane-close") closePane();
+    if (e.data.type === "eureka:ask" && pane && typeof e.data.text === "string") {
+      const quote = typeof e.data.quote === "string" ? e.data.quote.slice(0, 1500) : null;
+      ask({ sessionId: pane.sid, text: e.data.text.slice(0, 2000), quote });
+    }
     if (e.data.type === "eureka:exam-done") Store.reload().then(() => {
       const [page, id] = route().parts;
       if (page === "chat") renderChat(id, { keepScroll: true });
@@ -3017,6 +3021,32 @@
       const score = right.reduce((a, r) => a + pts(r.q), 0);
       const wrongIds = rows.filter((r) => r.correct === false).map((r) => r.q.id);
       const label = (q, a) => (a ? (q.choices ? CIRC[Number(a) - 1] ?? a : a) : "–");
+      const wrong = rows.filter((r) => r.correct === false); // 안 푼 문항도 틀린 것으로 본다
+      const avgSec = rows.length ? rows.reduce((a, r) => a + r.sec, 0) / rows.length : 0;
+      // 개념별 정답: 문항의 개념(없으면 대화 문제의 개념)으로 묶는다. 약한 개념부터
+      const byCon = new Map();
+      rows.filter((r) => r.correct !== null).forEach((r) => {
+        const cid = (r.q.concept_ids ?? r.q.conceptIds ?? Store.problem?.(r.q.id)?.conceptIds ?? [])[0];
+        const name = cid ? concept(cid)?.name : null;
+        if (!name) return;
+        const g = byCon.get(name) ?? { name, n: 0, ok: 0 };
+        g.n += 1; if (r.correct) g.ok += 1;
+        byCon.set(name, g);
+      });
+      const cons = [...byCon.values()].sort((a, b) => a.ok / a.n - b.ok / b.n || b.n - a.n).slice(0, 6);
+      // 먼저 다시 볼 문항: 틀린 문항 중 오래 붙잡고 있던 것부터
+      const focus = [...wrong].sort((a, b) => b.sec - a.sec).slice(0, 3);
+      const anaHTML = (cons.length || wrong.length) ? `
+          <div class="panel xt-ana"><h3>결과 분석</h3>
+            ${cons.length ? `<div class="xt-sub">개념별 정답</div><div class="xt-cons">${cons.map((g) => `
+              <div class="xt-con ${g.ok / g.n < 0.5 ? "weak" : g.ok === g.n ? "good" : ""}"><span>${esc(g.name)}</span><i><em style="width:${Math.round((g.ok / g.n) * 100)}%"></em></i><b>${g.ok}/${g.n}</b></div>`).join("")}</div>` : ""}
+            ${focus.length ? `<div class="xt-sub">먼저 다시 볼 문항</div><div class="xt-focus">${focus.map((r) => `
+              <button type="button" class="xt-fq" data-xt-why="${rows.indexOf(r)}" title="이 문제를 대화에서 설명 듣기">
+                <b>${rows.indexOf(r) + 1}번</b><span data-math>${esc(r.q.stem.replace(/\s+/g, " "))}</span>
+                <small>${r.skipped ? "안 풂" : "틀림"}${r.sec ? ` · ${mmss(r.sec)}${r.sec > avgSec * 1.3 ? " · 오래 걸림" : ""}` : ""}</small><i data-lucide="message-circle-question"></i></button>`).join("")}</div>` : ""}
+            ${wrong.length ? `<div class="xt-review"><button class="btn-primary" data-xt-review><i data-lucide="messages-square"></i>틀린 ${wrong.length}문제 ${EMBED ? "왼쪽 대화에서" : "대화로"} 설명 듣기</button>
+              <span class="mini">문제를 인용해 물어보면 왜 틀렸는지, 어떤 개념을 놓쳤는지 자세히 설명해요</span></div>` : ""}
+          </div>` : "";
       view.innerHTML = `
         <div class="xt-result">
           <div class="xt-score panel">
@@ -3037,16 +3067,18 @@
               ${p.id && !EMBED ? `<a class="btn-ghost" href="#/project/${p.id}"><i data-lucide="folder"></i>프로젝트로</a>` : ""}
             </div>
           </div>
+          ${anaHTML}
           ${slow.length ? `<div class="panel xt-slow"><h3>시간이 오래 걸린 문항</h3>
             <div class="xt-slow-list">${slow.map((r) => `<div><b>${rows.indexOf(r) + 1}번</b><span>${mmss(r.sec)}</span><small>${r.correct ? "맞음" : r.skipped ? "안 풂" : r.correct === false ? "틀림" : "채점 못 함"}</small></div>`).join("")}</div>
-            <p class="mini">평균 ${mmss(Math.round(rows.reduce((a, r) => a + r.sec, 0) / rows.length))} · 오래 걸렸는데 틀린 문항부터 다시 보면 좋아요</p></div>` : ""}
+            <p class="mini">평균 ${mmss(Math.round(avgSec))} · 오래 걸렸는데 틀린 문항부터 다시 보면 좋아요</p></div>` : ""}
           <div class="panel xt-table"><h3>문항별 결과</h3>
             ${rows.map((r, i) => `<div class="xt-row ${r.correct ? "ok" : r.correct === false ? "bad" : ""}">
               <b>${i + 1}</b><span class="xt-st"><i data-lucide="${r.correct ? "circle-check" : r.correct === false ? "circle-x" : "circle-help"}"></i>${r.correct ? "맞음" : r.skipped ? "안 풂" : r.correct === false ? "틀림" : "채점 못 함"}</span>
-              <span class="xt-stem1" data-math>${esc(r.q.stem.slice(0, 80))}</span>
+              <span class="xt-stem1" data-math>${esc(r.q.stem.replace(/\s+/g, " "))}</span>
               <span class="xt-ans">내 답 <b data-math>${esc(label(r.q, r.my))}</b></span>
               <span class="xt-ans">정답 <b data-math>${esc(label(r.q, r.answer))}</b></span>
-              <span class="xt-ans xt-sec">${mmss(r.sec)}</span></div>`).join("")}
+              <span class="xt-ans xt-sec">${mmss(r.sec)}</span>
+              ${r.correct === false ? `<button type="button" class="xt-why" data-xt-why="${i}" title="이 문제를 대화에서 설명 듣기"><i data-lucide="message-circle-question"></i><span>왜 틀렸지?</span></button>` : "<span></span>"}</div>`).join("")}
           </div>
         </div>`;
       icons();
@@ -3058,7 +3090,22 @@
           return go(`${path}?${q}`);
         }
         if (e.target.closest("[data-xt-again]")) return renderExamTake({ p, list, params, pts, subject, scopeName, path, back });
+        const why = e.target.closest("[data-xt-why]");
+        if (why) return reviewInChat([rows[Number(why.dataset.xtWhy)]]);
+        if (e.target.closest("[data-xt-review]")) return reviewInChat(wrong);
       };
+      // 틀린 문제를 인용해 대화에서 설명 듣기 — 오른쪽 패널이면 왼쪽 대화로, 아니면 그 대화(없으면 새 대화)로
+      function reviewInChat(picked) {
+        if (!picked.length) return;
+        const one = picked.length === 1;
+        const text = one ? "이 문제를 왜 틀렸는지, 어떤 개념을 놓쳤는지 설명해 줘"
+          : `방금 시험에서 틀린 ${picked.length}문제를 하나씩 왜 틀렸는지, 어떤 개념을 놓쳤는지 설명해 줘`;
+        const quote = picked.map((r) => `${rows.indexOf(r) + 1}번. ${r.q.stem.trim()}\n(내 답: ${label(r.q, r.my)} · 정답: ${label(r.q, r.answer)})`)
+          .join("\n\n").slice(0, 1500);
+        if (EMBED) { toParent({ type: "eureka:ask", text, quote }); return toast("왼쪽 대화에 물어봤어요"); }
+        const sid = path.startsWith("/exam-chat/") ? path.split("/")[2] : null;
+        ask({ sessionId: sid, projectId: p.id, text, quote });
+      }
       countUp(view);
     }
 
