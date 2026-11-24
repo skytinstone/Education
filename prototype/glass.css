@@ -1191,9 +1191,17 @@ body.pdf-capture .exam-body { column-count: 1 !important; column-rule: none !imp
 .ivx { --x-ink: #14161F; --x-mute: #5C6170; --x-line: #E6E7EC; --x-edge: #D3D5DD; --x-accent: #1F5FE0; --x-accent-2: #174BB8; --x-tint: #EEF3FD;
   --x-ok: #0A6247; --x-warn: #8F3608;
   max-width: 1280px; margin: 0 auto; height: calc(100dvh - 140px); min-height: 540px;
-  display: grid; grid-template-rows: auto minmax(0, 1fr); background: #fff; color: var(--x-ink);
+  display: grid; grid-template-rows: auto minmax(0, 1fr); grid-template-columns: minmax(0, 1fr); background: #fff; color: var(--x-ink);
   border: 1px solid var(--x-line); border-radius: 16px; overflow: hidden; }
 .ivx h1, .ivx h2, .ivx h3, .ivx p { margin: 0; }
+/* 한국어는 단어 중간에서 끊지 않는다 · 칩 · 버튼 · Step 이름 · 번호는 한 줄로 */
+.ivx { word-break: keep-all; overflow-wrap: anywhere; }
+.ivx-top h1, .ivx-back, .ivx .ivx-btn, .ivx-rng, .ivx-level b, .ivx-eyebrow { white-space: nowrap; }
+.ivx .ivx-chip { white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.ivx-step span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ivx-top h1 { flex-shrink: 0; }
+.ivx-steps { min-width: 0; }
+.ivx .ivx-step { min-width: 0; }
 .ivx button:focus-visible, .ivx a:focus-visible, .ivx .ivx-in:focus-visible { outline: 2px solid var(--x-accent); outline-offset: 2px; }
 
 .ivx-top { display: flex; align-items: center; gap: 24px; padding: 0 28px; min-height: 64px; border-bottom: 1px solid var(--x-line); }
@@ -1296,8 +1304,10 @@ body.pdf-capture .exam-body { column-count: 1 !important; column-rule: none !imp
 .ivx .ivx-btn.primary:disabled { border-color: var(--x-line); background: #F1F2F5; color: var(--x-mute); cursor: not-allowed; }
 .ivx .ivx-btn[hidden] { display: none; }
 
-@media (max-width: 1100px) { .ivx-work { grid-template-columns: minmax(0, 1fr) 280px; } .ivx .ivx-step { width: 120px; } }
-@media (max-width: 860px) {
+/* 화면 폭이 아니라 이 영역의 폭으로 나눈다 — 사이드바가 열려 있으면 더 일찍 한 장씩 쌓인다 */
+.ivx-wrap { container: ivx / inline-size; }
+@container ivx (max-width: 1000px) { .ivx-work { grid-template-columns: minmax(0, 1fr) 280px; } .ivx .ivx-step { width: 120px; } }
+@container ivx (max-width: 760px) {
   .ivx { height: auto; min-height: 0; display: block; overflow: visible; border: 0; border-radius: 0; }
   .ivx-top { flex-wrap: wrap; padding: 0 0 8px; gap: 4px 16px; }
   .ivx-step span { display: flex; flex-direction: column; gap: 2px; }

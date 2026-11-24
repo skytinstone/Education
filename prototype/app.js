@@ -3424,7 +3424,7 @@
       : `<div class="ivx-pv-head"><h2>진행 방식</h2><p>${esc(k.name)}</p></div>
           <ol class="ivx-slots info">${info.map(([a, b]) => `<li class="ivx-slot"><span class="ivx-rng">${a}</span><strong>${esc(b)}</strong></li>`).join("")}</ol>`;
     view.innerHTML = `
-      <div class="ivx">
+      <div class="ivx-wrap"><div class="ivx">
         <header class="ivx-top">
           <a class="ivx-back" href="#/interview"><i data-lucide="arrow-left"></i>AI 면접</a>
           <h1>${esc(k.name)}</h1>
@@ -3444,7 +3444,7 @@
             </div>
           </footer>
         </form>
-      </div>`;
+      </div></div>`;
     icons();
     const form = $("#iv-form");
     const next = $("#ivx-next");
