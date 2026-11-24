@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     portone_channel_key: str | None = None
     portone_api_secret: str | None = None
     portone_webhook_secret: str | None = None
+    billing_public: bool = False  # false(베타): 요금제 화면은 운영자(ADMIN_EMAILS)에게만 보인다
 
     # 운영자 — 이 이메일로 로그인한 계정만 피드백 관리·문제 복구를 할 수 있다 (쉼표로 여러 개)
     admin_emails: str = ""

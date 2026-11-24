@@ -68,6 +68,12 @@ def available() -> bool:
     return bool(s.portone_store_id and s.portone_channel_key and s.portone_api_secret)
 
 
+def open_to(user: m.User) -> bool:
+    """이 사용자에게 요금제 화면을 보여 줄지 — BILLING_PUBLIC 이 꺼져 있으면(베타) 운영자만"""
+    s = get_settings()
+    return available() and (s.billing_public or user.email.lower() in s.admins)
+
+
 # ---------- PortOne 연결 (테스트에서 바꿔 끼운다) ----------
 class PortOne:
     def __init__(self) -> None:
@@ -187,7 +193,7 @@ def subscribe(db: Session, user: m.User, plan_key: str, billing_key: str) -> m.S
     plan = PLANS.get(plan_key)
     if not plan or not plan.price:
         raise BillingError(422, "없는 요금제예요")
-    if not available():
+    if not open_to(user):
         raise BillingError(503, "결제는 아직 준비 중이에요")
     if plan_of(db, user).price:
         raise BillingError(409, "이미 구독 중이에요. 요금제를 바꾸려면 해지한 뒤 이번 기간이 끝나고 다시 구독해 주세요")
@@ -318,9 +324,9 @@ def status(db: Session, user: m.User) -> dict:
                       .order_by(m.BillingPayment.created_at.desc()).limit(12)).all()
     s = get_settings()
     return {
-        "available": available(),
-        "store_id": s.portone_store_id if available() else None,
-        "channel_key": s.portone_channel_key if available() else None,
+        "available": open_to(user),
+        "store_id": s.portone_store_id if open_to(user) else None,
+        "channel_key": s.portone_channel_key if open_to(user) else None,
         "customer_id": str(user.id),
         "plan": plan.key,
         "plans": [{"key": p.key, "name": p.name, "price": p.price, "perks": list(p.perks)} for p in PLANS.values()],

@@ -76,7 +76,7 @@ class FakePortOne:
 def portone(monkeypatch):
     s = get_settings()
     for k, v in {"portone_store_id": "store-test", "portone_channel_key": "channel-test", "portone_api_secret": "secret",
-                 "portone_webhook_secret": WHSEC}.items():
+                 "portone_webhook_secret": WHSEC, "billing_public": True}.items():
         monkeypatch.setattr(s, k, v)
     FakePortOne.outcome, FakePortOne.calls = {}, []
     monkeypatch.setattr(billing, "portone_factory", FakePortOne)
@@ -212,3 +212,13 @@ def test_account_delete_revokes_and_deletes_billing_key(client, auth, portone):
     email = client.get("/api/me", headers=auth).json()["email"]
     assert client.request("DELETE", "/api/me", headers=auth, json={"confirm_email": email}).status_code == 204
     assert ("revoke", "billing-key-1") in portone.calls and ("delete", "billing-key-1") in portone.calls
+
+
+def test_beta_shows_billing_to_admins_only(client, auth, portone, monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "billing_public", False)
+    assert me(client, auth)["available"] is False and me(client, auth)["store_id"] is None
+    assert subscribe(client, auth).status_code == 503 and not any(c[0] == "pay" for c in portone.calls)
+    email = client.get("/api/me", headers=auth).json()["email"]
+    monkeypatch.setattr(s, "admin_emails", email)
+    assert me(client, auth)["available"] is True and subscribe(client, auth).status_code == 200
