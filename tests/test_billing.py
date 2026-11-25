@@ -196,7 +196,7 @@ def test_plan_raises_daily_ai_limit(client, auth, portone, db, monkeypatch):
     user = db.query(m.User).one()
     assert quota.limits(db, user) == (0.5, 150)
     subscribe(client, auth)
-    assert quota.limits(db, user) == (3.0, 600)
+    assert quota.limits(db, user) == (1.5, 400)
     monkeypatch.setattr(s, "ai_daily_limit_calls", 0)  # 기본이 제한 없음이면 구독자도
     assert quota.limits(db, user)[1] == 0
 

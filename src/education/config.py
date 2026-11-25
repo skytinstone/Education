@@ -43,8 +43,10 @@ class Settings(BaseSettings):
     openai_effort_verify: str = "medium"
     ai_max_attempts: int = 2  # 검증에 실패하면 문제당 다시 만드는 최대 횟수
     # 한 사람이 하루(서비스 시간대 기준)에 쓸 수 있는 AI — 비용(달러)과 호출 수 중 먼저 닿는 쪽. 0 이면 제한 없음. 운영자는 제외
-    ai_daily_limit_usd: float = 2.0
-    ai_daily_limit_calls: int = 400
+    ai_daily_limit_usd: float = 0.5   # 계정당 하루 AI 비용 (무료) — 0 이면 제한 없음
+    ai_daily_limit_calls: int = 150   # 계정당 하루 AI 호출 수 (무료)
+    ai_monthly_limit_usd: float = 1.5  # 계정당 한 달 AI 비용 (무료)
+    ai_global_daily_limit_usd: float = 20.0  # 서비스 전체 하루 AI 비용 — 넘으면 운영자 빼고 모두 멈추고 메일 알림
 
     # 오류 추적 (Sentry). DSN 을 넣으면 서버 오류가 Sentry 로 모인다
     sentry_dsn: str | None = None

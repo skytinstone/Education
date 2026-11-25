@@ -105,10 +105,10 @@ def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
     has_history = bool(session and session.messages)
     if intent.fast_route(text, has_history) == "exam_mode":  # 시험 모드는 AI 없이 — 한도·AI 꺼짐과 상관없이
         return exam_reply(db, user, project, session)
-    if llm and quota.exceeded(db, user):  # 하루 한도를 넘으면 AI 없이 문제 은행에서
+    if llm and (why := quota.reason(db, user)):  # 한도를 넘으면 AI 없이 문제 은행에서
         ids = _from_bank(db, user, text, detect_domain(text), None)
-        return Reply((f"오늘 쓸 수 있는 AI 사용량을 다 써서, 문제 은행의 검증된 문제 {len(ids)}개를 보여드려요. 내일 다시 AI 로 만들어 드릴게요."
-                      if ids else quota.MESSAGE), ids, intent="quota")
+        return Reply((f"{why.split('.')[0]}. 대신 문제 은행의 검증된 문제 {len(ids)}개를 보여드려요."
+                      if ids else why), ids, intent="quota")
     if llm is None:  # AI 가 없으면 문제 은행에서
         return Reply(*reply(db, user, text, project), intent="make_problems")
 
@@ -170,8 +170,8 @@ def _deep_reply(db: Session, llm, user: m.User, text: str, quote: str, session: 
     """답글: 앞 답변에서 고른 부분을 이전 대화·학습 현황과 함께 더 깊고 자세하게 풀어 준다 (판단 없이 바로 풀이 모델)."""
     if llm is None:
         return Reply("고른 부분을 자세히 풀어 드리려면 AI 가 켜져 있어야 해요.", intent="deep")
-    if quota.exceeded(db, user):
-        return Reply(quota.MESSAGE, intent="quota")
+    if why := quota.reason(db, user):
+        return Reply(why, intent="quota")
     prompt = intent.deep_prompt(db, user, text=text, quote=quote, session=session, project=project)
     try:
         line, payload = explain.explain(db, llm, user, text, prompt=prompt, instructions=explain.DEEP_INSTRUCTIONS, purpose="deep")
@@ -185,8 +185,8 @@ def _files_reply(db: Session, llm, user: m.User, text: str, files: list[Attachme
     """첨부한 사진·PDF 를 읽고 풀이로 답한다. AI 가 없거나 한도를 넘었으면 이유를 알린다."""
     if llm is None:
         return Reply("사진·파일을 읽으려면 AI 가 켜져 있어야 해요. 지금은 문제를 글로 적어서 물어봐 주세요.", intent="explain_file")
-    if quota.exceeded(db, user):
-        return Reply(quota.MESSAGE, intent="quota")
+    if why := quota.reason(db, user):
+        return Reply(why, intent="quota")
     names = ", ".join(f.filename for f in files)
     prompt = f"학생 질문: {text}\n\n[첨부한 자료] {names}"
     try:

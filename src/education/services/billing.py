@@ -45,14 +45,15 @@ class Plan:
     price: int              # 원, 부가세 포함 · 한 달
     daily_usd: float        # 하루 AI 비용 한도 (services/quota.py)
     daily_calls: int        # 하루 AI 호출 한도
+    monthly_usd: float      # 한 달 AI 비용 한도 — 요금보다 한참 낮게 (부가세·수수료 뺀 금액의 절반 아래)
     perks: tuple[str, ...]
 
 
-# free 의 한도는 .env 의 AI_DAILY_LIMIT_USD · AI_DAILY_LIMIT_CALLS 를 쓴다 (0 이면 이 값)
+# free 의 한도는 .env 의 AI_DAILY_LIMIT_USD · AI_DAILY_LIMIT_CALLS · AI_MONTHLY_LIMIT_USD 를 쓴다
 PLANS: dict[str, Plan] = {
-    "free": Plan("free", "무료", 0, 0, 0, ("하루 AI 사용량 기본 제공", "문제 풀이 · 실전 시험 · AI 면접 체험")),
-    "plus": Plan("plus", "Plus", 9900, 3.0, 600, ("무료보다 넉넉한 하루 AI 사용량", "실전 시험 · AI 면접을 자주 볼 때")),
-    "pro": Plan("pro", "Pro", 19900, 8.0, 1500, ("Plus 의 2배가 넘는 하루 AI 사용량", "기출 분석 · AI 면접을 매일 할 때")),
+    "free": Plan("free", "무료", 0, 0, 0, 0, ("하루 AI 사용량 기본 제공", "문제 풀이 · 실전 시험 · AI 면접 체험")),
+    "plus": Plan("plus", "Plus", 9900, 1.5, 400, 4.0, ("무료보다 넉넉한 하루 AI 사용량", "실전 시험 · AI 면접을 자주 볼 때")),
+    "pro": Plan("pro", "Pro", 19900, 3.0, 800, 8.0, ("Plus 의 2배가 넘는 하루 AI 사용량", "기출 분석 · AI 면접을 매일 할 때")),
 }
 
 

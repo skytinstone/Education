@@ -72,6 +72,13 @@ def create_note(concept_id: str, user: CurrentUser, db: DB) -> ConceptNoteCreate
                               added_cards=[CardOut.model_validate(c) for c in result.added_cards])
 
 
+# ---------- AI 사용량 (설정 화면) ----------
+@router.get("/usage", tags=["통계"])
+def ai_usage(user: CurrentUser, db: DB) -> dict:
+    """오늘 · 이번 달 AI 사용량을 한도 대비 비율로 (금액은 보여 주지 않는다)"""
+    return quota.summary(db, user)
+
+
 # ---------- 개념 레슨 · 개념과 대화하기 (라이브러리) ----------
 @router.get("/concepts/{concept_id}/lesson", tags=["개념"])
 def get_lesson(concept_id: str, user: CurrentUser, db: DB) -> dict | None:

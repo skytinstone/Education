@@ -5778,6 +5778,16 @@
       drawBillingCard();
     } catch (err) { busy(false); toast(err.message); }
   }
+  async function drawUsage() {
+    let u = null;
+    try { u = await Store.aiUsage(); } catch { return; }
+    const sec = $("#stx-usage"), box = $("#usage-box");
+    if (!box || !u || u.unlimited) return;
+    sec.hidden = false;
+    const bar = (label, pct) => `<div class="usage-row"><span>${label}</span><span class="usage-track"><i class="${pct >= 90 ? "hot" : pct >= 70 ? "warm" : ""}" style="width:${Math.max(pct, 2)}%"></i></span><b>${pct}%</b></div>`;
+    box.innerHTML = `${bar("오늘", u.today_pct)}${bar("이번 달", u.month_pct)}
+      ${u.blocked ? `<p class="mini stx-warn">${esc(u.blocked)}</p>` : ""}`;
+  }
   async function drawBillingCard() {
     const card = $("#billing-card"), box = $("#billing-box");
     if (!box) return;
@@ -5943,7 +5953,12 @@
           </div>
         </form>
 
-        ${Store.mode === "api" ? `<section class="stx-sec" id="billing-card" hidden>
+        ${Store.mode === "api" ? `<section class="stx-sec" id="stx-usage" hidden>
+          <div class="stx-label"><h2>AI 사용량</h2><p>AI 는 하루·한 달 정해진 만큼 쓸 수 있어요. 오늘 몫은 밤 12시, 이번 달 몫은 1일에 다시 채워져요</p></div>
+          <div class="stx-body" id="usage-box"></div>
+        </section>
+
+        <section class="stx-sec" id="billing-card" hidden>
           <div class="stx-label"><h2>요금제와 결제</h2><p>매달 같은 날 자동으로 결제되고, 언제든 해지할 수 있어요</p></div>
           <div class="stx-body" id="billing-box"></div>
         </section>
@@ -6059,6 +6074,7 @@
     renderLoginMethods();
     drawNotionCard();
     drawBillingCard();
+    drawUsage();
     $("#s-logout").addEventListener("click", () => {
       try { localStorage.removeItem("eureka.token"); localStorage.removeItem("eureka.user"); } catch { /* 무시 */ }
       location.href = "login.html";
