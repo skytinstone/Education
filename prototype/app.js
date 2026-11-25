@@ -3226,7 +3226,7 @@
     if (!iv) return;
     clearInterval(iv.timer);
     iv.stopRec?.();
-    try { speechSynthesis.cancel(); } catch { /* 없음 */ }
+    ivStopAudio();
     ivMediaStop();
     iv = null;
   }
@@ -3658,23 +3658,55 @@
     ivDrawQuestion();
   }
 
-  function ivSpeak(text, lang, done) {
-    const synth = window.speechSynthesis;
-    if (!synth || !ivVoiceOn()) return done?.();
-    try {
-      synth.cancel();
-      const u = new SpeechSynthesisUtterance(text);
-      u.lang = lang === "en" ? "en-US" : "ko-KR";
-      u.rate = lang === "en" ? 0.95 : 1;
-      const v = synth.getVoices().find((x) => x.lang?.startsWith(u.lang.slice(0, 2)));
-      if (v) u.voice = v;
-      let fired = false;
-      const end = () => { if (!fired) { fired = true; $(".iv-ai")?.classList.remove("speaking"); done?.(); } };
-      u.onend = end; u.onerror = end;
-      $(".iv-ai")?.classList.add("speaking");
-      synth.speak(u);
-      setTimeout(end, Math.min(60000, 1500 + text.length * 90)); // 일부 브라우저는 onend 를 안 준다
-    } catch { done?.(); }
+  // 질문 읽어 주기 — 영어 면접(OPIc · TOEIC)은 서버가 만든 자연스러운 여자 목소리(고정), 안 되면 브라우저 음성(여자 영어 목소리 우선)
+  const ivAudio = { urls: {}, el: null };
+  const IV_FEMALE = /samantha|\bava\b|allison|susan|zira|aria|jenny|michelle|emma|karen|moira|serena|victoria|tessa|joanna|salli|female|google us english/i;
+  function ivStopAudio() {
+    try { ivAudio.el?.pause(); } catch { /* 없음 */ }
+    ivAudio.el = null;
+    try { speechSynthesis.cancel(); } catch { /* 없음 */ }
+  }
+  const ivSpeechUrl = (id, index) => (ivAudio.urls[`${id}:${index}`] ??= Store.interviewSpeech(id, index).catch(() => null));
+  function ivBrowserVoice(lang) {
+    const want = lang === "en" ? "en" : "ko";
+    const vs = speechSynthesis.getVoices().filter((x) => x.lang?.toLowerCase().startsWith(want));
+    if (want !== "en") return vs[0];
+    const score = (v) => (IV_FEMALE.test(v.name) && !/\bmale\b/i.test(v.name) ? 4 : 0) + (/natural|online|neural|premium|enhanced/i.test(v.name) ? 2 : 0) + (/en[-_]US/i.test(v.lang) ? 1 : 0);
+    return vs.sort((a, b) => score(b) - score(a))[0];
+  }
+  function ivSpeak(text, lang, done, index = null) {
+    if (!ivVoiceOn()) return done?.();
+    ivStopAudio();
+    let fired = false;
+    const end = () => { if (!fired) { fired = true; $(".iv-ai")?.classList.remove("speaking"); done?.(); } };
+    $(".iv-ai")?.classList.add("speaking");
+    const browser = () => {
+      const synth = window.speechSynthesis;
+      if (!synth || fired) return end();
+      try {
+        synth.cancel();
+        const u = new SpeechSynthesisUtterance(text);
+        u.lang = lang === "en" ? "en-US" : "ko-KR";
+        u.rate = lang === "en" ? 0.94 : 1;
+        u.pitch = lang === "en" ? 1.05 : 1;
+        const v = ivBrowserVoice(lang);
+        if (v) u.voice = v;
+        u.onend = end; u.onerror = end;
+        synth.speak(u);
+        setTimeout(end, Math.min(60000, 1500 + text.length * 90)); // 일부 브라우저는 onend 를 안 준다
+      } catch { end(); }
+    };
+    if (lang !== "en" || index == null || !iv || Store.mode !== "api") return browser();
+    const id = iv.id;
+    ivSpeechUrl(id, index).then((url) => {
+      if (fired || iv?.id !== id) return;
+      if (!url) return browser();
+      const a = new Audio(url);
+      ivAudio.el = a;
+      a.onended = end;
+      a.onerror = () => { if (ivAudio.el === a) browser(); };
+      a.play().catch(() => { if (ivAudio.el === a) browser(); }); // 자동 재생이 막히면 브라우저 음성으로
+    });
   }
 
   // 문항 자료: 소리 내어 읽을 지문 · 묘사할 사진 · 보고 답할 표 · 상황 설명
@@ -3741,7 +3773,7 @@
     ivSayLabel();
     ivPrep();
     // 준비 시간이 없는 시험(OPIc)은 질문을 다 들으면 바로 답변이 시작된다
-    ivSpeak(t.q, d.lang, () => { if (iv?.phase === "listen") ivAnswer(); });
+    ivSpeak(t.q, d.lang, () => { if (iv?.phase === "listen") ivAnswer(); }, d.current);
   }
 
   // 준비 시간: 원이 줄어들고, 끝나면 답변으로 (바로 답하기도 가능)
@@ -3783,7 +3815,7 @@
   function ivAnswer() {
     const ansSec = ivAnsSec();
     clearInterval(iv.timer);
-    try { speechSynthesis.cancel(); } catch { /* 없음 */ }
+    ivStopAudio();
     iv.phase = "answer";
     iv.text = "";
     iv.started = Date.now();
@@ -3975,7 +4007,7 @@
       iv.replaysLeft -= 1;
       ivSayLabel();
       const t = iv.d.turns[iv.d.current];
-      return ivSpeak(t.q, iv.d.lang);
+      return ivSpeak(t.q, iv.d.lang, null, iv.d.current);
     }
     const adj = e.target.closest("[data-iv-adjust]");
     if (adj) return ivAdjustPick(adj.dataset.ivAdjust, adj);
