@@ -202,7 +202,7 @@
   .check { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: var(--ink-2); user-select: none; }
   .check input { appearance: none; width: 18px; height: 18px; border-radius: 6px; margin: 0; flex-shrink: 0; cursor: pointer;
     background: #fff; box-shadow: inset 0 0 0 1px rgba(15,23,42,.2); display: grid; place-items: center; transition: background .15s, box-shadow .15s; }
-  .check input:checked { background: var(--ink); box-shadow: none; }
+  .check input:checked { background: var(--accent); box-shadow: none; }
   .check input:checked::after { content: ""; width: 9px; height: 5px; border: 2px solid #fff; border-top: 0; border-right: 0; transform: translateY(-1px) rotate(-45deg); }
   .check input:focus-visible { box-shadow: 0 0 0 3px var(--accent-soft), inset 0 0 0 1px var(--accent); }
 
@@ -216,11 +216,11 @@
 
   .primary {
     margin-top: 16px; width: 100%; height: 46px; border-radius: 12px;
-    background: var(--ink); color: #fff; font-size: 14.5px; font-weight: 600;
+    background: var(--accent); color: #fff; box-shadow: 0 8px 22px rgba(31,95,224,.25); font-size: 14.5px; font-weight: 600;
     display: flex; align-items: center; justify-content: center; gap: 8px;
     transition: background .2s, opacity .2s;
   }
-  .primary:hover:not(:disabled) { background: #1e293b; }
+  .primary:hover:not(:disabled) { background: #174BB8; }
   .primary:disabled { opacity: .3; cursor: default; }
   .primary [data-lucide] { transition: transform .2s; }
   .primary:hover:not(:disabled) [data-lucide] { transform: translateX(3px); }
