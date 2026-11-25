@@ -117,7 +117,7 @@
   .headline > span { display: block; }
   /* 바뀌는 한 단어 */
   .slot { display: inline-block; height: 1.2em; overflow: hidden; vertical-align: bottom; }
-  .reel { display: flex; flex-direction: column; animation: roll 12s cubic-bezier(.7,0,.2,1) infinite; }
+  .reel { display: flex; flex-direction: column; align-items: center; animation: roll 12s cubic-bezier(.7,0,.2,1) infinite; }
   .reel span { height: 1.2em; line-height: 1.2em; white-space: nowrap; background: linear-gradient(90deg, #1F5FE0, #7A4DFF); -webkit-background-clip: text; background-clip: text; color: transparent; }
   @keyframes roll { 0%,12% { transform: translateY(0); } 16.6%,28.6% { transform: translateY(-1.2em); } 33.3%,45.3% { transform: translateY(-2.4em); } 50%,62% { transform: translateY(-3.6em); } 66.6%,78.6% { transform: translateY(-4.8em); } 83.3%,95.3% { transform: translateY(-6em); } 100% { transform: translateY(-7.2em); } }
   /* Eureka 강조: 큰 워드마크 + 흐르는 그라데이션 + 형광 밑줄 */
