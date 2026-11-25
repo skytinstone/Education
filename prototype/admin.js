@@ -251,7 +251,7 @@
       <div class="kpis">
         ${kpi("전체 가입자", num(u.total), `오늘 +${num(u.new_today)} · 7일 +${num(u.new_7d)} · 30일 +${num(u.new_30d)}`)}
         ${kpi("활성 사용자 (오늘 / 7일 / 30일)", `${num(a.dau)} / ${num(a.wau)} / ${num(a.mau)}`, `로그인하거나 문제를 푼 사람 · <a href="#/users" class="live-link"><span class="presence on"><i></i>지금 ${num(o.online_now)}명 접속 중</span></a>`)}
-        ${kpi("AI 비용 (30일)", usd(ai.cost_30d), `오늘 ${usd(ai.cost_today)} · 7일 ${usd(ai.cost_7d)} · 실패 ${num(ai.failed_30d)}회`)}
+        ${kpi("AI 비용 (30일)", usd(ai.cost_30d), `오늘 ${usd(ai.cost_today)}${ai.global_limit_usd ? ` / 하루 한도 ${usd(ai.global_limit_usd)} (${Math.round((ai.cost_today / ai.global_limit_usd) * 100)}%)` : ""} · 7일 ${usd(ai.cost_7d)} · 실패 ${num(ai.failed_30d)}회`, ai.global_limit_usd && ai.cost_today >= ai.global_limit_usd * 0.8 ? "warn" : "")}
         ${kpi("처리할 VOC", num(o.voc.open + o.voc.reviewing), `접수 ${num(o.voc.open)} · 확인 중 ${num(o.voc.reviewing)}`, o.voc.open ? "warn" : "")}
       </div>
       <div class="admin-grid">

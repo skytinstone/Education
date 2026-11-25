@@ -1816,3 +1816,11 @@ body.pdf-capture .exam-body { column-count: 1 !important; column-rule: none !imp
   .nx-choices { grid-template-columns: minmax(0, 1fr); }
   .nx-note-top time { margin-left: 0; }
 }
+
+/* ---------- 설정: AI 사용량 ---------- */
+.usage-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 48px; align-items: center; gap: 12px; font-size: 14px; }
+.usage-row b { text-align: right; font-variant-numeric: tabular-nums; }
+.usage-track { height: 10px; border-radius: 5px; background: #F1F2F5; overflow: hidden; }
+.usage-track i { display: block; height: 100%; border-radius: 5px; background: #1F5FE0; }
+.usage-track i.warm { background: #E0A12E; }
+.usage-track i.hot { background: #C2541E; }
