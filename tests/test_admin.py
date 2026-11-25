@@ -33,7 +33,7 @@ def test_admin_page_and_landing_are_served(client):
     page = client.get("/admin")
     assert page.status_code == 200 and "관리자 로그인" in page.text and page.headers["x-robots-tag"] == "noindex"
     landing = client.get("/").text
-    assert 'property="og:image" content="https://eurekai.cloud/app/og-image.png?v=4"' in landing  # 링크드인·카톡 미리보기
+    assert 'property="og:image" content="https://eurekai.cloud/app/og-image.png?v=5"' in landing  # 링크드인·카톡 미리보기
     assert client.get("/app/og-image.png").headers["content-type"] == "image/png"
 
 
