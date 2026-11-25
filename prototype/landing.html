@@ -99,6 +99,7 @@
   .nav .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
   .brand { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
   .brand-company { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 14px; letter-spacing: -0.025em; }
+  a.brand-company:hover { text-decoration: underline; text-underline-offset: 3px; }
   .brand-divider { width: 1px; height: 14px; background: rgba(15, 23, 42, 0.18); }
   .brand-name { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 20px; letter-spacing: -0.04em; }
   .brand-name::after { content: "."; color: var(--accent); }
@@ -437,11 +438,11 @@
 <!-- ===================== 내비게이션 ===================== -->
 <header class="nav" id="nav">
   <div class="wrap">
-    <a class="brand" href="/" aria-label="Eureka 홈">
-      <span class="brand-company">Horcrux Technologies</span>
+    <div class="brand">
+      <a class="brand-company" href="https://www.horcruxtechnologies.com" target="_blank" rel="noopener" title="Horcrux Technologies 회사 홈페이지 (새 창)">Horcrux Technologies</a>
       <span class="brand-divider" aria-hidden="true"></span>
-      <span class="brand-name">Eureka</span>
-    </a>
+      <a class="brand-name" href="/" aria-label="Eureka 홈">Eureka</a>
+    </div>
     <nav class="nav-links" aria-label="페이지 안내">
       <a href="#features">기능</a>
       <a href="#agent">AI Education Agent</a>
@@ -838,7 +839,7 @@
 
 <footer class="site">
   <div class="wrap">
-    <span class="brand"><span class="brand-company">Horcrux Technologies</span><span class="brand-divider" aria-hidden="true"></span><span class="brand-name" style="font-size:15px">Eureka</span></span>
+    <span class="brand"><a class="brand-company" href="https://www.horcruxtechnologies.com" target="_blank" rel="noopener" title="Horcrux Technologies 회사 홈페이지 (새 창)">Horcrux Technologies</a><span class="brand-divider" aria-hidden="true"></span><span class="brand-name" style="font-size:15px">Eureka</span></span>
     <span>© 2026 Horcrux Technologies</span>
     <nav aria-label="약관">
       <a href="/app/terms.html">이용약관</a>
