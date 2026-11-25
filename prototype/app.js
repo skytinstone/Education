@@ -1312,6 +1312,74 @@
     return c ? `${subjectOf(c.id)?.name ?? ""} · ${c.name}` : DOMAIN_NAME[p.domain] ?? "";
   };
 
+  // ---------- 다른 풀이 보기: 정석 · 그래프 · 빠른 풀이 (문제마다 한 번 만들어 같이 본다) ----------
+  const methodsState = {}; // 문제 id → { open, busy, data, tab, error }
+  function methodsInnerHTML(pid) {
+    const st = methodsState[pid];
+    if (!st?.open) {
+      return `<button type="button" class="mth-open" data-methods="${pid}"><i data-lucide="git-branch"></i>다른 풀이 보기<small>정석 · 그래프 · 빠른 풀이</small></button>`;
+    }
+    if (st.busy) return `<div class="mth-busy"><i data-lucide="loader-circle" class="spin"></i>서로 다른 풀이를 만들고 있어요 (20~40초)</div>`;
+    if (st.error) return `<div class="mth-busy bad"><i data-lucide="circle-alert"></i>${esc(st.error)} <button type="button" class="tag" data-methods="${pid}">다시 시도</button></div>`;
+    const ms = st.data?.methods ?? [];
+    const tab = Math.min(st.tab ?? 0, ms.length - 1);
+    const x = ms[tab];
+    return `
+      <div class="mth-head"><b><i data-lucide="git-branch"></i>다른 풀이</b>
+        <div class="seg" role="tablist">${ms.map((m, i) => `<button type="button" role="tab" aria-selected="${i === tab}" class="${i === tab ? "on" : ""}" data-mtab="${pid}:${i}">${esc(m.name)}</button>`).join("")}</div>
+        <button type="button" class="icon-btn" data-methods-close="${pid}" aria-label="다른 풀이 닫기"><i data-lucide="x"></i></button></div>
+      ${x ? `<p class="mth-when" data-math><i data-lucide="lightbulb"></i>${esc(x.when)}</p>
+        ${explanationHTML({ summary: x.summary, principle: "", steps: x.steps, result: x.result, graph: x.graph, check: null }, `mth:${pid}:${tab}`)}` : ""}`;
+  }
+  const refreshMethods = (pid) => {
+    $$(`[data-methods-box="${pid}"]`).forEach((el) => { el.innerHTML = methodsInnerHTML(pid); });
+    icons();
+  };
+  async function openMethods(pid) {
+    const st = (methodsState[pid] ??= {});
+    st.open = true; st.error = null;
+    if (st.data) return refreshMethods(pid);
+    st.busy = true; refreshMethods(pid);
+    try {
+      st.data = (await Store.problemMethods(pid)) ?? (await Store.createProblemMethods(pid));
+    } catch (err) {
+      st.error = err?.message || "다른 풀이를 만들지 못했어요";
+    }
+    st.busy = false;
+    refreshMethods(pid);
+  }
+
+  // ---------- 약점 분석 · 추가 학습: 답을 내면 바로 이 개념의 정답률과 다음에 할 일 ----------
+  function insightHTML(p, attempt) {
+    const c = concept(p.conceptIds?.[0]);
+    if (!attempt || !c) return "";
+    const all = Store.conceptStats();
+    const st = all.find((x) => x.conceptId === c.id);
+    if (!st) return "";
+    const acc = st.accuracy, level = st.attempts < 3 ? ["new", "기록 쌓는 중"] : acc < 0.6 ? ["weak", "약점"] : acc < 0.8 ? ["mid", "보통"] : ["good", "강점"];
+    const weakest = all.find((x) => x.attempts >= 3 && x.accuracy < 0.6 && x.conceptId !== c.id && concept(x.conceptId));
+    const harder = attempt.correct && level[0] !== "weak"; // 약한 개념이면 맞혔어도 비슷한 수준을 더
+    const more = harder ? `${c.name} 조금 더 어려운 문제 3개 내줘` : `${c.name} 비슷한 문제 3개 내줘`;
+    return `
+      <div class="insight ${level[0]}">
+        <div class="ins-top">
+          <span class="ins-tag">${level[1]}</span>
+          <b>${esc(c.name)}</b>
+          <span class="ins-acc">정답률 <b>${Math.round(acc * 100)}%</b> <small>(${st.attempts}문제)</small></span>
+        </div>
+        <div class="ins-bar" aria-hidden="true"><i style="width:${Math.round(acc * 100)}%"></i></div>
+        <p class="ins-note">${attempt.correct
+          ? (level[0] === "weak" ? "이번엔 맞았어요! 아직 약한 개념이라 몇 문제 더 풀면 확실해져요." : "좋아요. 한 단계 어려운 문제로 넘어가 봐요.")
+          : "틀린 문제는 오답노트에 담고 1일 · 3일 · 7일 뒤에 다시 풀자고 알려 드려요."}
+          ${weakest ? ` 지금 가장 약한 개념은 <b>${esc(concept(weakest.conceptId).name)}</b> (${Math.round(weakest.accuracy * 100)}%)이에요.` : ""}</p>
+        <div class="ins-actions">
+          <button type="button" class="tag on" data-suggest="${esc(more)}"><i data-lucide="sparkles"></i>${harder ? "더 어려운 문제 3개" : "비슷한 문제 3개 더"}</button>
+          <a class="tag" href="#/library/concept/${c.id}"><i data-lucide="book-open"></i>개념 레슨</a>
+          ${attempt.correct ? "" : `<a class="tag" href="#/notes"><i data-lucide="notebook-pen"></i>오답노트</a>`}
+        </div>
+      </div>`;
+  }
+
   function problemHTML(pid, { attempt = null, index = null } = {}) {
     const p = Store.problem(pid);
     if (!p) return "";
@@ -1348,7 +1416,9 @@
           <i data-lucide="${attempt.correct ? "circle-check" : "circle-x"}"></i>${attempt.correct ? "정답이에요!" : "아쉬워요. 오답노트에 저장했어요"}
         </div>
         ${p.solution ? `<div class="solution"><b>해설</b><span data-math>${esc(p.solution)}</span></div>` : ""}
-        ${note ? whyHTML(note) : ""}`;
+        ${note ? whyHTML(note) : ""}
+        <div class="mth" data-methods-box="${pid}">${methodsInnerHTML(pid)}</div>
+        ${insightHTML(p, attempt)}`;
     }
     const work = workState[pid]?.open;
     return `
@@ -1646,6 +1716,18 @@
 
   // 문제 카드 공통 동작: 저장, 틀린 이유 표시
   function handleProblemExtras(e) {
+    const mo = e.target.closest("[data-methods]");
+    if (mo) { openMethods(mo.dataset.methods); return true; }
+    const mc = e.target.closest("[data-methods-close]");
+    if (mc) { (methodsState[mc.dataset.methodsClose] ??= {}).open = false; refreshMethods(mc.dataset.methodsClose); return true; }
+    const mt = e.target.closest("[data-mtab]");
+    if (mt) { const [pid, i] = mt.dataset.mtab.split(":"); methodsState[pid].tab = Number(i); refreshMethods(pid); return true; }
+    const sg = e.target.closest(".insight [data-suggest]");
+    if (sg) { // 대화 밖(라이브러리·오답노트)에서 누르면 새 대화로 보낸다 — 대화 안에서는 대화 화면이 먼저 처리한다
+      const sid = ask({ text: sg.dataset.suggest });
+      if (sid) go(`/chat/${sid}`);
+      return true;
+    }
     const report = e.target.closest("[data-report], [data-report-review]");
     if (report) {
       feedbackModal(report.dataset.report ? { problemId: report.dataset.report, kind: "problem" } : { problemId: report.dataset.reportReview, kind: "review" });

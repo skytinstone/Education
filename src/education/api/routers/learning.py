@@ -14,7 +14,7 @@ from education.api.dto import (
 )
 from education.db import models as m
 from education.schemas import ErrorType
-from education.services import learning, lessons, notes, quota, review, tutor_chat
+from education.services import learning, lessons, notes, quota, review, solutions, tutor_chat
 from education.services.llm import get_llm
 
 router = APIRouter(tags=["학습"])
@@ -195,6 +195,40 @@ def review_solution(problem_id: str, body: SolutionReviewIn, user: CurrentUser, 
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
     except review.ReviewError as e:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e)) from None
+
+
+def _solved_problem(db, user, problem_id: str) -> m.Problem:
+    """볼 수 있는 문제이고, 이미 답을 낸 문제여야 한다 (풀기 전에 풀이를 미리 보지 않게)."""
+    p = db.get(m.Problem, problem_id)
+    if p is None or p.owner_user_id not in (None, user.id):
+        raise HTTPException(404, "문제를 찾을 수 없어요")
+    tried = db.scalar(select(m.Attempt.id).where(m.Attempt.user_id == user.id, m.Attempt.problem_id == problem_id).limit(1))
+    if tried is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "먼저 답을 내면 다른 풀이를 볼 수 있어요")
+    return p
+
+
+@router.get("/problems/{problem_id}/methods", tags=["문제"])
+def get_methods(problem_id: str, user: CurrentUser, db: DB) -> dict | None:
+    """이 문제의 여러 가지 풀이 — 아직 없으면 null."""
+    _solved_problem(db, user, problem_id)
+    return solutions.get(db, problem_id)
+
+
+@router.post("/problems/{problem_id}/methods", tags=["문제"], status_code=status.HTTP_201_CREATED)
+def create_methods(problem_id: str, user: CurrentUser, db: DB) -> dict:
+    """정석 · 그래프 · 빠른 풀이처럼 서로 다른 풀이 2~3가지를 만든다 (20~40초). 이미 있으면 그대로 돌려준다."""
+    p = _solved_problem(db, user, problem_id)
+    if (cached := solutions.get(db, problem_id)) is not None:
+        return cached
+    llm = get_llm()
+    if llm is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 아직 설정되지 않았어요")
+    quota.check(db, user)
+    try:
+        return solutions.create(db, llm, user, p)
+    except solutions.MethodsError as e:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"다른 풀이를 만들지 못했어요. 잠시 후 다시 시도해 주세요 ({e})") from None
 
 
 @router.post("/attempts", tags=["문제"], status_code=status.HTTP_201_CREATED)
