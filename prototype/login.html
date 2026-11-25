@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>로그인 · Eureka | AI 시험 에이전트</title>
 <link rel="manifest" href="/app/manifest.webmanifest" />
-<meta name="theme-color" content="#f7f8fb" />
+<meta name="theme-color" content="#FAFAFB" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Eureka" />
 <link rel="apple-touch-icon" href="/app/icons/icon-180.png" />
@@ -31,16 +31,15 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css" />
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@700&display=swap" />
 <script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
-<script src="dots.js"></script>
 <style>
   :root {
-    --bg: #f7f8fb;
+    --bg: #FAFAFB;
     --ink: #0f172a;
     --ink-2: #475569;
     --ink-3: #6b7280;
     --line: rgba(15, 23, 42, 0.08);
-    --accent: #4f6bff;
-    --accent-soft: rgba(79, 107, 255, 0.12);
+    --accent: #1F5FE0;
+    --accent-soft: rgba(31, 95, 224, 0.12);
     --ok: #16a34a;
     --bad: #e11d48;
     --glass-blur: blur(24px) saturate(170%);
@@ -57,7 +56,14 @@
   input { font: inherit; color: inherit; }
   [data-lucide] { width: 16px; height: 16px; stroke-width: 1.6; flex-shrink: 0; }
 
-  #dots { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+  /* 배경: 천천히 흐르는 아웃라인 단어 */
+  .kt-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; display: flex; flex-direction: column; justify-content: center; }
+  .kt-row { display: flex; width: max-content; white-space: nowrap; font-size: clamp(64px, 9vw, 140px); font-weight: 900; letter-spacing: -0.045em; line-height: 1.04; animation: kt-l 50s linear infinite; }
+  .kt-row.rev { animation-name: kt-r; animation-duration: 62s; }
+  .kt-row span { padding: 0 .3em; color: transparent; -webkit-text-stroke: 1.2px rgba(20,22,31,.08); }
+  .kt-row span.eu { font-family: "Space Grotesk", sans-serif; -webkit-text-stroke-color: rgba(31,95,224,.24); }
+  @keyframes kt-l { to { transform: translateX(-50%); } }
+  @keyframes kt-r { from { transform: translateX(-50%); } to { transform: none; } }
 
   .glass {
     position: relative;
@@ -106,30 +112,27 @@
 
   .intro footer { font-size: 12px; color: var(--ink-3); }
 
-  /* 한 줄 메시지 + 제품 미리보기 (말로 설명하지 않고 보여 준다) */
-  .pitch { text-align: left; align-items: flex-start; max-width: 540px; }
-  .headline { margin-top: 18px; font-size: clamp(34px, 3.6vw, 50px); line-height: 1.18; font-weight: 800; letter-spacing: -0.035em; word-break: keep-all; }
+  .pitch { text-align: left; align-items: flex-start; max-width: 640px; }
+  .headline { font-size: clamp(44px, 5.4vw, 88px); line-height: 1.14; font-weight: 900; letter-spacing: -0.05em; word-break: keep-all; }
+  .headline > span { display: block; }
+  /* 바뀌는 한 단어 */
+  .slot { display: inline-block; height: 1.2em; overflow: hidden; vertical-align: bottom; }
+  .reel { display: flex; flex-direction: column; animation: roll 12s cubic-bezier(.7,0,.2,1) infinite; }
+  .reel span { height: 1.2em; line-height: 1.2em; white-space: nowrap; background: linear-gradient(90deg, #1F5FE0, #7A4DFF); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  @keyframes roll { 0%,12% { transform: translateY(0); } 16.6%,28.6% { transform: translateY(-1.2em); } 33.3%,45.3% { transform: translateY(-2.4em); } 50%,62% { transform: translateY(-3.6em); } 66.6%,78.6% { transform: translateY(-4.8em); } 83.3%,95.3% { transform: translateY(-6em); } 100% { transform: translateY(-7.2em); } }
+  /* Eureka 강조: 큰 워드마크 + 흐르는 그라데이션 + 형광 밑줄 */
+  .eu-word { position: relative; z-index: 0; display: inline-block; font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 1.22em; letter-spacing: -0.055em; line-height: 1;
+    background: linear-gradient(90deg, #1F5FE0, #7A4DFF, #C24DFF, #1F5FE0) 0 0 / 300% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: flow 8s linear infinite; }
+  .eu-hl { position: relative; display: inline-block; }
+  .eu-hl::after { content: ""; position: absolute; left: .02em; right: .02em; bottom: .06em; height: .2em; border-radius: .1em; z-index: -1; background: rgba(122,77,255,.16); }
+  .eu-mark { display: block; font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 40px; letter-spacing: -0.045em; line-height: 1; margin-bottom: 14px; }
+  .eu-mark i { font-style: normal; color: var(--accent); }
   .headline em {
     font-style: normal;
     background: linear-gradient(90deg, #ff5f6d, #ffb347, #5ee7a0, #4fc3ff, #6b7cff, #c06bff, #ff5f6d) 0 0 / 200% 100%;
     -webkit-background-clip: text; background-clip: text; color: transparent; animation: flow 6s linear infinite;
   }
-  .pitch .desc { margin-top: 14px; font-size: 16px; word-break: keep-all; }
-  .peek { margin-top: 32px; width: 100%; display: flex; flex-direction: column; gap: 12px; }
-  .pk-ask { align-self: flex-end; max-width: 86%; padding: 11px 15px; border-radius: 16px 16px 4px 16px; background: #1F5FE0; color: #fff; font-size: 14px; line-height: 1.5; }
-  .pk-ans { padding: 16px 18px; border-radius: 16px; background: rgba(255,255,255,.85); box-shadow: inset 0 0 0 1px var(--line), 0 10px 28px rgba(31,41,80,.07); display: flex; flex-direction: column; gap: 8px; }
-  .pk-ok { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; color: #1F5FE0; }
-  .pk-ok svg, .pk-ic svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-  .pk-ans p { font-size: 14px; line-height: 1.6; color: var(--ink-2); }
-  .pk-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .pk-chips span { font-size: 12px; padding: 5px 10px; border-radius: 999px; background: #EEF3FD; color: #1F4BB8; }
-  .pk-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-  .pk-cards > div { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 14px 16px; border-radius: 16px; background: rgba(255,255,255,.85); box-shadow: inset 0 0 0 1px var(--line); }
-  .pk-ic { grid-row: span 2; width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; }
-  .pk-ic.exam { background: #FFF4EA; color: #C2541E; }
-  .pk-ic.iv { background: #E9F8FB; color: #0E7490; }
-  .pk-cards b { font-size: 14.5px; }
-  .pk-cards small { font-size: 12.5px; color: var(--ink-3); }
+  .pitch .desc { margin-top: 22px; font-size: 16px; word-break: keep-all; }
 
   /* 지난번에 쓴 로그인 방법 */
   .social.is-recent { box-shadow: inset 0 0 0 2px #1F5FE0; }
@@ -138,7 +141,7 @@
 
   /* ---------- 오른쪽: 로그인 / 회원가입 카드 ---------- */
   .panel { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px; }
-  .card { width: 100%; max-width: 420px; border-radius: 24px; padding: 28px 30px 24px; }
+  .card { width: 100%; max-width: 420px; border-radius: 24px; padding: 30px 30px 24px; background: #fff; box-shadow: 0 24px 64px rgba(20,22,31,.12); }
 
   .card h2 { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
   .card .sub { margin-top: 4px; font-size: 13.5px; color: var(--ink-2); }
@@ -262,7 +265,7 @@
 
   @media (prefers-reduced-motion: reduce) {
     .reveal { opacity: 1; transform: none; transition: none; }
-    .slogan em, .pane.active { animation: none; }
+    .slogan em, .pane.active, .kt-row, .reel, .eu-word { animation: none; }
   }
 
 
@@ -270,8 +273,9 @@
     .login { grid-template-columns: 1fr; }
     .intro { padding: 20px 20px 0; }
     .pitch { padding: 28px 0 8px; }
-    .peek { display: none; }
-    .headline { font-size: 30px; }
+    .headline { font-size: 38px; }
+    .pitch .desc { margin-top: 14px; font-size: 14.5px; }
+    .eu-mark { font-size: 32px; }
     .intro footer { display: none; }
     .panel { padding: 16px 16px 40px; justify-content: flex-start; }
     .card { padding: 22px 18px 20px; }
@@ -279,8 +283,14 @@
 </style>
 </head>
 <body>
-<canvas id="dots" aria-hidden="true"></canvas>
 
+<div class="kt-bg" aria-hidden="true">
+  <div class="kt-row"><span>미적분</span><span>치환적분</span><span class="eu">Eureka</span><span>극한</span><span>수열</span><span>미적분</span><span>치환적분</span><span class="eu">Eureka</span><span>극한</span><span>수열</span><span>미적분</span><span>치환적분</span><span class="eu">Eureka</span><span>극한</span><span>수열</span><span>미적분</span><span>치환적분</span><span class="eu">Eureka</span><span>극한</span><span>수열</span></div>
+  <div class="kt-row rev"><span>OPIc</span><span>TOEIC Speaking</span><span>직무 면접</span><span>OPIc</span><span>TOEIC Speaking</span><span>직무 면접</span><span>OPIc</span><span>TOEIC Speaking</span><span>직무 면접</span><span>OPIc</span><span>TOEIC Speaking</span><span>직무 면접</span></div>
+  <div class="kt-row"><span>몰 농도</span><span>반응식</span><span class="eu">Eureka</span><span>물리학Ⅰ</span><span>몰 농도</span><span>반응식</span><span class="eu">Eureka</span><span>물리학Ⅰ</span><span>몰 농도</span><span>반응식</span><span class="eu">Eureka</span><span>물리학Ⅰ</span><span>몰 농도</span><span>반응식</span><span class="eu">Eureka</span><span>물리학Ⅰ</span></div>
+  <div class="kt-row rev"><span>실전 시험</span><span>오답노트</span><span>약점 진단</span><span>실전 시험</span><span>오답노트</span><span>약점 진단</span><span>실전 시험</span><span>오답노트</span><span>약점 진단</span><span>실전 시험</span><span>오답노트</span><span>약점 진단</span></div>
+  <div class="kt-row"><span>편입</span><span>의전원</span><span class="eu">Eureka</span><span>AI 역량검사</span><span>편입</span><span>의전원</span><span class="eu">Eureka</span><span>AI 역량검사</span><span>편입</span><span>의전원</span><span class="eu">Eureka</span><span>AI 역량검사</span><span>편입</span><span>의전원</span><span class="eu">Eureka</span><span>AI 역량검사</span></div>
+</div>
 <main class="login">
   <!-- ===================== 소개 ===================== -->
   <section class="intro">
@@ -289,21 +299,12 @@
     </a>
 
     <div class="pitch">
-      <span class="eyebrow reveal"><i></i>Eureka · AI Education Agent</span>
-      <h1 class="headline reveal">물어보면 풀고,<br /><em>틀리면</em> 기억해요.</h1>
+      <h1 class="headline reveal">
+        <span>다음 시험이</span>
+        <span><span class="slot"><span class="reel"><span>미적분</span><span>OPIc</span><span>직무 면접</span><span>화학Ⅰ</span><span>편입 면접</span><span>TOEIC</span><span>미적분</span></span></span>이라도,</span>
+        <span><span class="eu-hl"><span class="eu-word">Eureka</span></span>로 준비해요.</span>
+      </h1>
       <p class="desc reveal">문제 풀이부터 실전 시험, AI 면접까지. 로그인하면 지난 학습이 그대로 이어져요.</p>
-      <div class="peek reveal" aria-hidden="true">
-        <div class="pk-ask">이차방정식 근의 공식, 왜 이렇게 나오는지 알려줘</div>
-        <div class="pk-ans">
-          <span class="pk-ok"><svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>검산 완료</span>
-          <p>ax² + bx + c = 0 을 완전제곱식으로 바꾸면 돼요. 양변을 a 로 나누고…</p>
-          <div class="pk-chips"><span>비슷한 문제 3개</span><span>오답노트에 담기</span></div>
-        </div>
-        <div class="pk-cards">
-          <div><span class="pk-ic exam"><svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span><b>실전 시험</b><small>OMR · 결과 분석까지</small></div>
-          <div><span class="pk-ic iv"><svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></svg></span><b>AI 면접</b><small>OPIc · 토익스피킹 · 직무</small></div>
-        </div>
-      </div>
     </div>
 
     <footer>© 2026 Horcrux Technologies</footer>
@@ -311,7 +312,8 @@
 
   <!-- ===================== 로그인 / 회원가입 ===================== -->
   <section class="panel">
-    <div class="card glass reveal" id="card" data-mode="login">
+    <div class="card reveal" id="card" data-mode="login">
+      <span class="eu-mark" aria-hidden="true">Eureka<i>.</i></span>
       <h2 id="title">로그인</h2>
       <p class="sub" id="subtitle">Google · 카카오 계정이면 처음이어도 바로 시작돼요</p>
       <p class="notice" id="card-notice" role="alert" hidden></p>
@@ -486,17 +488,6 @@
   $$(".reveal").forEach((el, i) => el.style.setProperty("--d", `${120 + i * 70}ms`));
   requestAnimationFrame(() => requestAnimationFrame(() => $$(".reveal").forEach((el) => el.classList.add("in"))));
 
-  // ---------- 도트: 카드를 중심으로 퍼지고, 왼쪽 글자 주변은 비켜 간다 ----------
-  const textEls = [".brand", ".eyebrow", ".wordmark", ".slogan", ".desc"].map((s) => $(s));
-  dotField($("#dots"), {
-    gap: 18, baseR: 1, peakR: 2.4, baseAlpha: 0.1, peakAlpha: 0.55, light: 60,
-    wavelength: 90, speed: 1.1, hueSpeed: 25, reach: 0.75, floor: 0.55, introSec: 1.3,
-    focus: () => {
-      const r = card.getBoundingClientRect();
-      return [r.left + r.width / 2, r.top + r.height / 2];
-    },
-    clear: () => textEls.filter((el) => el.offsetParent).map((el) => el.getBoundingClientRect()),
-  });
 
   // ---------- API 연결 ----------
   // API 서버(http://localhost:8000/app/...)로 열면 실제 로그인, 파일로 열면(file://) 프로토타입처럼 바로 메인으로
