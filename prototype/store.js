@@ -692,6 +692,13 @@ const Store = (() => {
       form.append("file", file, file.name);
       return api("/interviews/resume-text", { method: "POST", form });
     },
+    // 영어 면접 질문 음성 (서버가 만든 여자 목소리 mp3) → 재생할 주소. 만들 수 없으면 null (브라우저 음성으로)
+    async interviewSpeech(id, index) {
+      if (MODE !== "api") return null;
+      const res = await fetch(`/api/interviews/${id}/speech/${index}`, { headers: { Authorization: `Bearer ${TOKEN}` } });
+      if (!res.ok) return null;
+      return URL.createObjectURL(await res.blob());
+    },
     adjustInterview: (id, choice) => api(`/interviews/${id}/adjust`, { method: "POST", body: { choice } }),
     deleteInterview: (id) => api(`/interviews/${id}`, { method: "DELETE" }),
     ping: (page) => (MODE === "api" ? api("/me/ping", { method: "POST", body: { page } }).catch(() => {}) : Promise.resolve()),

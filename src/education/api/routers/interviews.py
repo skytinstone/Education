@@ -7,12 +7,13 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from education.api.deps import DB, CurrentUser, owned
 from education.db import models as m
-from education.services import doc_text
+from education.services import doc_text, quota, tts
 from education.services import interview as iv_svc
 
 router = APIRouter(prefix="/interviews", tags=["AI 면접"])
@@ -98,6 +99,22 @@ def list_interviews(user: CurrentUser, db: DB) -> list[dict]:
 @router.get("/{interview_id}")
 def detail(interview_id: UUID, user: CurrentUser, db: DB) -> dict:
     return _detail(owned(db, m.Interview, interview_id, user))
+
+
+@router.get("/{interview_id}/speech/{index}", include_in_schema=False)
+def speech(interview_id: UUID, index: int, user: CurrentUser, db: DB) -> FileResponse:
+    """영어 면접 질문을 여자 목소리 mp3 로 — 그 면접의 질문만 읽는다. 만들 수 없으면 404 (화면은 브라우저 음성으로)"""
+    iv = owned(db, m.Interview, interview_id, user)
+    if iv.lang != "en" or not 0 <= index < len(iv.turns) or not (text := (iv.turns[index].get("q") or "").strip()):
+        raise HTTPException(404, "읽을 질문이 없어요")
+    path = tts.cache_path(text, iv.kind)
+    if not path.exists():
+        if quota.exceeded(db, user):
+            raise HTTPException(404, "오늘 쓸 수 있는 AI 사용량을 모두 썼어요")
+        path = tts.speech(db, user, text, iv.kind)
+    if path is None:
+        raise HTTPException(404, "음성을 만들지 못했어요")
+    return FileResponse(path, media_type="audio/mpeg", headers={"Cache-Control": "private, max-age=86400"})
 
 
 @router.post("/{interview_id}/answers")
