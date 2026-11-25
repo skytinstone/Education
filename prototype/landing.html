@@ -177,8 +177,6 @@
   .dm-in { animation: dmIn .5s var(--ease) both; }
   @keyframes dmIn { from { opacity: 0; transform: translateY(10px); } }
   .dm-ask { align-self: flex-end; max-width: 86%; padding: 13px 17px; border-radius: 18px 18px 4px 18px; background: #3182F6; color: #fff; font-size: 15.5px; line-height: 1.5; min-height: 49px; }
-  .dm-me { align-self: flex-end; max-width: 86%; padding: 13px 17px; border-radius: 18px 18px 4px 18px; background: #1B64DA; color: #fff; font-size: 15px; line-height: 1.5; }
-  .dm-me q { quotes: none; display: block; padding-left: 10px; margin-bottom: 6px; border-left: 2px solid rgba(255,255,255,.6); color: rgba(255,255,255,.82); font-size: 13px; }
   .dm-caret { display: inline-block; width: 2px; height: 1.1em; margin-left: 2px; background: currentColor; vertical-align: -.15em; animation: blink 1s steps(1) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
   .dm-card { padding: 18px 20px; border-radius: 16px; background: #fff; box-shadow: 0 2px 10px rgba(0,27,55,.05); display: flex; flex-direction: column; gap: 10px; }
@@ -189,11 +187,30 @@
   .dm-opts { display: flex; flex-wrap: wrap; gap: 8px; font-size: 14px; }
   .dm-opts span { padding: 7px 13px; border-radius: 10px; box-shadow: inset 0 0 0 1px #D3D5DD; }
   .dm-opts span.ok { background: #3182F6; color: #fff; font-weight: 700; box-shadow: none; }
-  .dm-sol { position: relative; font-size: 15.5px; line-height: 1.75; color: #31343E; }
-  .dm-sol mark { padding: 1px 4px; border-radius: 4px; color: inherit; background: #E8F3FF; transition: background .3s, box-shadow .3s; }
-  .dm-sol mark.on { background: #C9E2FF; box-shadow: 0 0 0 2px #3182F6; }
-  .dm-pop { position: absolute; right: 0; top: -38px; padding: 6px 12px; border-radius: 10px; background: var(--ink); color: #fff; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
-  .dm-pop [data-lucide] { width: 14px; height: 14px; }
+  .dm-opts span.bad { background: #FFECEE; color: #E42939; box-shadow: inset 0 0 0 1.5px #F04452; }
+  .dm-verdict { font-size: 13.5px; font-weight: 700; color: #E42939; }
+  .dm-methods { border-radius: 16px; background: #fff; box-shadow: 0 2px 10px rgba(0,27,55,.05); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .dm-methods.fold .dm-mbody { display: none; }
+  .dm-methods .dm-graph { padding: 0; box-shadow: none; }
+  .dm-mtabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .dm-mtabs span { padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; background: #F2F4F6; color: #4E5968; transition: background .2s, color .2s; }
+  .dm-mtabs span.on { background: #3182F6; color: #fff; }
+  .dm-mbody p { font-size: 15px; line-height: 1.7; color: #31343E; }
+  .dm-mbody mark { padding: 1px 4px; border-radius: 4px; background: #E8F3FF; color: inherit; }
+  .dm-weak { border-radius: 16px; background: #FFF6F5; box-shadow: inset 0 0 0 1px rgba(240,68,82,.18); padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; font-size: 14.5px; line-height: 1.6; color: #333D4B; }
+  .dm-wtop { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .dm-wtag { padding: 3px 9px; border-radius: 999px; background: #F04452; color: #fff; font-size: 12px; font-weight: 700; }
+  .dm-wacc { margin-left: auto; font-size: 13px; color: #4E5968; }
+  .dm-wacc b { color: #F04452; }
+  .dm-wbar { height: 6px; border-radius: 3px; background: rgba(0,27,55,.07); overflow: hidden; }
+  .dm-wbar i { display: block; width: 42%; height: 100%; border-radius: 3px; background: #F04452; }
+  .dm-wact { display: flex; flex-wrap: wrap; gap: 6px; }
+  .dm-wact span { padding: 7px 12px; border-radius: 10px; font-size: 13px; font-weight: 700; background: #fff; box-shadow: inset 0 0 0 1px #E5E8EB; }
+  .dm-wact span.on { background: #3182F6; color: #fff; box-shadow: none; }
+  .dm-next { list-style: none; display: flex; flex-direction: column; gap: 6px; animation: dmIn .5s var(--ease) both; }
+  .dm-next li { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 10px; background: #fff; font-size: 14px; }
+  .dm-next li b { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: #E8F3FF; color: #1B64DA; font-size: 12px; }
+  .dm-next li small { margin-left: auto; font-size: 12px; color: #8B95A1; }
   .dm-graph { padding: 16px 18px; border-radius: 16px; background: #fff; box-shadow: 0 2px 10px rgba(0,27,55,.05); display: flex; flex-direction: column; gap: 10px; font-size: 14.5px; line-height: 1.6; }
   .dm-graph b.k { color: var(--accent); }
   .dm-plots { display: flex; flex-wrap: wrap; gap: 12px; }
@@ -413,7 +430,6 @@
     .demo-sec { padding: 72px 0; }
     .dm-stage { padding: 12px; border-radius: 22px; }
     .dm-screen { height: 520px; }
-    .dm-solve { padding: 18px; }
     .dm-cap { padding: 4px; }
     .dm-no { font-size: 48px; }
     .dm-cap h3 { font-size: 22px; }
@@ -501,7 +517,7 @@
         <div>
           <div class="kicker reveal">직접 보세요</div>
           <h2 class="reveal">눈치 보지 말고,<br /><em>물고 늘어지세요</em>, 맘 편히.</h2>
-          <p class="sub reveal">막힌 한 줄에 답글을 달면 그래프까지 그려 주고, 면접관은 내 대답에서 다음 질문을 꺼내요.</p>
+          <p class="sub reveal">요청하면 검산한 문제가 오고, 여러 가지 풀이로 이해하고, 약점은 다음 공부로 이어져요. 면접관은 내 대답에서 다음 질문을 꺼내요.</p>
         </div>
         <div class="dm-tabs reveal" role="group" aria-label="데모 고르기">
           <button type="button" data-track="solve" aria-pressed="true">문제 풀이</button>
@@ -518,42 +534,53 @@
               <div class="dm-card dm-in" data-from="1">
                 <div class="dm-chips"><span>✓ 문제 분석</span><span>✓ 검산</span><span>✓ 품질 확인</span><small>미적분 · 치환적분 · 3점</small></div>
                 <p class="dm-q">∫₀¹ 2x·e<sup>x²</sup> dx 의 값은?</p>
-                <div class="dm-opts"><span class="ok">① e − 1</span><span>② e</span><span>③ e + 1</span><span>④ 2e − 1</span></div>
+                <div class="dm-opts"><span id="dm-o1">① e − 1</span><span>② e</span><span id="dm-o3">③ e + 1</span><span>④ 2e − 1</span></div>
+                <p class="dm-verdict" id="dm-verdict" hidden>아쉬워요. 오답노트에 저장했어요</p>
               </div>
-              <p class="dm-sol dm-in" data-from="2">
-                <b>정답이에요!</b> t = x² 으로 치환하면 dt = 2x dx 예요. 그래서
-                <mark id="dm-mark">∫₀¹ 2x·e<sup>x²</sup> dx = ∫₀¹ eᵗ dt</mark>
-                = e − 1 이 돼요.
-                <span class="dm-pop dm-in" id="dm-pop" hidden><i data-lucide="reply"></i>답글</span>
-              </p>
-              <div class="dm-me dm-in" id="dm-replybox" hidden>
-                <q>∫₀¹ 2x·e<sup>x²</sup> dx = ∫₀¹ eᵗ dt</q>
-                <span id="dm-reply"></span><span class="dm-caret" data-caret="reply"></span>
-              </div>
-              <div class="dm-graph dm-in" data-from="4">
-                <span>두 그래프의 <b class="k">색칠한 넓이</b>가 바로 적분값이에요. 모양은 달라도 넓이는 똑같이 <b>e − 1 ≈ 1.72</b>.</span>
-                <div class="dm-plots">
-                  <figure>
-                    <svg viewBox="0 0 300 190" role="img" aria-label="y = 2x e^(x²) 의 0부터 1까지 넓이">
-                      <path d="M24 170H292M24 170V10" stroke="#C9CDD6" fill="none"></path>
-                      <path class="area" id="dm-a1" fill="rgba(31,95,224,.18)"></path>
-                      <path class="draw" id="dm-l1" stroke="#1F5FE0" stroke-width="3" fill="none" stroke-linecap="round"></path>
-                      <text x="30" y="24" font-size="12" fill="#5C6170">y = 2x·eˣ²</text>
-                      <text x="22" y="184" font-size="11" fill="#5C6170">0</text><text x="282" y="184" font-size="11" fill="#5C6170">1</text>
-                    </svg>
-                    <figcaption>치환 전 · x 로 보면</figcaption>
-                  </figure>
-                  <figure>
-                    <svg viewBox="0 0 300 190" role="img" aria-label="y = e^t 의 0부터 1까지 넓이">
-                      <path d="M24 170H292M24 170V10" stroke="#C9CDD6" fill="none"></path>
-                      <path class="area" id="dm-a2" fill="rgba(122,77,255,.18)"></path>
-                      <path class="draw" id="dm-l2" stroke="#7A4DFF" stroke-width="3" fill="none" stroke-linecap="round"></path>
-                      <text x="30" y="24" font-size="12" fill="#5C6170">y = eᵗ</text>
-                      <text x="22" y="184" font-size="11" fill="#5C6170">0</text><text x="282" y="184" font-size="11" fill="#5C6170">1</text>
-                    </svg>
-                    <figcaption>치환 후 · t 로 보면</figcaption>
-                  </figure>
+              <div class="dm-methods dm-in" data-from="2">
+                <div class="dm-mtabs" role="presentation"><span data-mt="0">치환적분으로</span><span data-mt="1">그래프로 보기</span><span data-mt="2">보기 대입</span></div>
+                <div class="dm-mbody" data-mb="0">
+                  <p>t = x² 으로 치환하면 dt = 2x dx 라서 <mark>∫₀¹ 2x·e<sup>x²</sup> dx = ∫₀¹ eᵗ dt</mark> = <b>e − 1</b> 이에요.</p>
                 </div>
+                <div class="dm-mbody dm-graph" data-mb="1" hidden>
+                  <span>두 그래프의 <b class="k">색칠한 넓이</b>가 바로 적분값이에요. 모양은 달라도 넓이는 똑같이 <b>e − 1 ≈ 1.72</b>.</span>
+                  <div class="dm-plots">
+                    <figure>
+                      <svg viewBox="0 0 300 190" role="img" aria-label="y = 2x e^(x²) 의 0부터 1까지 넓이">
+                        <path d="M24 170H292M24 170V10" stroke="#C9CDD6" fill="none"></path>
+                        <path class="area" id="dm-a1" fill="rgba(49,130,246,.18)"></path>
+                        <path class="draw" id="dm-l1" stroke="#3182F6" stroke-width="3" fill="none" stroke-linecap="round"></path>
+                        <text x="30" y="24" font-size="12" fill="#5C6170">y = 2x·eˣ²</text>
+                        <text x="22" y="184" font-size="11" fill="#5C6170">0</text><text x="282" y="184" font-size="11" fill="#5C6170">1</text>
+                      </svg>
+                      <figcaption>치환 전 · x 로 보면</figcaption>
+                    </figure>
+                    <figure>
+                      <svg viewBox="0 0 300 190" role="img" aria-label="y = e^t 의 0부터 1까지 넓이">
+                        <path d="M24 170H292M24 170V10" stroke="#C9CDD6" fill="none"></path>
+                        <path class="area" id="dm-a2" fill="rgba(122,77,255,.18)"></path>
+                        <path class="draw" id="dm-l2" stroke="#7A4DFF" stroke-width="3" fill="none" stroke-linecap="round"></path>
+                        <text x="30" y="24" font-size="12" fill="#5C6170">y = eᵗ</text>
+                        <text x="22" y="184" font-size="11" fill="#5C6170">0</text><text x="282" y="184" font-size="11" fill="#5C6170">1</text>
+                      </svg>
+                      <figcaption>치환 후 · t 로 보면</figcaption>
+                    </figure>
+                  </div>
+                </div>
+                <div class="dm-mbody" data-mb="2" hidden>
+                  <p>eˣ² 은 0 ≤ x ≤ 1 에서 1 보다 크고 e 보다 작아요. 그래서 값은 <b>1 과 e 사이</b> — 보기 중에서는 ① e − 1 ≈ 1.72 뿐이에요.</p>
+                </div>
+              </div>
+              <div class="dm-weak dm-in" data-from="3">
+                <div class="dm-wtop"><span class="dm-wtag">약점</span><b>치환적분</b><span class="dm-wacc">정답률 <b>42%</b> <small>(12문제)</small></span></div>
+                <div class="dm-wbar" aria-hidden="true"><i></i></div>
+                <p>틀린 이유는 <b>적용 실수</b>가 가장 많아요. 1일 · 3일 · 7일 뒤에 다시 풀자고 알려 드릴게요.</p>
+                <div class="dm-wact"><span class="on">비슷한 문제 3개 더</span><span>개념 레슨 · 치환적분</span><span>오답노트</span></div>
+                <ol class="dm-next" id="dm-next" hidden>
+                  <li><b>1</b>∫ x·cos(x²) dx <small>비슷한 난이도</small></li>
+                  <li><b>2</b>∫₀² x·√(x²+1) dx <small>정적분 구간 바꾸기</small></li>
+                  <li><b>3</b>∫ eˣ/(eˣ+1) dx <small>안쪽 함수 찾기</small></li>
+                </ol>
               </div>
             </div>
             <!-- AI 면접 -->
@@ -883,11 +910,10 @@
   // ---------- 데모 플레이어: 문제 풀이(답글 → 그래프) · AI 면접 ----------
   const SCENES = {
     solve: [
-      { label: "말로 요청", dur: 45, title: "평소 말투로 요청해요", desc: "과목, 개념, 난이도까지 알아들어요. 문제집을 뒤질 필요가 없어요." },
-      { label: "검산 후 도착", dur: 35, title: "검산을 마치고 도착해요", desc: "다른 AI가 처음부터 다시 풀어 본 문제만 보여 드려요." },
-      { label: "단계별 풀이", dur: 40, title: "정답만이 아니라 이유까지", desc: "왜 그렇게 치환하는지, 풀이를 한 단계씩 보여 줘요." },
-      { label: "답글", dur: 50, title: "궁금한 한 줄에 답글", desc: "풀이에서 막힌 부분을 드래그하고 \"그래프로 보여줘\"라고 답글을 달아요." },
-      { label: "그래프", dur: 90, title: "그래프를 그려서 보여 줘요", desc: "치환 전과 후, 모양은 달라도 색칠한 넓이는 똑같이 e − 1. 눈으로 확인해요." },
+      { label: "문제 요청", dur: 45, title: "문제를 말로 요청해요", desc: "과목, 개념, 난이도까지 평소 말투로. 시험 범위에 맞춰 알아들어요." },
+      { label: "문제 생성", dur: 50, title: "검산을 마친 문제가 만들어져요", desc: "다른 AI가 처음부터 다시 풀어 본 문제만 도착해요. 풀면 바로 채점하고, 틀리면 오답노트에 담아요." },
+      { label: "다양한 문제 풀이", dur: 110, title: "한 문제, 여러 가지 풀이", desc: "정석 풀이부터 그래프로 보는 풀이, 실전에서 빠른 풀이까지. 막힌 줄엔 답글로 더 물어볼 수 있어요." },
+      { label: "약점 분석 · 추가 학습", dur: 90, title: "약점을 찾고, 다음 공부까지", desc: "개념별 정답률로 약점을 짚고, 비슷한 문제 · 개념 레슨 · 1·3·7일 복습으로 이어 줘요." },
     ],
     iv: [
       { label: "질문", dur: 40, title: "면접관이 먼저 물어요", desc: "OPIc, 토익스피킹, 직무 면접. 실제 시험 순서 그대로 진행해요." },
@@ -897,7 +923,6 @@
     ],
   };
   const ASK = "미적분 치환적분 3점짜리 문제 하나 내줘";
-  const REPLY = "이 부분, 그래프로 보여줘";
   const ANS = "I usually go to the Han River park near my house. On weekends I ride a bike along the river and just watch the sunset. It helps me clear my head.";
   const dm = { track: "solve", s: 0, t: 0, playing: !reduce, visible: false };
 
@@ -943,11 +968,15 @@
     if (dm.track === "solve") {
       const askN = s === 0 ? Math.min(ASK.length, Math.floor(t * 0.8)) : ASK.length;
       $("#dm-ask").textContent = ASK.slice(0, askN); caret("ask", s === 0 && askN < ASK.length);
-      $("#dm-mark").classList.toggle("on", s >= 3);
-      $("#dm-pop").hidden = !(s === 3 && t < 14);
-      $("#dm-replybox").hidden = !(s >= 4 || (s === 3 && t >= 14));
-      const repN = s === 3 ? Math.max(0, Math.min(REPLY.length, Math.floor((t - 14) * 0.6))) : REPLY.length;
-      $("#dm-reply").textContent = REPLY.slice(0, repN); caret("reply", s === 3 && repN < REPLY.length);
+      const picked = s > 1 || (s === 1 && t >= 28); // 학생이 ③ 을 골랐다가 틀린다
+      $("#dm-o3").className = picked ? "bad" : "";
+      $("#dm-o1").className = picked ? "ok" : "";
+      $("#dm-verdict").hidden = !picked;
+      const mt = s === 2 ? (t < 34 ? 0 : t < 84 ? 1 : 2) : 0; // 풀이 탭이 저절로 넘어간다
+      $$("[data-mt]").forEach((el) => el.classList.toggle("on", +el.dataset.mt === mt));
+      $$("[data-mb]").forEach((el) => (el.hidden = +el.dataset.mb !== mt));
+      $(".dm-methods").classList.toggle("fold", s > 2); // 약점 카드가 오면 풀이는 접는다
+      $("#dm-next").hidden = !(s === 3 && t >= 30);
     } else {
       const ansN = s === 1 ? Math.min(ANS.length, Math.floor(t * 2.2)) : ANS.length;
       $("#dm-ans").textContent = ANS.slice(0, ansN); caret("ans", s === 1 && ansN < ANS.length);

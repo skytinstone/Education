@@ -548,6 +548,9 @@ const Store = (() => {
     },
     // 개념 레슨 (모두가 같이 보는 레슨) · 개념과 대화하기 · 내 노트에 담기 — 서버 모드에서만
     getLesson: (conceptId) => (local ? Promise.resolve(null) : api(`/concepts/${conceptId}/lesson`)),
+    // 다른 풀이 보기 — 답을 낸 문제만 (아직 없으면 null)
+    problemMethods: (problemId) => (local ? Promise.resolve(null) : api(`/problems/${problemId}/methods`)),
+    createProblemMethods: (problemId) => api(`/problems/${problemId}/methods`, { method: "POST" }),
     createLesson: (conceptId) => api(`/concepts/${conceptId}/lesson`, { method: "POST" }),
     conceptChat: (conceptId, body) => api(`/concepts/${conceptId}/chat`, { method: "POST", body }),
     clips: (conceptId) => (local ? Promise.resolve([]) : api(`/concepts/${conceptId}/clips`)),

@@ -371,6 +371,15 @@ class Problem(Base):
         return [c.id for c in self.concepts]
 
 
+class ProblemMethods(Base):
+    """한 문제를 푸는 여러 가지 방법 (services/solutions.py) — 문제마다 한 번 만들고, 그 문제를 볼 수 있는 사람이 같이 본다."""
+    __tablename__ = "problem_methods"
+
+    problem_id: Mapped[str] = mapped_column(ForeignKey("problems.id", ondelete="CASCADE"), primary_key=True)
+    content: Mapped[dict] = mapped_column(JSONB)  # {"methods": [{name, when, summary, steps, result, graph}]}
+    created_at: Mapped[datetime] = created_at()
+
+
 class ProblemAnswer(Base):
     """올린 문제지의 문항 하나 ↔ 정답 하나 (problem_id 가 기본키라 1:1).
 
