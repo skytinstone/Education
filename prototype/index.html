@@ -238,6 +238,9 @@
   }
   .hero-badge[hidden] { display: none; }
   .hero h1 { font-size: clamp(30px, 3.8vw, 46px); font-weight: 800; letter-spacing: -0.04em; line-height: 1.18; }
+  .hero h1 .nm { color: var(--brand, #1F5FE0); }
+  .hero h1 .gl2 { font-size: .82em; }
+  .hero p.cheer { font-size: 16px; font-weight: 600; color: #C2410C; }
   .hero h1 .eu { font-family: "Space Grotesk", sans-serif; font-weight: 700; color: var(--brand, #1F5FE0); letter-spacing: -0.03em; }
   .hero p { color: var(--ink-2); margin-top: 10px; font-size: 15px; }
   .scroll-cue {
@@ -584,7 +587,7 @@
         <section class="stage" id="stage">
         <section class="hero">
           <a class="hero-badge" id="hero-badge" href="#/plan" hidden></a>
-          <h1 id="greeting">무엇이든, <span class="eu">Eureka</span>에게.</h1>
+          <h1 id="greeting">안녕하세요!<br><span class="gl2">오늘은 어떤 것을 해볼까요?</span></h1>
           <p id="hero-sub">문제 요청, 풀이 질문, 사진 첨부까지 — 말하듯 물어보세요</p>
 
           <form class="composer glass" id="composer">
@@ -619,7 +622,7 @@
         <section class="panel activity" aria-label="학습 기록">
           <div class="panel-head">
             <h2>학습 기록</h2>
-            <span class="legend" aria-hidden="true">적음 <i class="l0"></i><i class="l1"></i><i class="l2"></i><i class="l3"></i><i class="l4"></i> 목표 달성</span>
+            <span class="legend" aria-hidden="true">적음 <i class="l0"></i><i class="l1"></i><i class="gl2"></i><i class="l3"></i><i class="l4"></i> 목표 달성</span>
           </div>
           <div class="activity-body">
             <div class="heat-scroll" id="heat-scroll"><div class="heat" id="heat"></div></div>

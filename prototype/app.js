@@ -595,7 +595,13 @@
 
     const st = Store.state;
     const name = st.user?.name;
-    $("#hero-sub").textContent = `${name ? `${name}님, ` : ""}문제 요청, 풀이 질문, 사진 첨부까지 — 말하듯 물어보세요`;
+    // 인사: 시험이 7일 안으로 다가오면 응원 문구로 바꾼다
+    const soon = planProject();
+    const left = soon ? daysLeft(soon.examDate) : null;
+    const near = left != null && left >= 0 && left <= 7;
+    $("#greeting").innerHTML = `안녕하세요${name ? `, <span class="nm">${esc(name)}</span>님` : ""}!<br><span class="gl2">${near ? "이제 시험이 얼마 남지 않았어요!" : "오늘은 어떤 것을 해볼까요?"}</span>`;
+    $("#hero-sub").textContent = near ? "끝까지 열심히 해서, 좋은 결과 얻도록 노력해봐요!" : "문제 요청, 풀이 질문, 사진 첨부까지 — 말하듯 물어보세요";
+    $("#hero-sub").classList.toggle("cheer", near);
 
     renderOnboard();
     renderTodo();
