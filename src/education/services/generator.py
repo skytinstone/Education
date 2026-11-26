@@ -26,7 +26,7 @@ from education.concepts import load_template_courses
 from education.config import get_settings
 from education.db import models as m
 from education.schemas import ProblemSource, ProblemType, VerificationStatus
-from education.services import learning
+from education.services import item_stats, learning
 from education.services.llm import LLM, LLMError, Usage
 
 # 어느 시험에나 쓰는 난이도 (수능이면 괄호 안 배점에 맞춘다)
@@ -444,6 +444,9 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
               + ("\n이미 있는 문제 (겹치지 않게):\n" + "\n".join(f"- {r[:120]}" for r in recent) if recent else "")
               + ("\n\n참고할 기출 문제 (이 결을 따르되 베끼지 말 것 · 수준과 표기는 코스보다 기출을 따른다):\n\n"
                  + "\n\n---\n\n".join(_exemplar_text(e) for e in exemplars[:3]) if exemplars else ""))
+    # 실제 학생 풀이로 본 기존 문제 성적 — 난이도 보정 · 잘 먹힌 함정 · 죽은 보기 · 모호했던 문제
+    if feedback := item_stats.concept_feedback(db, concept_id):
+        prompt += "\n\n" + feedback
     course = db.get(m.Course, concept.course_id)
     choice_count = choice_count or (course.choice_count if course else 5)
     if formats:

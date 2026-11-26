@@ -7,7 +7,7 @@
 import argparse
 
 from education.db.session import SessionLocal
-from education.services import reminders
+from education.services import item_stats, reminders
 
 
 def main() -> None:
@@ -16,6 +16,10 @@ def main() -> None:
     args = parser.parse_args()
     with SessionLocal() as db:
         sent = reminders.run(db, evening=args.evening)
+        if not args.evening:  # 아침마다 문제 성적표도 새로 매긴다 (문제 생성이 참고)
+            stats = item_stats.refresh(db)
+            db.commit()
+            print(f"문제 성적표 {stats['problems']}문제")
     print(" · ".join(f"{k} {v}명" for k, v in sent.items()) or "보낼 알림 없음")
 
 

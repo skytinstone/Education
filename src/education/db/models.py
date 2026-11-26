@@ -716,3 +716,19 @@ class DeepDive(Base):
         UniqueConstraint("user_id", "problem_id", name="uq_deep_dive_user_problem"),
         CheckConstraint("feedback IN ('understood', 'confused')", name="deep_dive_feedback"),
     )
+
+
+class ProblemStats(Base):
+    """문제 성적표 (services/item_stats.py) — 학생 처음 풀이로 매긴 문항 분석. 다시 계산할 때마다 통째로 바꾼다."""
+    __tablename__ = "problem_stats"
+
+    problem_id: Mapped[str] = mapped_column(ForeignKey("problems.id", ondelete="CASCADE"), primary_key=True)
+    n: Mapped[int]  # 처음 푼 학생 수
+    p: Mapped[float]  # 정답률
+    b: Mapped[float]  # 라쉬 난이도 (학생 평균 실력 = 0)
+    disc: Mapped[float | None]  # 변별도 (맞힘 여부와 학생 실력의 상관)
+    observed_difficulty: Mapped[int] = mapped_column(SmallInteger)  # 실제 난이도 1~5
+    choices: Mapped[list | None] = mapped_column(JSONB)  # 객관식: 보기마다 {n, ability}
+    flags: Mapped[list[str]] = mapped_column(ARRAY(String(20)), server_default="{}")
+    grade: Mapped[str] = mapped_column(String(1))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

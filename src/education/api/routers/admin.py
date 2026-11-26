@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from education.api.deps import DB, FORCED_PREFIX, AdminUser, admin_user, is_admin
 from education.config import get_settings
 from education.db import models as m
-from education.services import accounts, audit, billing, learning
+from education.services import accounts, audit, billing, item_stats, learning
 
 router = APIRouter(prefix="/admin", tags=["운영"], dependencies=[Depends(admin_user)])
 
@@ -458,6 +458,20 @@ def quality(db: DB, days: int = Query(30, ge=1, le=180)) -> dict:
         "answer_keys": keys,
         "reports": reports,
     }
+
+
+# ---------- 문제 성적표: 학생 실력을 감안한 문항 분석 ----------
+@router.get("/item-stats")
+def item_stats_list(db: DB, flag: str | None = None, grade: str | None = Query(None, pattern="^[ABCD]$")) -> dict:
+    return item_stats.summary(db, flag=flag, grade=grade)
+
+
+@router.post("/item-stats/refresh")
+def item_stats_refresh(db: DB) -> dict:
+    """처음 풀이 기록으로 모든 문제 성적을 다시 계산한다 (매일 아침 알림 작업에서도 한다)."""
+    out = item_stats.refresh(db)
+    db.commit()
+    return out
 
 
 # ---------- 가입 전환 퍼널 · 주간 재방문 ----------
