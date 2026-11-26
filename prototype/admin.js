@@ -115,10 +115,11 @@
   // ================= 운영 콘솔 (운영자 계정만) =================
   // #/(개요) · #/users[/id] · #/ai · #/logins · #/voc
   const FB_STATUS = { open: "접수", reviewing: "확인 중", resolved: "해결" };
-  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["revenue", "매출", "wallet"], ["ai", "AI 사용량", "cpu"], ["quality", "문제 품질", "gauge"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"], ["actions", "관리 기록", "scroll-text"]];
+  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["revenue", "매출", "wallet"], ["ai", "AI 사용량", "cpu"], ["quality", "문제 품질", "gauge"], ["items", "문제 성적표", "clipboard-check"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"], ["actions", "관리 기록", "scroll-text"]];
   const METHOD_NAME = { password: "이메일", google: "Google", kakao: "카카오" };
   const PURPOSE_NAME = { generate: "문제 생성", verify: "문제 검증", note_generate: "개념 정리 생성", note_verify: "개념 정리 검증",
-    course: "코스 만들기", extract: "기출·교재 분석", essay_grade: "서술형 채점", review: "풀이 확인", explain: "계산·설명 풀이", answer_key: "정답지 풀이", answer_verify: "정답지 검산" };
+    course: "코스 만들기", extract: "기출·교재 분석", essay_grade: "서술형 채점", review: "풀이 확인", explain: "계산·설명 풀이", answer_key: "정답지 풀이", answer_verify: "정답지 검산",
+    methods: "다른 풀이", plan: "학습 계획 검토", deep_dive: "Deep Dive" };
   // 접속 상태
   const PAGE_NAME = { home: "홈", chat: "대화", project: "프로젝트", notes: "오답노트", library: "라이브러리", settings: "설정",
     "answer-key": "정답지", exam: "시험", admin: "운영 콘솔" };
@@ -135,6 +136,7 @@
     actions: { q: "", action: "" },
     logins: { q: "", result: "all", method: "" },
     voc: { state: "open", kind: "", q: "", user_id: "" },
+    items: { flag: "", grade: "" },
   };
   const num = (n) => Number(n ?? 0).toLocaleString("ko-KR");
   const compact = (n) => new Intl.NumberFormat("ko-KR", { notation: "compact", maximumFractionDigits: 1 }).format(Number(n ?? 0));
@@ -167,6 +169,7 @@
 
   const TAB_DESC = { overview: "가입·이용 현황과 오늘 챙길 것", users: "회원 검색, 상세, 이용 정지·삭제", revenue: "월 구독 결제 매출 · 구독자 · AI 원가와 마진 (부가세·수수료·환율은 추정)", ai: "AI 호출 비용·토큰·실패",
     quality: "AI 가 만든 문제의 검산 통과율과 탈락 이유, 정답지 상태",
+    items: "학생 처음 풀이로 매긴 문제별 성적 — 학생 실력을 감안한 실제 난이도 · 변별도 · 보기 분석",
     logins: "로그인·가입 기록 (90일 보관)", voc: "의견·문제 신고 확인과 답변, 전체 공지",
     actions: "운영자가 한 조치 — 정지·해제·삭제·강제 로그아웃·VOC·공지 (누가 · 언제 · 누구에게)" };
   const ACTION_NAME = { suspend: ["이용 정지", "bad"], unsuspend: ["정지 해제", "ok"], delete: ["계정 삭제", "bad"], logout: ["강제 로그아웃", "warn"],
@@ -190,6 +193,7 @@
       else if (tab === "revenue") await adminRevenue(body);
       else if (tab === "ai") await adminAI(body);
       else if (tab === "quality") await adminQuality(body);
+      else if (tab === "items") await adminItems(body);
       else if (tab === "logins") await adminLogins(body);
       else if (tab === "actions") await adminActions(body);
       else await adminVOC(body);
@@ -328,6 +332,48 @@
       <section class="panel"><h3>정답지 문항 상태</h3>
         <div class="hbars">${Object.entries(KEY_NAME).map(([key, name]) => `
           <div class="hbar"><span>${name}</span><span class="track"><i class="${["conflict", "uncertain", "failed"].includes(key) ? "m-kakao" : "m-google"}" style="width:${keyTotal ? ((k[key] ?? 0) / keyTotal) * 100 : 0}%"></i></span><b>${num(k[key] ?? 0)}</b></div>`).join("")}</div></section>`;
+    icons();
+  }
+
+  // ---------- 문제 성적표: 학생 실력을 감안한 문항 분석 ----------
+  const GRADE_TONE = { A: "ok", B: "", C: "warn", D: "bad" };
+  // 표 안에서 짧게 읽히도록 LaTeX 명령과 $ 를 걷어 낸다
+  const texPlain = (t = "") => t.replace(/\\(displaystyle|left|right|,|;|!)/g, " ").replace(/\\(mathrm|text)\{([^}]*)\}/g, "$2")
+    .replace(/\\d?frac\{([^}]*)\}\{([^}]*)\}/g, "($1)/($2)").replace(/\\int/g, "∫").replace(/\\log/g, "log").replace(/\\mid/g, "|")
+    .replace(/\\cap/g, "∩").replace(/\\times/g, "×").replace(/[$\\]/g, "").replace(/\s+/g, " ").trim();
+  async function adminItems(body) {
+    const f = adminState.items;
+    const r = await Store.adminGet("/item-stats", { ...(f.flag && { flag: f.flag }), ...(f.grade && { grade: f.grade }) });
+    if (!body.isConnected) return;
+    const total = Object.values(r.grades).reduce((a, b) => a + b, 0);
+    const pct = (v) => (v == null ? "–" : `${Math.round(v * 100)}%`);
+    const lv = (n) => "●".repeat(n) + "○".repeat(5 - n);
+    const choiceBar = (x) => {
+      if (!x.choices.length || !x.n) return "";
+      const key = Number(x.answer);
+      return `<div class="ich">${x.choices.map((c, i) => `
+        <span class="${i + 1 === key ? "key" : c.n === 0 ? "dead" : ""}" title="${esc(c.text)} · ${c.n}명${c.ability == null ? "" : ` · 고른 학생 평균 실력 ${c.ability > 0 ? "+" : ""}${c.ability}`}">
+          <i style="height:${Math.max(4, Math.round((c.n / x.n) * 44))}px"></i><b>${i + 1}</b></span>`).join("")}</div>`;
+    };
+    body.innerHTML = `
+      <div class="panel-row top"><p class="mini">학생마다 실력이 달라서 단순 정답률 대신 <b>학생 실력과 문제 난이도를 함께 추정</b>(라쉬 모형)해요. 한 학생이 처음 푼 기록만 쓰고, ${r.min_n}명 이상 푼 문제만 매겨요.
+        결과는 같은 개념의 새 문제를 만들 때 AI 가 참고해요 (난이도 보정 · 잘 먹힌 함정 · 죽은 보기).${r.updated_at ? ` · 마지막 계산 ${when(r.updated_at)}` : ""}</p>
+        <button class="btn-ghost" data-irefresh><i data-lucide="refresh-cw"></i>지금 다시 계산</button></div>
+      <div class="kpis">
+        ${["A", "B", "C", "D"].map((g) => `<button type="button" class="kpi ${f.grade === g ? "on" : ""} ${GRADE_TONE[g]}" data-igrade="${g}" style="text-align:left;cursor:pointer"><span class="k">${g} 등급</span><b>${num(r.grades[g] ?? 0)}</b><small>${total ? `${Math.round(((r.grades[g] ?? 0) / total) * 100)}%` : "–"} · 눌러서 보기</small></button>`).join("")}
+      </div>
+      <section class="panel"><h3>문제 표시</h3>
+        <div class="ichips">${Object.entries(r.flag_names).map(([k, name]) => `<button type="button" class="itag ${f.flag === k ? "on" : ""}" data-iflag="${k}">${esc(name)} <b>${num(r.flags[k] ?? 0)}</b></button>`).join("")}</div></section>
+      <section class="panel"><h3>문제별 성적 <small class="mini">${f.grade || f.flag ? "필터 적용 중 — 같은 걸 다시 누르면 풀려요" : "나쁜 등급부터"}</small></h3>
+        ${table(["등급", "문제", "#푼 학생", "#정답률", "난이도 의도 → 실제", "#변별도", "보기 (높이 = 고른 비율, 파랑 = 정답)", "표시"], r.items.map((x) => `
+          <tr><td><span class="achip ${GRADE_TONE[x.grade]}">${x.grade}</span></td>
+            <td class="istem">${esc(texPlain(x.stem))}<small>${esc(x.concept)} · ${esc(x.problem_id)}${x.source === "generated" ? " · AI 생성" : ""}</small></td>
+            <td class="n">${num(x.n)}</td><td class="n">${pct(x.p)}</td>
+            <td class="nowrap"><span title="의도">${lv(x.intended)}</span><br><span title="실제" class="${Math.abs(x.observed - x.intended) >= 2 ? "bad" : ""}">${lv(x.observed)}</span></td>
+            <td class="n ${x.disc != null && x.disc < 0.15 ? "bad" : ""}">${x.disc == null ? "–" : x.disc.toFixed(2)}</td>
+            <td>${choiceBar(x)}</td>
+            <td>${x.flags.map((k) => `<span class="achip ${["neg_disc", "key_suspect"].includes(k) ? "bad" : "warn"}">${esc(r.flag_names[k] ?? k)}</span>`).join(" ") || '<span class="mini">—</span>'}</td></tr>`),
+          total ? "조건에 맞는 문제가 없어요" : `아직 ${r.min_n}명 이상 푼 문제가 없어요. 풀이가 쌓이면 매일 아침 자동으로 매겨요`)}</section>`;
     icons();
   }
 
@@ -601,6 +647,13 @@
     if ((x = el("[data-revdays]"))) { adminState.revDays = Number(x.dataset.revdays); return rerender(tab); }
     if (el("[data-revtest]")) { adminState.revTest = !adminState.revTest; return rerender(tab); }
     if ((x = el("[data-aidays]"))) { adminState.aiDays = Number(x.dataset.aidays); return rerender(tab); }
+    if ((x = el("[data-igrade]"))) { adminState.items.grade = adminState.items.grade === x.dataset.igrade ? "" : x.dataset.igrade; return rerender(tab); }
+    if ((x = el("[data-iflag]"))) { adminState.items.flag = adminState.items.flag === x.dataset.iflag ? "" : x.dataset.iflag; return rerender(tab); }
+    if ((x = el("[data-irefresh]"))) {
+      x.disabled = true;
+      try { const r = await Store.adminPost("/item-stats/refresh"); toast(`${num(r.problems)}문제의 성적을 새로 매겼어요`); } catch (err) { toast(err.message); }
+      return rerender(tab);
+    }
     if ((x = el("[data-lresult]"))) { adminState.logins.result = x.dataset.lresult; return rerender(tab); }
     if (el("[data-lmore]")) return adminLogins($("#admin-body"), true);
     if ((x = el("[data-ustate]"))) { adminState.users.state = x.dataset.ustate; adminState.users.offset = 0; return rerender(tab); }

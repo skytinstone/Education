@@ -140,6 +140,19 @@
     .live-page, .live-dev { display: none; }
     .live-head .mini { margin-left: 0; }
   }
+  /* 문제 성적표 */
+  .ich { display: flex; align-items: flex-end; gap: 4px; height: 62px; }
+  .ich span { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; width: 18px; height: 100%; }
+  .ich i { display: block; width: 14px; border-radius: 3px 3px 0 0; background: #CBD5E1; }
+  .ich span.key i { background: #1F5FE0; }
+  .ich span.dead b { color: #B42318; }
+  .ich b { font-size: 11px; font-weight: 600; color: #64748B; }
+  .istem { min-width: 220px; max-width: 360px; }
+  .istem small { display: block; margin-top: 3px; }
+  .kpi.on { outline: 2px solid #1F5FE0; }
+  .ichips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .itag { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border-radius: 999px; font-size: 13px; background: #fff; border: 1px solid rgba(15,23,42,.12); cursor: pointer; }
+  .itag.on { background: #1F5FE0; border-color: #1F5FE0; color: #fff; }
 </style>
 <link rel="stylesheet" href="/app/glass.css" />
 </head>
@@ -193,6 +206,7 @@
       <a href="#/users" data-tab="users"><i data-lucide="users"></i>회원</a>
       <a href="#/ai" data-tab="ai"><i data-lucide="cpu"></i>AI 사용량</a>
       <a href="#/quality" data-tab="quality"><i data-lucide="gauge"></i>문제 품질</a>
+      <a href="#/items" data-tab="items"><i data-lucide="clipboard-check"></i>문제 성적표</a>
       <a href="#/logins" data-tab="logins"><i data-lucide="log-in"></i>로그인 기록</a>
       <a href="#/voc" data-tab="voc"><i data-lucide="inbox"></i>VOC</a>
       <a href="#/actions" data-tab="actions"><i data-lucide="scroll-text"></i>관리 기록</a>
