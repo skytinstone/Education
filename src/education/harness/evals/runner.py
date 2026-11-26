@@ -104,7 +104,7 @@ def verify_metrics(results: list[dict]) -> dict:
         rows = [r for r in bad if r["defect"] == d]
         by_defect[d] = {"cases": len(rows), "detected": rate(rows, lambda r: r["decision"] == "reject")}
     ran = [r for r in results if r.get("math") and "error" not in r["math"] and r["math"].get("checkable")]
-    should_fail = {"wrong_key", "no_correct_choice"}
+    should_fail = {"wrong_key", "no_correct_choice", "subtle_wrong_key"}
     math_ok = lambda r: r["math"]["agrees"] if r["label"] == "good" else (not r["math"]["agrees"]) if r["defect"] in should_fail else True  # noqa: E731
     return {
         "cases": len(results), "good": len(good), "bad": len(bad),
@@ -136,6 +136,59 @@ def retrieval_metrics(results: list[dict]) -> dict:
     return {"cases": n,
             "recall_at_3": round(sum(1 for r in results if r["rank"]) / n, 4) if n else None,
             "mrr": round(sum(1 / r["rank"] for r in results if r["rank"]) / n, 4) if n else None}
+
+
+# ---------- generate (생성 효율 — 하네스 3단계 자기 수정 루프의 효과를 잰다) ----------
+def _generate_case(db: Session, llm: LLM, case: dict) -> dict:
+    """문제를 실제로 만들어 보고, 끝나면 되돌린다 (문제 은행 · 실행 기록에 남기지 않음)."""
+    from sqlalchemy import select
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.orm import Session as S
+
+    bind = db.get_bind()
+    conn = bind.connect() if isinstance(bind, Engine) else bind
+    trans = conn.begin() if isinstance(bind, Engine) else conn.begin_nested()
+    g = S(bind=conn, join_transaction_mode="create_savepoint", expire_on_commit=False)
+    started = time.monotonic()
+    try:
+        before = set(g.scalars(select(m.AgentRun.id)))
+        report = generator.generate_problems(g, llm, concept_id=case["concept_id"], difficulty=case["difficulty"], count=case["count"])
+        runs = [r for r in g.scalars(select(m.AgentRun).where(m.AgentRun.kind == "generate")) if r.id not in before]
+        items = [{"status": r.status, "attempts": sum(1 for x in r.steps if x["name"] == "generate"),
+                  "self_corrected": any(x["name"] == "self_correct" for x in r.steps),
+                  "reason": r.output, "cost_usd": float(r.cost_usd or 0), "ms": r.latency_ms} for r in runs]
+        return {"id": case["id"], "concept_id": case["concept_id"], "requested": case["count"],
+                "accepted": len(report.accepted), "items": items, "ms": int((time.monotonic() - started) * 1000)}
+    finally:
+        g.close()
+        trans.rollback()
+        if isinstance(bind, Engine):
+            conn.close()
+
+
+def generate_metrics(results: list[dict]) -> dict:
+    items = [i for r in results for i in r["items"]]
+    requested = sum(r["requested"] for r in results)
+    accepted = sum(r["accepted"] for r in results)
+    cost = sum(i["cost_usd"] for i in items)
+    reasons: dict[str, int] = {}
+    for i in items:
+        if i["status"] != "passed":
+            key = (i["reason"] or "?").split(":")[0]
+            reasons[key] = reasons.get(key, 0) + 1
+    fixed = [i for i in items if i["self_corrected"]]
+    return {
+        "requested": requested, "accepted": accepted,
+        "yield": round(accepted / requested, 4) if requested else None,
+        "first_try_pass": round(sum(1 for i in items if i["status"] == "passed" and i["attempts"] == 1) / requested, 4) if requested else None,
+        "avg_attempts": round(sum(i["attempts"] for i in items) / len(items), 3) if items else None,
+        "self_corrected": len(fixed),
+        "self_correct_success": round(sum(1 for i in fixed if i["status"] == "passed") / len(fixed), 4) if fixed else None,
+        "cost_usd": round(cost, 4),
+        "cost_per_accepted": round(cost / accepted, 4) if accepted else None,
+        "avg_ms": int(sum(i["ms"] or 0 for i in items) / len(items)) if items else 0,
+        "reject_reasons": reasons,
+    }
 
 
 # ---------- 실행 ----------
@@ -180,9 +233,16 @@ def run(db: Session, *, llm: LLM | None = None, mode: str = "live", cassette: di
         metrics["retrieval"] = retrieval_metrics(results)
         cases["retrieval"] = results
 
-    tape["metrics"] = metrics
+    if "generate" in suites:  # 생성은 매번 달라 녹화·재생하지 않는다 (live 만)
+        if mode != "live":
+            raise ValueError("generate 평가는 live 로만 돌려요")
+        results = [_generate_case(db, llm, c) for c in load("generate")]
+        metrics["generate"] = generate_metrics(results)
+        cases["generate"] = results
+
+    tape["metrics"] = {k: v for k, v in metrics.items() if k != "generate"}
     run_row.metrics, run_row.cases, run_row.status = metrics, cases, "done"
-    run_row.cost_usd = metrics.get("verify", {}).get("cost_usd") if mode == "live" else 0
+    run_row.cost_usd = (sum(metrics.get(k, {}).get("cost_usd") or 0 for k in ("verify", "generate")) if mode == "live" else 0)
     run_row.latency_ms = int((time.monotonic() - started) * 1000)
     run_row.finished_at = func.now()
     db.flush()

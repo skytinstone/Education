@@ -27,7 +27,7 @@ def admins(monkeypatch):
 
 def test_prompt_registry_versions():
     names = prompts.names()
-    assert len(names) == 20 and "generator.generator_instructions" in names and "tutor_agent.instructions" in names
+    assert len(names) == 21 and "generator.generator_instructions" in names and "tutor_agent.instructions" in names
     # 코드가 쓰는 지시문과 파일 내용이 같다
     assert generator.GENERATOR_INSTRUCTIONS == prompts.text("generator.generator_instructions")
     assert "\r" not in prompts.text("intent.instructions")
@@ -55,9 +55,10 @@ def test_generation_runs_are_traced(db):
     assert [s["name"] for s in ok.steps] == ["generate", "format_check", "verify"]
     assert ok.steps[2]["data"]["verifier_answer"] == "1" and ok.steps[0]["tokens"]["in"] == 1000
     assert float(ok.cost_usd) == pytest.approx(0.044) and ok.harness_version == prompts.harness_version()
-    assert set(ok.prompt_versions) == {"generator.generator_instructions", "generator.verifier_instructions"}
+    assert set(ok.prompt_versions) == {"generator.generator_instructions", "generator.verifier_instructions", "generator.repair_instructions"}
     bad = next(r for r in runs if r.status == "rejected")
-    assert [s["name"] for s in bad.steps] == ["generate", "format_check", "verify"] * 2  # 두 번 시도
+    # 두 번 시도 — 두 번째 앞에 떨어진 이유를 생성 AI 에 알려 주는 자기 수정 단계
+    assert [s["name"] for s in bad.steps] == ["generate", "format_check", "verify", "self_correct", "generate", "format_check", "verify"]
     assert not bad.steps[2]["ok"] and bad.output.startswith("정답 불일치")
 
 
@@ -98,5 +99,5 @@ def test_agent_runs_are_traced_and_admin_can_read(client, auth, db, monkeypatch,
     detail = client.get(f"/api/admin/runs/{runs[0]['id']}", headers=admin).json()
     assert detail["steps"][0]["name"] == "tool:get_study_status" and "tutor_agent.instructions" in detail["prompt_versions"]
     h = client.get("/api/admin/harness", headers=admin).json()
-    assert h["harness_version"] == prompts.harness_version() and len(h["prompts"]) == 20
+    assert h["harness_version"] == prompts.harness_version() and len(h["prompts"]) == 21
     assert h["versions"][0]["kind"] == "agent" and h["versions"][0]["statuses"] == {"answered": 1}

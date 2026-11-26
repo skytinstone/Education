@@ -387,7 +387,7 @@
   const RUN_KIND = { generate: "문제 생성", agent: "대화 에이전트" };
   const RUN_STATUS = { passed: ["통과", "ok"], rejected: ["탈락", "warn"], answered: ["답변", "ok"], failed: ["실패", "bad"] };
   const STEP_NAME = { generate: "생성 AI", format_check: "형식 검사", verify: "검증 AI (독립 재풀이)", math_check: "검산 에이전트 판정",
-    duplicate_check: "RAG 중복 확인", agent: "대화 에이전트 답" };
+    duplicate_check: "RAG 중복 확인", agent: "대화 에이전트 답", self_correct: "자기 수정 — 떨어진 이유를 생성 AI 에 전달" };
   const statusChip = (st) => { const [t, tone] = RUN_STATUS[st] ?? [st, ""]; return `<span class="achip ${tone}">${esc(t)}</span>`; };
   const ms = (v) => (v == null ? "–" : v >= 1000 ? `${(v / 1000).toFixed(1)}초` : `${v}ms`);
   const usd4 = (v) => (v == null ? "–" : `$${Number(v).toFixed(4)}`);
@@ -473,6 +473,23 @@
     return `<small class="${better ? "du" : "dd"}">${d > 0 ? "+" : ""}${d}%p</small>`;
   };
 
+  // 생성 효율 (자기 수정 루프 전후 비교) — 자기 수정을 켠 평가와 끈 평가 중 가장 최근 것끼리
+  function genCard(done) {
+    const withGen = done.filter((e) => e.metrics?.generate);
+    if (!withGen.length) return "";
+    const on = withGen.find((e) => e.models?.self_correct !== "False"), off = withGen.find((e) => e.models?.self_correct === "False");
+    const g = (e) => e?.metrics?.generate ?? {};
+    const row = (label, k, fmt, good = "up") => `<tr><td>${label}</td><td class="n">${off ? fmt(g(off)[k]) : "–"}</td><td class="n"><b>${on ? fmt(g(on)[k]) : "–"}</b></td>
+      <td class="n">${on && off && g(on)[k] != null && g(off)[k] != null ? delta(g(on)[k], g(off)[k], good) : ""}</td></tr>`;
+    return `<section class="panel"><h3>생성 효율 — 자기 수정 루프 끔 / 켬 <small class="mini">실제로 문제를 만들어 보고 되돌림</small></h3>
+      ${table(["지표", "#끔", "#켬", "#차이"], [
+        row("통과율 (요청 대비)", "yield", pctv), row("첫 시도 통과율", "first_try_pass", pctv),
+        `<tr><td>문제당 시도 횟수</td><td class="n">${off ? g(off).avg_attempts ?? "–" : "–"}</td><td class="n"><b>${on ? g(on).avg_attempts ?? "–" : "–"}</b></td><td></td></tr>`,
+        `<tr><td>통과 문제당 비용</td><td class="n">${off ? usd4(g(off).cost_per_accepted) : "–"}</td><td class="n"><b>${on ? usd4(g(on).cost_per_accepted) : "–"}</b></td><td></td></tr>`,
+        `<tr><td>고쳐서 다시 낸 문제 → 통과</td><td class="n">–</td><td class="n"><b>${on ? `${num(g(on).self_corrected)}개 → ${pctv(g(on).self_correct_success)}` : "–"}</b></td><td></td></tr>`,
+      ], "")}</section>`;
+  }
+
   async function adminEvals(body) {
     const list = await Store.adminGet("/evals");
     if (!body.isConnected) return;
@@ -493,7 +510,8 @@
       <section class="panel"><h3>결함 종류별 탐지율 <small class="mini">하네스 <code>${esc(cur.harness_version)}</code> · ${when(cur.created_at)}</small></h3>
         <div class="hbars">${Object.entries(v.by_defect ?? {}).map(([k, d]) => `
           <div class="hbar"><span>${esc(DEFECT_NAME[k] ?? k)} <small>(${d.cases})</small></span><span class="track"><i class="m-google" style="width:${(d.detected ?? 0) * 100}%"></i></span><b>${pctv(d.detected)}</b></div>`).join("")}</div>
-        <p class="mini">검산 에이전트 판단 정확도 ${pctv(v.math_check_accuracy)} (${num(v.math_check_runs)}번 실행) · 평가 비용 ${usd4(cur.cost_usd)} · 문항당 평균 ${ms(v.avg_ms)}</p></section>`
+        <p class="mini">검산 에이전트 판단 정확도 ${pctv(v.math_check_accuracy)} (${num(v.math_check_runs)}번 실행) · 평가 비용 ${usd4(cur.cost_usd)} · 문항당 평균 ${ms(v.avg_ms)}</p></section>
+      ${genCard(done)}`
         : '<section class="panel"><p class="mini">아직 실제 AI 평가가 없어요. 위 버튼으로 첫 평가(기준점)를 만들어 주세요.</p></section>'}
       <section class="panel"><h3>평가 기록</h3>
         ${table(["시각", "하네스 버전", "방식", "상태", "#탐지율", "#오탐률", "#검산 추가", "#recall@3", "#비용"], list.map((e) => {
@@ -809,7 +827,7 @@
     if ((x = el("[data-aidays]"))) { adminState.aiDays = Number(x.dataset.aidays); return rerender(tab); }
     if ((x = el("[data-eval]"))) { location.hash = `#/evals/${x.dataset.eval}`; return; }
     if ((x = el("[data-eval-run]"))) {
-      if (!confirm("실제 AI 로 골든셋을 평가해요. 몇 분 걸리고 약 $1 안팎의 비용이 들어요. 진행할까요?")) return;
+      if (!confirm("실제 AI 로 골든셋 평가와 문제 생성 평가를 돌려요. 10분 안팎 걸리고 약 $1~2 의 비용이 들어요. 진행할까요?")) return;
       x.disabled = true;
       try { await Store.adminPost("/evals/run"); toast("평가를 시작했어요. 몇 분 뒤 새로고침해 보세요"); } catch (err) { toast(err.message); }
       return rerender(tab);
