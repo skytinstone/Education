@@ -48,7 +48,7 @@ class Ctx:
 
 
 class AgentReply(BaseModel):
-    reply: str = Field(description="학생에게 보일 답 (해요체, 3~8줄, 첫 줄에 핵심). 숫자는 도구 결과에 있는 것만")
+    reply: str = Field(description="학생에게 보일 답 (해요체, 첫 줄에 질문에 대한 직접적인 답). 학생 기록의 숫자는 도구 결과에 있는 것만")
     suggestions: list[str] = Field(description="학생이 바로 이어서 보낼 요청 0~3개 (실제로 보낼 문장, 각 20자 안쪽). 예: '열역학 3문제 내줘'")
     start_exam: bool = Field(description="학생이 지금 시험(모의시험)을 보겠다고 했을 때만 true")
 
@@ -119,6 +119,45 @@ def search_problems(query: str, runtime: ToolRuntime[Ctx], k: int = 3) -> str:
         return "\n".join(f"• ({h.similarity:.2f}) {h.problem.stem[:100]}" for h in hits)
 
 
+@tool
+def get_past_exams(runtime: ToolRuntime[Ctx], year: str = "") -> str:
+    """학생이 프로젝트에 올린 기출 자료와 거기서 뽑은 문제 전체 (자료 이름 · 문제 형식 · 개념 · 문제 앞부분).
+    기출 유형 분석 · 연도별 출제 경향 · 자주 나온 개념 질문에 쓴다. year 를 주면 자료 이름에 그 글자가 든 것만 (예: '2024')."""
+    c = _ctx(runtime)
+    with c.lock:
+        c.used.append("get_past_exams")
+        project = c.project or _nearest_project(c.db, c.user)
+        if project is None:
+            return "시험 프로젝트가 없어요."
+        mats = [x for x in c.db.scalars(select(m.Material).where(m.Material.project_id == project.id,
+                                                                   m.Material.kind == "past_exam")
+                                        .order_by(m.Material.filename))
+                if not year or year in x.filename]
+        if not mats:
+            return f"프로젝트 '{project.name}' 에 {'이름에 ' + repr(year) + ' 이 든 ' if year else ''}기출 자료가 없어요."
+        rows = c.db.execute(
+            select(m.Problem.material_id, m.Problem.problem_type, m.Problem.stem, m.Concept.name)
+            .outerjoin(m.ProblemConcept, m.ProblemConcept.problem_id == m.Problem.id)
+            .outerjoin(m.Concept, m.Concept.id == m.ProblemConcept.concept_id)
+            .where(m.Problem.material_id.in_([x.id for x in mats]), m.Problem.owner_user_id == c.user.id)
+            .order_by(m.Problem.material_id, m.Problem.created_at)).all()
+        by_mat: dict = {}
+        for mid, qtype, stem, concept in rows:
+            by_mat.setdefault(mid, []).append(f"  - [{concept or '개념 미분류'} · {qtype}] {' '.join(stem.split())[:110]}")
+        out, budget = [f"프로젝트: {project.name} · 기출 자료 {len(mats)}개 · 문제 {len(rows)}개"], PAST_EXAM_LINES
+        for x in mats:
+            items = by_mat.get(x.id, [])
+            out.append(f"• {x.filename} — 문제 {len(items)}개" + ("" if x.status == "ready" else f" (상태: {x.status})"))
+            out += items[:budget]
+            budget = max(0, budget - len(items))
+        if len(rows) > PAST_EXAM_LINES:
+            out.append("(문제가 많아 일부만 보였어요 — year 로 좁혀 다시 부를 수 있어요)")
+        return "\n".join(out)
+
+
+PAST_EXAM_LINES = 80  # 한 번에 넘기는 기출 문제 줄 수 (토큰 비용 상한)
+
+
 def _nearest_project(db: Session, user: m.User) -> m.Project | None:
     from education.services import learning
     today = learning.local_today(db)
@@ -127,7 +166,7 @@ def _nearest_project(db: Session, user: m.User) -> m.Project | None:
     return soon[0] if soon else (max(ps, key=lambda p: p.created_at) if ps else None)
 
 
-TOOLS = [get_study_status, get_today_plan, get_wrong_notes, search_problems, *MATH_TOOLS]
+TOOLS = [get_study_status, get_today_plan, get_wrong_notes, get_past_exams, search_problems, *MATH_TOOLS]
 
 
 def enabled() -> bool:
@@ -138,7 +177,7 @@ def enabled() -> bool:
 def run(db: Session, user: m.User, project: m.Project | None, text: str, *, history: str = "") -> tuple[AgentReply, Usage, list]:
     """에이전트 한 번. 실패하면 LLMError (부르는 쪽은 기존 한 번 답으로 돌아간다)."""
     s = get_settings()
-    model = models.get_chat_model(s.openai_model_route, s.openai_effort_route, max_tokens=4000)
+    model = models.get_chat_model(s.openai_model_chat, s.openai_effort_chat, max_tokens=6000)
     if model is None:
         raise LLMError("AI 가 설정되지 않았어요")
     ctx = Ctx(db=db, user=user, project=project)
@@ -155,4 +194,4 @@ def run(db: Session, user: m.User, project: m.Project | None, text: str, *, hist
     if not isinstance(out, AgentReply):
         raise LLMError("에이전트 답 형식이 달라요")
     out.suggestions = [x.strip()[:60] for x in out.suggestions if x.strip()][:3]
-    return out, models.usage_of(res["messages"], s.openai_model_route, started), res["messages"]
+    return out, models.usage_of(res["messages"], s.openai_model_chat, started), res["messages"]

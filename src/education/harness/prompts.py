@@ -41,6 +41,7 @@ def models() -> dict[str, str]:
     return {"generate": f"{s.openai_model_generate}/{s.openai_effort_generate}",
             "verify": f"{s.openai_model_verify}/{s.openai_effort_verify}",
             "route": f"{s.openai_model_route}/{s.openai_effort_route}",
+            "chat": f"{s.openai_model_chat}/{s.openai_effort_chat}",
             "embedding": s.embedding_model,
             "self_correct": str(s.ai_self_correct), "tool_check": str(s.ai_tool_check)}
 

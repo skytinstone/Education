@@ -198,6 +198,32 @@ def test_tutor_agent_tools_stay_in_user_scope(db, new_user, client, monkeypatch)
     assert "오늘 푼 문제: 0개" in tutor_agent.get_study_status.func(runtime=Rt())
 
 
+def test_get_past_exams_reads_uploaded_problems_by_year(db, new_user):
+    new_user()
+    user = db.scalar(select(m.User).where(m.User.email != "b@example.com").order_by(m.User.created_at.desc()))
+    proj = m.Project(user_id=user.id, name="고려대 편입", subject_id="math.calculus")
+    db.add(proj)
+    db.flush()
+    for year, stems in (("2023", ["이중적분 $\iint_D xy\,dA$ 를 구하시오", "편미분의 연속성을 판단하시오"]),
+                        ("2024", ["역함수 곡선의 변곡점을 구하시오"])):
+        mat = m.Material(user_id=user.id, project_id=proj.id, filename=f"{year} 고려대 편입수학.pdf", content_type="application/pdf",
+                         size_bytes=1, storage_path="x", status="ready", rights_confirmed=True, kind="past_exam")
+        db.add(mat)
+        db.flush()
+        for st in stems:
+            db.add(m.Problem(domain="math", difficulty=3, problem_type="text", stem=st, answer="-", solution="-",
+                             source="past_exam", owner_user_id=user.id, material_id=mat.id))
+    db.flush()
+
+    class Rt:
+        context = tutor_agent.Ctx(db=db, user=user, project=proj)
+    every = tutor_agent.get_past_exams.func(runtime=Rt())
+    assert "기출 자료 2개 · 문제 3개" in every and "이중적분" in every and "변곡점" in every
+    only = tutor_agent.get_past_exams.func(runtime=Rt(), year="2024")
+    assert "변곡점" in only and "이중적분" not in only
+    assert "get_past_exams" in [t.name for t in tutor_agent.TOOLS]
+
+
 def test_agent_falls_back_to_single_answer_on_failure(client, auth, db, monkeypatch):
     def boom(*a, **k):
         raise RuntimeError("API 다운")
@@ -219,4 +245,5 @@ def test_agent_falls_back_to_single_answer_on_failure(client, auth, db, monkeypa
 
 def test_settings_have_agent_defaults():
     s = get_settings()
+    assert s.openai_model_chat == s.openai_model_generate  # 대화 코치는 분류용 가벼운 모델이 아니라 답의 질이 좋은 모델
     assert s.embedding_model == "text-embedding-3-small" and 0.9 <= s.rag_duplicate_similarity < 1

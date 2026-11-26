@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     # 대화 의도 판단·현황 보고·짧은 답 (services/intent.py) — 메시지마다 부르므로 가볍고 빠른 모델
     openai_model_route: str = "gpt-6-luna"
     openai_effort_route: str = "low"
+    # 대화 에이전트(현황 · 상담 · 기출 분석 · 일반 질문에 답하는 학습 코치) — 답의 질이 중요해서 생성과 같은 모델
+    openai_model_chat: str = "gpt-6.1-sol"
+    openai_effort_chat: str = "low"
     openai_effort_generate: str = "medium"
     openai_effort_verify: str = "medium"
     ai_max_attempts: int = 2  # 검증에 실패하면 문제당 다시 만드는 최대 횟수
