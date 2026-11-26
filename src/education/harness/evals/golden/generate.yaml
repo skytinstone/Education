@@ -1,0 +1,19 @@
+# 생성 평가 — 실제로 문제를 만들어 보고 생성 효율을 잰다 (첫 시도 통과율 · 시도 횟수 · 통과 문제당 비용).
+# 만든 문제는 평가가 끝나면 되돌린다 (문제 은행 · 실행 기록에 남지 않음, 결과는 eval_runs 에만).
+cases:
+  - id: gen_subst
+    concept_id: math.calculus.int_methods.substitution_parts
+    difficulty: 4
+    count: 3
+  - id: gen_log
+    concept_id: math.math1.exp_log.log_properties
+    difficulty: 3
+    count: 3
+  - id: gen_series
+    concept_id: math.calculus.seq_limit.series
+    difficulty: 4
+    count: 3
+  - id: gen_thermo
+    concept_id: physics.physics1.mechanics_energy.thermodynamics
+    difficulty: 3
+    count: 3

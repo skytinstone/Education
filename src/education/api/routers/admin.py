@@ -534,7 +534,7 @@ def get_run(run_id: UUID, db: DB) -> dict:
 
 # ---------- 하네스 평가 (골든셋 점수판) ----------
 def _eval_summary(r: m.EvalRun) -> dict:
-    return {"id": str(r.id), "harness_version": r.harness_version, "mode": r.mode, "status": r.status, "suites": r.suites,
+    return {"id": str(r.id), "harness_version": r.harness_version, "mode": r.mode, "status": r.status, "suites": r.suites, "models": r.models,
             "metrics": r.metrics, "error": r.error, "cost_usd": float(r.cost_usd) if r.cost_usd is not None else None,
             "latency_ms": r.latency_ms, "created_at": r.created_at.isoformat()}
 
@@ -556,7 +556,7 @@ def _run_eval_in_background(open_session, eval_id: UUID) -> None:
     with open_session() as db:
         row = db.get(m.EvalRun, eval_id)
         try:
-            evals.run(db, llm=get_llm(), mode="live", eval_run=row)
+            evals.run(db, llm=get_llm(), mode="live", eval_run=row, suites=tuple(row.suites))
         except Exception as e:  # 평가가 실패해도 기록은 남긴다
             db.rollback()
             row = db.get(m.EvalRun, eval_id)
@@ -574,7 +574,7 @@ def start_eval(db: DB, background: BackgroundTasks, open_session=Depends(session
                                                 m.EvalRun.created_at > func.now() - timedelta(minutes=30)))
     if running:
         return _eval_summary(running)
-    row = m.EvalRun(harness_version=prompts.harness_version(), mode="live", status="running", suites=["verify", "retrieval"],
+    row = m.EvalRun(harness_version=prompts.harness_version(), mode="live", status="running", suites=["verify", "retrieval", "generate"],
                     prompt_versions=prompts.versions(), models=prompts.models())
     db.add(row)
     db.commit()

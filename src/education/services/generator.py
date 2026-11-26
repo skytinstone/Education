@@ -249,7 +249,27 @@ class Candidate:
     trace: Trace | None = None  # 실행 기록 (harness/trace.py)
 
 
-GEN_PROMPTS = ["generator.generator_instructions", "generator.verifier_instructions"]
+GEN_PROMPTS = ["generator.generator_instructions", "generator.verifier_instructions", "generator.repair_instructions"]
+REPAIR_TEMPLATE = prompts.text("generator.repair_instructions")
+
+
+def repair_prompt(problem, reason: str, verdict=None, check: dict | None = None) -> str:
+    """자기 수정 루프 (하네스 3단계): 떨어진 문제와 이유를 다음 생성 시도에 붙인다."""
+    details = []
+    if verdict is not None:
+        if getattr(verdict, "answer", None) is not None:
+            details.append(f"검증자가 직접 푼 답: {verdict.answer}")
+        if verdict.issues:
+            details.append("검증자 지적: " + "; ".join(verdict.issues))
+        if getattr(verdict, "work", ""):
+            details.append(f"검증자 풀이 요약: {verdict.work[:400]}")
+    if check:
+        details.append(f"계산 도구 검산 결과: {check.get('computed') or '?'} — {check.get('reason', '')[:200]}")
+    choices = getattr(problem, "choices", None)
+    return REPAIR_TEMPLATE.format(
+        stem=problem.stem, reason=reason, details="\n".join(details),
+        choices=" / ".join(f"{i}. {c}" for i, c in enumerate(choices, 1)) if choices else "(없음)",
+        answer=str(getattr(problem, "answer", getattr(problem, "model_answer", ""))))
 
 
 def format_issues(p, choice_count: int = 5) -> list[str]:
@@ -333,10 +353,14 @@ def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multipl
     calls: list[CallLog] = []
     t = trace or Trace("generate", prompts_used=GEN_PROMPTS + (["math_check.instructions"] if tool_check else []))
     last = Candidate(None, None, "생성하지 못함", calls, t)
+    repair = ""  # 직전 시도가 떨어진 이유 (자기 수정 루프)
     for attempt in range(1, max_attempts + 1):
+        if repair:
+            t.step("self_correct", data={"feedback": repair})
         try:
             gen = llm.structured(model=s.openai_model_generate, effort=s.openai_effort_generate,
-                                 instructions=GENERATOR_INSTRUCTIONS, prompt=prompt, schema=gen_schema)
+                                 instructions=GENERATOR_INSTRUCTIONS, prompt=prompt + (f"\n\n{repair}" if repair else ""),
+                                 schema=gen_schema)
             calls.append(CallLog("generate", gen.usage, s.openai_model_generate))
             t.step("generate", usage=gen.usage, data={"attempt": attempt, "stem": gen.data.stem,
                                                      "answer": str(getattr(gen.data, "answer", ""))})
@@ -349,6 +373,7 @@ def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multipl
         if errors := format_issues(problem, choice_count):
             t.step("format_check", ok=False, data={"issues": errors})
             last = Candidate(problem, None, f"형식 오류: {', '.join(errors)}", calls, t)
+            repair = repair_prompt(problem, last.reason) if s.ai_self_correct else ""
             continue
         t.step("format_check")
 
@@ -366,15 +391,17 @@ def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multipl
         ok_answer = verdict.well_posed and agrees(problem, verdict)
         t.step("verify", ok=ok_answer, usage=ver.usage, data={
             "verifier_answer": str(getattr(verdict, "answer", "")), "well_posed": verdict.well_posed, "issues": verdict.issues})
+        check: dict = {}
         if not verdict.well_posed:
             last = Candidate(problem, verdict, f"문제 결함: {'; '.join(verdict.issues) or '검증자가 결함 지적'}", calls, t)
         elif not agrees(problem, verdict):
             got = getattr(verdict, "answer", "모범 답안 오류")
             last = Candidate(problem, verdict, f"정답 불일치: 출제 {getattr(problem, 'answer', '')}, 검증 {got}", calls, t)
-        elif tool_check and (why := _tool_check(problem, question, calls, t)):
+        elif tool_check and (why := _tool_check(problem, question, calls, t, check)):
             last = Candidate(problem, verdict, why, calls, t)
         else:
             return Candidate(problem, verdict, None, calls, t)
+        repair = repair_prompt(problem, last.reason, verdict, check) if s.ai_self_correct else ""
     return last
 
 
@@ -386,7 +413,7 @@ def _answer_for_check(problem) -> str:
     return answer
 
 
-def _tool_check(problem, question: str, calls: list[CallLog], trace: Trace | None = None) -> str | None:
+def _tool_check(problem, question: str, calls: list[CallLog], trace: Trace | None = None, out: dict | None = None) -> str | None:
     """계산 도구 검산 (ai/math_check.py). 다르면 버릴 이유를, 같거나 확인할 수 없거나 검산이 실패하면 None."""
     if isinstance(problem, GeneratedEssay):
         return None
@@ -403,6 +430,8 @@ def _tool_check(problem, question: str, calls: list[CallLog], trace: Trace | Non
         trace.tool_steps(messages)
         trace.step("math_check", ok=not (res.checkable and not res.agrees), usage=usage,
                    data={"checkable": res.checkable, "computed": res.computed, "agrees": res.agrees, "reason": res.reason})
+    if out is not None:
+        out.update(computed=res.computed, reason=res.reason)
     if res.checkable and not res.agrees:
         return f"검산 불일치: 계산 {res.computed or '?'} — {res.reason[:120]}"
     return None

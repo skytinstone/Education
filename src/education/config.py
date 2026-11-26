@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     ai_max_attempts: int = 2  # 검증에 실패하면 문제당 다시 만드는 최대 횟수
     # LangChain 에이전트 · RAG (src/education/ai/)
     ai_tool_check: bool = True          # 수학·물리 문제를 SymPy 도구로 한 번 더 검산 (Tool Calling)
+    ai_self_correct: bool = True        # 검토에서 떨어지면 이유를 생성 AI 에 알려 고치게 한다 (하네스 3단계)
     ai_tool_check_domains: str = "math,physics"
     ai_chat_agent: bool = True               # 대화의 현황·상담 질문을 도구를 쓰는 에이전트가 답한다
     embedding_model: str = "text-embedding-3-small"

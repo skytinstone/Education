@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from education.ai import math_check
 from education.config import get_settings
@@ -26,12 +26,12 @@ def admins(monkeypatch):
 def test_golden_set_is_well_formed():
     ids = [c["id"] for c in runner.load("verify")]
     assert len(ids) == len(set(ids)) >= 25
-    defects = {"wrong_key", "multiple_answers", "missing_condition", "no_correct_choice"}
+    defects = {"wrong_key", "multiple_answers", "missing_condition", "no_correct_choice", "subtle_wrong_key"}
     for c in GOLD.values():
         assert c["label"] in ("good", "bad") and 1 <= int(c["answer"]) <= len(c["choices"]) == 5
         assert (c["label"] == "good") == (c.get("defect") is None) and (c.get("defect") in defects | {None})
     # 정답 번호만 바꾼 망가진 문제는 같은 본문의 좋은 문제와 답이 달라야 한다
-    for b in (c for c in GOLD.values() if c.get("defect") == "wrong_key"):
+    for b in (c for c in GOLD.values() if c.get("defect") in ("wrong_key", "subtle_wrong_key")):
         twin = next(g for g in GOLD.values() if g["label"] == "good" and g["stem"] == b["stem"])
         assert twin["answer"] != b["answer"] and twin["choices"] == b["choices"]
     r = runner.load("retrieval")
@@ -57,7 +57,7 @@ class FakeVerifier:
         if ans is None:
             v = Verdict(answer="none", work="-", well_posed=False, issues=["결함"])
         else:
-            v = Verdict(answer="5" if r"\sum" in prompt else ans, work="-", well_posed=True, issues=[])
+            v = Verdict(answer="5" if r"\left(\frac{1}{3}" in prompt else ans, work="-", well_posed=True, issues=[])
         return LLMResult(data=v, usage=Usage(model="gpt-6.1-sol", input_tokens=500, output_tokens=100))
 
 
@@ -72,11 +72,11 @@ def test_live_eval_metrics_and_replay_is_identical(db, monkeypatch):
     monkeypatch.setattr(math_check, "check", fake_math)
     run, tape = runner.run(db, llm=FakeVerifier(), mode="live", suites=("verify",), workers=2)
     v = run.metrics["verify"]
-    assert run.status == "done" and v["cases"] == len(GOLD) and v["good"] == 15
+    assert run.status == "done" and v["cases"] == len(GOLD) and v["good"] == 29
     # 등비급수: 검증 AI 가 틀려서 좋은 문제 하나를 잘못 버리고, 망가진 쪽은 검산 에이전트가 잡는다
     by_id = {c["id"]: c for c in run.cases["verify"]}
     assert by_id["g_geo_series"]["decision"] == "reject" and by_id["b_series_key"]["caught_by"] == "math_check"
-    assert v["false_reject_rate"] == round(1 / 15, 4) and v["detection_rate"] == 1.0
+    assert v["false_reject_rate"] == round(1 / 29, 4) and v["detection_rate"] == 1.0
     assert v["math_check_added"] > 0 and v["verifier_detection"] < 1.0
     assert v["by_defect"]["wrong_key"]["detected"] == 1.0 and v["cost_usd"] > 0
     assert set(tape["verify"]) == set(GOLD)
@@ -117,3 +117,46 @@ def test_admin_eval_endpoints(client, db, new_user, monkeypatch):
     assert len(detail["cases"]["verify"]) == len(GOLD) and detail["prompt_versions"]
     assert client.post("/api/admin/evals/run", headers=admin).status_code == 503  # 테스트에는 AI 가 없다
     assert db.scalar(select(m.EvalRun.status).where(m.EvalRun.id == run.id)) == "done"
+
+
+# ---------- 3단계: 자기 수정 루프 · 생성 평가 ----------
+from education.services import generator  # noqa: E402
+from test_generator import FakeLLM, good_problem, verdict  # noqa: E402
+
+
+class PromptLLM(FakeLLM):
+    def __init__(self, *a):
+        super().__init__(*a)
+        self.prompts = []
+
+    def structured(self, *, model, effort, instructions, prompt, schema, max_output_tokens=16000):
+        self.prompts.append((schema.__name__, prompt))
+        return super().structured(model=model, effort=effort, instructions=instructions, prompt=prompt, schema=schema)
+
+
+@pytest.mark.parametrize("on", [True, False])
+def test_self_correction_feeds_back_the_reason(db, monkeypatch, on):
+    monkeypatch.setattr(get_settings(), "ai_self_correct", on)
+    llm = PromptLLM([good_problem(answer="2"), good_problem()], [verdict("1", issues=["보기 1이 맞음"]), verdict("1")])
+    report = generator.generate_problems(db, llm, concept_id="math.calculus.int_methods.substitution_parts", difficulty=3, count=1)
+    assert len(report.accepted) == 1
+    second = [p for name, p in llm.prompts if name == "GeneratedProblem"][1]
+    assert ("[직전 시도" in second and "정답 불일치" in second and "검증자가 직접 푼 답: 1" in second) is on
+    run = db.scalars(select(m.AgentRun).where(m.AgentRun.problem_id == report.accepted[0])).one()
+    assert ("self_correct" in [x["name"] for x in run.steps]) is on
+    assert "generator.repair_instructions" in run.prompt_versions
+
+
+def test_generate_eval_measures_and_rolls_back(db, monkeypatch):
+    monkeypatch.setattr(runner, "load", lambda suite: [{"id": "gen_x", "concept_id": "math.calculus.int_methods.substitution_parts",
+                                                       "difficulty": 3, "count": 2}] if suite == "generate" else [])
+    before = db.scalar(select(func.count()).select_from(m.Problem))
+    # 하나는 첫 시도에 통과, 하나는 고쳐서 두 번째에 통과
+    llm = FakeLLM([good_problem(), good_problem(answer="2"), good_problem(stem="고친 문제")], [verdict("1"), verdict("1"), verdict("1")])
+    run, _ = runner.run(db, llm=llm, mode="live", suites=("generate",), workers=1)
+    g = run.metrics["generate"]
+    assert g["requested"] == 2 and g["accepted"] == 2 and g["yield"] == 1.0 and g["first_try_pass"] == 0.5
+    assert g["avg_attempts"] == 1.5 and g["self_corrected"] == 1 and g["self_correct_success"] == 1.0 and g["cost_per_accepted"] > 0
+    # 만든 문제는 되돌렸다 — 문제 은행과 실행 기록에 남지 않는다
+    assert db.scalar(select(func.count()).select_from(m.Problem)) == before
+    assert db.scalar(select(func.count()).select_from(m.AgentRun)) == 0
