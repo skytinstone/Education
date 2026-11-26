@@ -11,7 +11,7 @@
 | OpenAI 모델 · 임베딩 | `langchain-openai` (`ChatOpenAI`, `OpenAIEmbeddings`) | 1.8.5 |
 | 에이전트 실행 그래프 | `langgraph` | 1.2.24 |
 | OpenAI SDK | `openai` | 3.59.0 |
-| 벡터 저장 · 검색 | pgvector 확장 (DB 이미지 `pgvector/pgvector:0.8.7-pg17`) · `pgvector` (SQLAlchemy) | 0.8.7 · 0.5.1 |
+| 벡터 저장 · 검색 | pgvector 확장 (DB 이미지 `pgvector/pgvector:0.8.7-pg17-trixie`) · `pgvector` (SQLAlchemy) | 0.8.7 · 0.5.1 |
 | 임베딩 모델 | `text-embedding-3-small` (1536차원) | — |
 | 계산 | `sympy` | 1.14.0 |
 
