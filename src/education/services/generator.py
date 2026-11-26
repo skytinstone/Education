@@ -22,11 +22,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from education.harness import prompts
 from education.concepts import load_template_courses
 from education.config import get_settings
 from education.db import models as m
 from education.schemas import ProblemSource, ProblemType, VerificationStatus
 from education.ai import math_check, rag
+from education.harness.trace import Trace
 from education.services import item_stats, learning
 from education.services.llm import LLM, LLMError, Usage
 
@@ -121,28 +123,9 @@ class EssayVerdict(BaseModel):
     issues: list[str] = Field(description="발견한 문제점 (모호한 질문, 틀린 모범 답안, 기준과 맞지 않는 배점, 범위 밖 등)")
 
 
-GENERATOR_INSTRUCTIONS = r"""당신은 여러 시험(수능·대학·자격증·공무원·어학 등)의 출제 경험이 많은 출제위원입니다.
-주어진 코스(시험·과목·수준·교육과정·교재)의 범위와 수준 안에서, 요청한 개념·난이도·문제 형태에 맞는 문제를 하나 만듭니다.
+GENERATOR_INSTRUCTIONS = prompts.text("generator.generator_instructions")  # harness/prompts/generator/generator_instructions.md
 
-반드시 지킬 것
-- 객관식: 정답은 정확히 하나, 보기 개수는 '문제 형태'에 적힌 대로. 오답 보기는 그럴듯하지만 분명히 틀려야 하고 흔한 실수로 나오는 값을 넣는다
-- 단답형: 답이 0 이상 999 이하의 정수 하나로 정해지게 만든다 (자동 채점용)
-- 주관식: 답이 짧은 단어·구·수식 하나로 정해지게 만들고, 정답으로 인정할 다른 표기를 빠짐없이 적는다
-- 수치형: 답이 수 하나로 정해지게, 구할 단위와 반올림 자릿수를 문제에 밝히고 그에 맞는 오차를 정한다
-- 서술형: 무엇을 어떤 범위로 쓰라는지 분명하게 묻고, 모범 답안과 합계 10점의 채점 기준을 만든다
-- 그 시험이 실제로 묻는 방식과 용어를 쓴다. 코스 언어가 영어면 문제와 보기는 영어로, 해설은 한국어로 쓴다
-- 참고할 기출 문제가 주어지면 형식·어투·소재의 결을 따르되, 문장과 수치는 그대로 베끼지 말고 새로 만든다
-- 모든 수치는 직접 끝까지 계산해서 검산한다. 근삿값이 아닌 정확한 값을 쓴다
-- 문제에 필요한 조건은 모두 문제 안에 쓴다 (그림 없이 글만으로 풀 수 있게)
-- 수식은 LaTeX 로 쓰고 $ 로 감싼다 (예: $x^2$, $\sqrt{2}$, $\dfrac{1}{2}$, $\log_2 3$). 적분·시그마처럼 크게 보여야 하는 식은 $\displaystyle\int_0^1 f(x)\,dx$ 처럼 쓴다. 단위는 $2\,\mathrm{m/s}$, 화학식은 $\mathrm{H_2O}$ 처럼 쓴다. 보기와 해설도 같은 방식
-- 해설은 학생이 혼자 따라갈 수 있게 단계별로, 한국어로 쓴다. 이모지는 쓰지 않는다
-- 이미 있는 문제와 소재·수치가 겹치지 않게 새로 만든다"""
-
-VERIFIER_INSTRUCTIONS = """당신은 시험 문제 검토위원입니다. 출제자가 만든 문제를 정답을 모르는 상태에서 직접 풉니다.
-- 처음부터 끝까지 스스로 풀어서 답을 구한다. 객관식은 보기 번호를 고르고(정답이 없으면 none), 단답형은 정수, 주관식은 짧은 답, 수치형은 문제가 정한 단위의 수로 답한다
-- 서술형은 문제가 분명한지, 모범 답안이 맞고 채점 기준을 만족하는지, 기준으로 일관되게 채점할 수 있는지 검토한다
-- 정답이 둘 이상이거나, 조건이 모순되거나 빠졌거나, 문제 문장이 모호하거나, 주어진 코스의 범위·수준을 벗어나면 well_posed 를 false 로 하고 issues 에 구체적으로 쓴다
-- 사소한 표현 개선 의견은 issues 에 넣지 않는다 (정답 판정에 영향을 주는 것만)"""
+VERIFIER_INSTRUCTIONS = prompts.text("generator.verifier_instructions")  # harness/prompts/generator/verifier_instructions.md
 
 
 # ---------- 요청 분석 ----------
@@ -263,6 +246,10 @@ class Candidate:
     verdict: Verdict | None
     reason: str | None  # 통과 못 한 이유. None 이면 통과
     calls: list[CallLog] = field(default_factory=list)
+    trace: Trace | None = None  # 실행 기록 (harness/trace.py)
+
+
+GEN_PROMPTS = ["generator.generator_instructions", "generator.verifier_instructions"]
 
 
 def format_issues(p, choice_count: int = 5) -> list[str]:
@@ -338,26 +325,32 @@ FORMATS = {
 
 
 def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multiple_choice", choice_count: int = 5,
-         tool_check: bool = False) -> Candidate:
+         tool_check: bool = False, trace: Trace | None = None) -> Candidate:
     """문제 하나: 생성 → 형식 검사 → 독립 검증 → (수학·물리) 계산 도구 검산. 실패하면 max_attempts 까지 다시 만든다."""
     s = get_settings()
     gen_schema, ver_schema, describe, question_of, agrees = FORMATS[question_type]
     prompt = f"{prompt}\n문제 형태: {describe(choice_count)}"
     calls: list[CallLog] = []
-    last = Candidate(None, None, "생성하지 못함", calls)
-    for _ in range(max_attempts):
+    t = trace or Trace("generate", prompts_used=GEN_PROMPTS + (["math_check.instructions"] if tool_check else []))
+    last = Candidate(None, None, "생성하지 못함", calls, t)
+    for attempt in range(1, max_attempts + 1):
         try:
             gen = llm.structured(model=s.openai_model_generate, effort=s.openai_effort_generate,
                                  instructions=GENERATOR_INSTRUCTIONS, prompt=prompt, schema=gen_schema)
             calls.append(CallLog("generate", gen.usage, s.openai_model_generate))
+            t.step("generate", usage=gen.usage, data={"attempt": attempt, "stem": gen.data.stem,
+                                                     "answer": str(getattr(gen.data, "answer", ""))})
         except LLMError as e:
             calls.append(CallLog("generate", None, s.openai_model_generate, str(e)))
-            last = Candidate(None, None, f"생성 실패: {e}", calls)
+            t.step("generate", model=s.openai_model_generate, error=str(e), data={"attempt": attempt})
+            last = Candidate(None, None, f"생성 실패: {e}", calls, t)
             continue
         problem = gen.data
         if errors := format_issues(problem, choice_count):
-            last = Candidate(problem, None, f"형식 오류: {', '.join(errors)}", calls)
+            t.step("format_check", ok=False, data={"issues": errors})
+            last = Candidate(problem, None, f"형식 오류: {', '.join(errors)}", calls, t)
             continue
+        t.step("format_check")
 
         question = question_of(problem)
         try:
@@ -366,18 +359,22 @@ def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multipl
             calls.append(CallLog("verify", ver.usage, s.openai_model_verify))
         except LLMError as e:
             calls.append(CallLog("verify", None, s.openai_model_verify, str(e)))
-            last = Candidate(problem, None, f"검증 실패: {e}", calls)
+            t.step("verify", model=s.openai_model_verify, error=str(e))
+            last = Candidate(problem, None, f"검증 실패: {e}", calls, t)
             continue
         verdict = ver.data
+        ok_answer = verdict.well_posed and agrees(problem, verdict)
+        t.step("verify", ok=ok_answer, usage=ver.usage, data={
+            "verifier_answer": str(getattr(verdict, "answer", "")), "well_posed": verdict.well_posed, "issues": verdict.issues})
         if not verdict.well_posed:
-            last = Candidate(problem, verdict, f"문제 결함: {'; '.join(verdict.issues) or '검증자가 결함 지적'}", calls)
+            last = Candidate(problem, verdict, f"문제 결함: {'; '.join(verdict.issues) or '검증자가 결함 지적'}", calls, t)
         elif not agrees(problem, verdict):
             got = getattr(verdict, "answer", "모범 답안 오류")
-            last = Candidate(problem, verdict, f"정답 불일치: 출제 {getattr(problem, 'answer', '')}, 검증 {got}", calls)
-        elif tool_check and (why := _tool_check(problem, question, calls)):
-            last = Candidate(problem, verdict, why, calls)
+            last = Candidate(problem, verdict, f"정답 불일치: 출제 {getattr(problem, 'answer', '')}, 검증 {got}", calls, t)
+        elif tool_check and (why := _tool_check(problem, question, calls, t)):
+            last = Candidate(problem, verdict, why, calls, t)
         else:
-            return Candidate(problem, verdict, None, calls)
+            return Candidate(problem, verdict, None, calls, t)
     return last
 
 
@@ -389,17 +386,23 @@ def _answer_for_check(problem) -> str:
     return answer
 
 
-def _tool_check(problem, question: str, calls: list[CallLog]) -> str | None:
+def _tool_check(problem, question: str, calls: list[CallLog], trace: Trace | None = None) -> str | None:
     """계산 도구 검산 (ai/math_check.py). 다르면 버릴 이유를, 같거나 확인할 수 없거나 검산이 실패하면 None."""
     if isinstance(problem, GeneratedEssay):
         return None
     s = get_settings()
     try:
-        res, usage = math_check.check(question, _answer_for_check(problem))
+        res, usage, messages = math_check.check(question, _answer_for_check(problem))
     except LLMError as e:
         calls.append(CallLog("math_check", None, s.openai_model_verify, str(e)))
+        if trace:
+            trace.step("math_check", model=s.openai_model_verify, error=str(e))
         return None  # 검산이 실패해도 문제를 막지 않는다 (이미 독립 재풀이 검증을 통과)
     calls.append(CallLog("math_check", usage, s.openai_model_verify))
+    if trace:
+        trace.tool_steps(messages)
+        trace.step("math_check", ok=not (res.checkable and not res.agrees), usage=usage,
+                   data={"checkable": res.checkable, "computed": res.computed, "agrees": res.agrees, "reason": res.reason})
     if res.checkable and not res.agrees:
         return f"검산 불일치: 계산 {res.computed or '?'} — {res.reason[:120]}"
     return None
@@ -486,6 +489,10 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
               + ("\n\n잘 만들어진 기존 문제 (비슷한 요청으로 찾은 것 — 형식·수준·함정의 결만 참고하고 새로 만들 것):\n\n"
                  + "\n\n---\n\n".join(_exemplar_text(e) for e in references) if references else ""))
     tool_check = math_check.enabled(concept.domain)
+
+    def run_input(qtype: str) -> str:
+        return (f"{concept.name} · 난이도 {difficulty} · {qtype}" + (f" · 요청: {request}" if request else "")
+                + (f" · 기출 본보기 {len(exemplars[:3])}개" if exemplars else "") + (f" · 참고 문제 {len(references)}개" if references else ""))
     # 실제 학생 풀이로 본 기존 문제 성적 — 난이도 보정 · 잘 먹힌 함정 · 죽은 보기 · 모호했던 문제
     if feedback := item_stats.concept_feedback(db, concept_id):
         prompt += "\n\n" + feedback
@@ -502,7 +509,9 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
 
     # 문제마다 독립적이라 동시에 만든다 (DB 기록은 아래에서 한 스레드로)
     with ThreadPoolExecutor(max_workers=min(count, 4)) as pool:
-        candidates = list(pool.map(lambda i: (_one(llm, prompt, s.ai_max_attempts, types[i % len(types)], choice_count, tool_check),
+        candidates = list(pool.map(lambda i: (_one(llm, prompt, s.ai_max_attempts, types[i % len(types)], choice_count, tool_check,
+                                                   Trace("generate", prompts_used=GEN_PROMPTS + (["math_check.instructions"] if tool_check else []),
+                                                         user=user, input=run_input(types[i % len(types)]))),
                                               types[i % len(types)]), range(count)))
 
     # RAG 중복 확인 — 검증을 통과한 새 문제가 같은 개념의 기존 문제와 의미상 거의 같으면 버린다
@@ -512,8 +521,10 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
     for c, v, dup in zip(passed, vectors, rag.duplicates(db, vectors, concept_id=concept_id, user=owner or user) if vectors else []):
         if dup is not None:
             c.reason = f"중복: 기존 문제와 거의 같아요 (유사도 {dup.similarity:.2f})"
+            c.trace and c.trace.step("duplicate_check", ok=False, data={"similar_to": dup.problem.id, "similarity": round(dup.similarity, 3)})
         else:
             vec_of[id(c)] = v
+            c.trace and c.trace.step("duplicate_check", data={"checked": True})
 
     report = GenerationReport(accepted=[], rejected=[], reasons=[], cost_usd=0.0)
     new_index: list[tuple[str, list[float]]] = []
@@ -546,6 +557,8 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
                 new_index.append((pid, vec_of[id(cand)]))
         if cand.reason:
             report.reasons.append(cand.reason)
+        if cand.trace:
+            cand.trace.save(db, status="rejected" if cand.reason else "passed", output=cand.reason or "통과", problem_id=pid)
         for c in cand.calls:
             cost = c.usage.cost_usd if c.usage else None
             report.cost_usd += cost or 0

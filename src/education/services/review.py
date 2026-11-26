@@ -12,6 +12,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from education.harness import prompts
 from education.config import get_settings
 from education.db import models as m
 from education.services import generator
@@ -34,11 +35,7 @@ class Review(BaseModel):
     hint: str = Field(description="다음에 무엇을 고치면 되는지 힌트 한두 문장")
 
 
-REVIEW_INSTRUCTIONS = r"""당신은 서술형 채점 경험이 많은 선생님입니다. 학생이 쓴 풀이를 한 단계씩 확인합니다.
-- 먼저 학생 풀이를 그대로 transcription 에 옮긴다. 손글씨 사진이면 수식을 정확히 읽어 LaTeX 로 쓴다. 읽을 수 없으면 verdict 를 unreadable 로
-- 풀이를 단계로 나눠 각 단계의 수식 변형·계산·논리가 맞는지 스스로 확인한다. 기준 답과 해설은 참고만 하고, 학생의 다른 풀이 방법도 맞으면 맞다고 한다
-- 처음 틀린 단계 번호를 first_error 에, 무엇이 왜 틀렸는지 그 단계의 comment 에 구체적으로 쓴다 (예: "$(x+1)^2$ 를 전개할 때 $2x$ 항이 빠졌어요")
-- 수식은 LaTeX 로 쓰고 $ 로 감싼다. 한국어로, 학생에게 직접 말하듯 쓴다. 이모지는 쓰지 않는다"""
+REVIEW_INSTRUCTIONS = prompts.text("review.review_instructions")  # harness/prompts/review/review_instructions.md
 
 HIDE_ANSWER = "\n- 학생은 아직 이 문제의 답을 제출하지 않았다. 정답 값과 전체 풀이는 절대 알려 주지 말고, 틀린 곳과 다음 단계 힌트만 준다"
 
@@ -57,11 +54,7 @@ class EssayGrade(BaseModel):
     summary: str = Field(description="전체 평가와 보완할 점 두세 문장")
 
 
-GRADER_INSTRUCTIONS = r"""당신은 서술형 채점 위원입니다. 채점 기준표로 학생 답안을 채점합니다.
-- 기준마다 답안에 그 내용이 있는지 확인해 0점부터 배점까지 점수를 준다. 표현이 달라도 내용이 맞으면 점수를 준다
-- 모범 답안은 참고용이다. 다른 방식이라도 기준을 만족하면 점수를 준다
-- 기준표에 없는 내용으로 점수를 더하거나 빼지 않는다
-- 수식은 LaTeX 로 $ 로 감싼다. 한국어로 쓴다. 이모지는 쓰지 않는다"""
+GRADER_INSTRUCTIONS = prompts.text("review.grader_instructions")  # harness/prompts/review/grader_instructions.md
 
 
 def grade_essay(db: Session, llm: LLM, user: m.User, problem: m.Problem, answer: str) -> dict:

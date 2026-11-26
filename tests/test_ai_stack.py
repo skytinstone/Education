@@ -82,7 +82,8 @@ def test_math_check_agent_uses_tools_and_finds_wrong_key(monkeypatch):
         [call("MathCheck", checkable=True, computed="e - 1", agrees=False, reason="적분값은 e-1 인데 출제 정답은 e")],
     )
     monkeypatch.setattr(models, "get_chat_model", lambda *a, **k: model)
-    out, usage = math_check.check("∫₀¹ 2x·e^(x²) dx 의 값은?", "2번 (e)")
+    out, usage, messages = math_check.check("∫₀¹ 2x·e^(x²) dx 의 값은?", "2번 (e)")
+    assert math_check.tool_calls(messages) == ["definite_integral", "are_equal"]
     assert out.checkable and not out.agrees and out.computed == "e - 1"
     assert usage.input_tokens == 300 and usage.output_tokens == 60  # 모델 호출 3번의 합
 
@@ -93,7 +94,7 @@ def test_generator_rejects_when_tool_check_disagrees(db, monkeypatch):
     def fake_check(question, answer):
         seen.append(answer)
         return math_check.MathCheck(checkable=True, computed="e - 1", agrees=answer.startswith("1번"), reason="도구 계산"), \
-            Usage(model="gpt-6.1-sol", input_tokens=100, output_tokens=10)
+            Usage(model="gpt-6.1-sol", input_tokens=100, output_tokens=10), []
 
     monkeypatch.setattr(math_check, "check", fake_check)
     monkeypatch.setattr(math_check, "enabled", lambda domain: domain == "math")

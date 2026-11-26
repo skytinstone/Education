@@ -747,3 +747,23 @@ class ProblemEmbedding(Base):
 
     __table_args__ = (Index("ix_problem_embeddings_hnsw", "embedding", postgresql_using="hnsw",
                             postgresql_ops={"embedding": "vector_cosine_ops"}),)
+
+
+class AgentRun(Base):
+    """AI 실행 기록 (harness/trace.py) — 문제 생성 한 문제 · 대화 에이전트 한 번 등이 어떤 하네스 버전으로,
+    어떤 단계(모델 호출 · 도구 호출 · 검사)를 거쳐 어떤 결과가 됐는지. 평가와 재현에 쓴다."""
+    __tablename__ = "agent_runs"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    kind: Mapped[str] = mapped_column(String(24), index=True)  # generate | agent
+    status: Mapped[str] = mapped_column(String(16))  # passed | rejected | answered | failed
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    problem_id: Mapped[str | None] = mapped_column(ForeignKey("problems.id", ondelete="SET NULL"), index=True)
+    harness_version: Mapped[str] = mapped_column(String(16), index=True)
+    prompt_versions: Mapped[dict] = mapped_column(JSONB)  # 이 실행에 쓴 지시문 {이름: 버전}
+    input: Mapped[str] = mapped_column(Text, server_default="")  # 요청 요약 (개념·난이도 · 학생 질문)
+    output: Mapped[str] = mapped_column(Text, server_default="")  # 결과 요약 (통과/탈락 이유 · 답 앞부분)
+    steps: Mapped[list] = mapped_column(JSONB, server_default="[]")  # [{name, ok, ms, model, tokens, cost, data}]
+    cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6))
+    latency_ms: Mapped[int | None]
+    created_at: Mapped[datetime] = created_at()
