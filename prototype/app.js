@@ -351,6 +351,7 @@
     const [page, id] = route().parts;
     if (!page) return "home";
     if (page === "chat" || page === "project") return `${page}:${id}`;
+    if (page === "plan") return `project:${id}`;
     return page;
   }
 
@@ -376,7 +377,7 @@
     view.onchange = null;
     view.onkeydown = null;
     notionDoc = null;
-    $(".wrap").classList.toggle("wide", page === "project");
+    $(".wrap").classList.toggle("wide", page === "project" || page === "plan");
     if (!page) { renderHome(params); replayReveal(); }
     else if (page === "chat") renderChat(a);
     else if (page === "project") renderProject(a, params);
@@ -388,6 +389,8 @@
     else if (page === "exam-record") renderExamRecord(a);
     else if (page === "exam-chat") renderChatExam(a, params);
     else if (page === "interview") renderInterview(a, b);
+    else if (page === "plan") renderPlan(a);
+    else if (page === "dive") renderDive(a, params);
     else if (page === "admin") { location.href = "/admin"; return; }
     else return go("/");
     renderSidebar();
@@ -1312,6 +1315,316 @@
     return c ? `${subjectOf(c.id)?.name ?? ""} · ${c.name}` : DOMAIN_NAME[p.domain] ?? "";
   };
 
+  // ================= AI 학습 플래너 =================
+  // 남은 기간 · 개념별 분석(내 정답률 vs 다른 학습자 평균) · 오늘 할 일 · AI 계획 검토(피드백 반영)
+  const planState = {}; // 프로젝트 id → { data, busy, error, all }
+  const PLAN_STATUS = { weak: ["약점", "weak"], mid: ["보통", "mid"], good: ["강점", "good"], few: ["기록 적음", "new"], untouched: ["아직 안 봄", "new"] };
+  const TASK_ICON = { lesson: "book-open", practice: "pencil-line", review: "rotate-ccw", deepdive: "scan-search" };
+
+  async function renderPlan(id) {
+    const p = Store.project(id);
+    if (!p) { toast("프로젝트를 찾을 수 없어요"); return go("/"); }
+    if (Store.mode !== "api") {
+      view.innerHTML = '<div class="ai-slot" style="margin-top:16px"><i data-lucide="info"></i><div>AI 학습 플래너는 로그인해서 서버 화면으로 열었을 때 쓸 수 있어요.</div></div>';
+      return;
+    }
+    const st = (planState[id] ??= {});
+    view.innerHTML = `<div class="pl" id="pl">${st.data ? "" : skel(6)}</div>`;
+    if (st.data) drawPlan(id);
+    try {
+      st.data = await Store.plan(id);
+      st.error = null;
+    } catch (err) {
+      st.error = err?.message || "플래너를 불러오지 못했어요";
+    }
+    if (route().parts[0] === "plan" && route().parts[1] === id) drawPlan(id);
+  }
+
+  function planTaskHTML(id, t) {
+    const pr = t.target > 1 ? `<span class="pl-count">${t.progress}/${t.target}</span>` : "";
+    let act = "";
+    if (t.kind === "lesson") {
+      act = `<a class="btn-ghost sm" href="#/library/concept/${t.concept_id}">레슨 열기</a>
+        <button type="button" class="pl-check" data-plan-check="${esc(t.key)}" aria-pressed="${t.done}" aria-label="${t.done ? "체크 해제" : "다 봤어요"}"><i data-lucide="check"></i></button>`;
+    } else if (t.kind === "practice") {
+      act = `<button type="button" class="btn-ghost sm" data-plan-practice="${esc(t.concept_id)}">${t.progress ? "더 풀기" : "문제 받기"}</button>`;
+    } else if (t.kind === "review") {
+      act = `<a class="btn-ghost sm" href="#/notes">복습하기</a>`;
+    } else if (t.kind === "deepdive") {
+      act = `<a class="btn-ghost sm" href="#/dive/${t.problem_id}?from=${id}">${t.done ? "다시 보기" : "시작"}</a>`;
+    }
+    return `
+      <li class="pl-task ${t.done ? "done" : ""}" data-kind="${t.kind}">
+        <span class="pl-ticon"><i data-lucide="${t.done ? "circle-check" : TASK_ICON[t.kind]}"></i></span>
+        <div class="pl-tbody">
+          <b>${esc(t.title)}</b>${pr}
+          <small>${esc(t.why)}</small>
+          ${t.target > 1 ? `<div class="pl-tbar"><i style="width:${Math.round((t.progress / t.target) * 100)}%"></i></div>` : ""}
+        </div>
+        <div class="pl-tact">${act}</div>
+      </li>`;
+  }
+
+  function planReviewHTML(id, d) {
+    const st = planState[id];
+    const rv = d.review;
+    const name = (cid) => d.concepts.find((c) => c.id === cid)?.name ?? "";
+    const form = `
+      <div class="pl-fb">
+        <label for="pl-fb">${rv ? "계획에 대한 피드백" : "AI에게 먼저 알려 줄 것 (선택)"}</label>
+        <textarea id="pl-fb" rows="2" maxlength="1000" placeholder="예: 평일엔 하루 1시간밖에 못 해요 · 확률은 자신 있어요 · 다음 주에 수행평가가 있어요">${esc(st.draft ?? "")}</textarea>
+        <button type="button" class="btn-primary" data-plan-review ${st.busy ? "disabled" : ""}><i data-lucide="sparkles"></i>${rv ? "피드백 반영해서 다시 검토" : "AI에게 계획 검토 받기"}</button>
+      </div>`;
+    if (st.busy) return `<div class="pl-busy"><i data-lucide="loader-circle" class="spin"></i>분석표를 보고 계획을 짜고 있어요 (20~40초)</div>`;
+    if (!rv) {
+      return `<p class="pl-empty">개념별 정답률 · 다른 학습자 평균 · 남은 기간을 AI가 함께 보고, 기간별 계획과 오늘의 초점을 정해 드려요.</p>
+        ${st.reviewError ? `<p class="pl-err"><i data-lucide="circle-alert"></i>${esc(st.reviewError)}</p>` : ""}${form}`;
+    }
+    return `
+      <p class="pl-headline">${esc(rv.headline)}</p>
+      ${rv.feedback_reply ? `<p class="pl-reply"><i data-lucide="message-circle-reply"></i>${esc(rv.feedback_reply)}</p>` : ""}
+      <ul class="pl-diag">${rv.diagnosis.map((x) => `<li data-math>${esc(x)}</li>`).join("")}</ul>
+      <ol class="pl-phases">${rv.phases.map((ph, i) => `
+        <li><span class="pl-pn">${i + 1}</span>
+          <div><div class="pl-ph"><b>${esc(ph.title)}</b><em>${esc(ph.period)}</em></div>
+          <p>${esc(ph.focus)}</p>
+          ${ph.concept_ids.length ? `<div class="pl-chips">${ph.concept_ids.map((c) => `<a href="#/library/concept/${c}">${esc(name(c))}</a>`).join("")}</div>` : ""}</div>
+        </li>`).join("")}</ol>
+      ${rv.advice.length ? `<ul class="pl-advice">${rv.advice.map((x) => `<li><i data-lucide="lightbulb"></i>${esc(x)}</li>`).join("")}</ul>` : ""}
+      <p class="pl-when">${d.reviewed_at ? `${relTime(Date.parse(d.reviewed_at))} 검토` : ""}</p>
+      ${st.reviewError ? `<p class="pl-err"><i data-lucide="circle-alert"></i>${esc(st.reviewError)}</p>` : ""}
+      ${form}`;
+  }
+
+  function planConceptHTML(c) {
+    const [label, cls] = PLAN_STATUS[c.status];
+    const mine = c.accuracy == null ? null : Math.round(c.accuracy * 100);
+    const peer = c.peer_accuracy == null ? null : Math.round(c.peer_accuracy * 100);
+    return `
+      <li class="pl-c ${cls}">
+        <div class="pl-crow">
+          <a href="#/library/concept/${c.id}">${esc(c.name)}</a>
+          <span class="pl-st">${label}</span>
+        </div>
+        <div class="pl-cbar" aria-hidden="true">${mine != null ? `<i style="width:${mine}%"></i>` : ""}${peer != null ? `<em style="left:${peer}%"></em>` : ""}</div>
+        <div class="pl-cmeta">
+          <span>내 정답률 <b>${mine == null ? "–" : `${mine}%`}</b>${c.attempts ? ` · ${c.attempts}문제` : ""}</span>
+          <span>다른 학습자 <b>${peer == null ? "–" : `${peer}%`}</b></span>
+          <span class="u">${esc(c.unit_name)}</span>
+        </div>
+        ${c.reasons.length ? `<p class="pl-why">${c.reasons.slice(0, 2).map(esc).join(" · ")}</p>` : ""}
+      </li>`;
+  }
+
+  function drawPlan(id) {
+    const box = $("#pl");
+    if (!box) return;
+    const st = planState[id];
+    const p = Store.project(id);
+    if (!st.data) {
+      box.innerHTML = `<div class="ai-slot"><i data-lucide="circle-alert"></i><div>${esc(st.error || "플래너를 불러오지 못했어요")}</div></div>`;
+      return icons();
+    }
+    const d = st.data, s = d.summary, n = d.days_left;
+    const left = s.untouched + s.weak;
+    const concepts = st.all ? d.concepts : d.concepts.slice(0, 8);
+    const done = d.tasks.filter((t) => t.done).length;
+    box.innerHTML = `
+      <a class="ak-back" href="#/project/${id}"><i data-lucide="arrow-left"></i>${esc(p.name)}</a>
+      <header class="pl-head">
+        <div>
+          <span class="pl-eyebrow"><i data-lucide="calendar-check"></i>AI 학습 플래너</span>
+          <h1>${n == null ? "시험일을 정하면 남은 기간에 맞춰 짜 드려요" : n < 0 ? "시험이 끝났어요" : n === 0 ? "오늘이 시험날이에요" : `시험까지 <em>${n}일</em>, ${left ? `남은 개념 <em>${left}개</em>` : "범위를 다 봤어요"}`}</h1>
+          <p>${esc(p.name)}${p.goal ? ` · 목표 ${esc(p.goal)}` : ""}${d.project.exam_date ? ` · ${d.project.exam_date}` : ""}</p>
+        </div>
+        ${n == null ? '<button type="button" class="btn-ghost" data-plan-edit><i data-lucide="calendar"></i>시험일 정하기</button>' : ""}
+      </header>
+      <div class="pl-kpis">
+        <div><span>시험까지</span><b class="${n != null && n >= 0 && n <= 14 ? "warn" : ""}">${n == null ? "–" : ddayLabel(n)}</b><small>${d.project.exam_date ?? "시험일 미정"}</small></div>
+        <div><span>범위 커버</span><b>${s.touched}<small>/${s.concepts}</small></b><div class="pl-mini"><i style="width:${s.concepts ? Math.round((s.touched / s.concepts) * 100) : 0}%"></i></div></div>
+        <div><span>약점 개념</span><b class="${s.weak ? "bad" : ""}">${s.weak}</b><small>강점 ${s.good} · 남은 오답 ${s.open_notes}</small></div>
+        <div><span>하루 페이스</span><b>${s.per_day == null ? "–" : `${s.per_day}<small>개념</small>`}</b><small>${s.per_day == null ? (n == null ? "시험일이 필요해요" : "여유 있어요") : "마지막 사흘은 총정리"}</small></div>
+      </div>
+      <div class="pl-grid">
+        <div class="pl-col">
+          <section class="panel pl-today">
+            <div class="pl-sh"><h2><i data-lucide="list-checks"></i>오늘 할 일</h2><span>${done}/${d.tasks.length} 완료</span></div>
+            ${d.tasks.length ? `<ul class="pl-tasks">${d.tasks.map((t) => planTaskHTML(id, t)).join("")}</ul>`
+              : '<p class="pl-empty">오늘 할 일을 다 마쳤거나 범위가 비어 있어요.</p>'}
+            <p class="pl-note">문제 풀이 · 복습 · Deep Dive는 푼 기록으로 저절로 체크돼요.</p>
+          </section>
+          <section class="panel pl-review" id="pl-review">
+            <div class="pl-sh"><h2><i data-lucide="sparkles"></i>AI 계획 검토</h2></div>
+            ${planReviewHTML(id, d)}
+          </section>
+        </div>
+        <section class="panel pl-concepts">
+          <div class="pl-sh"><h2><i data-lucide="chart-no-axes-column"></i>개념별 분석</h2><span>우선순위 순</span></div>
+          <p class="pl-legend"><span class="me"></span>내 정답률 <span class="peer"></span>같은 개념을 푼 다른 학습자 평균</p>
+          <ul class="pl-clist">${concepts.map(planConceptHTML).join("")}</ul>
+          ${d.concepts.length > 8 ? `<button type="button" class="btn-ghost sm pl-more" data-plan-all>${st.all ? "접기" : `전체 ${d.concepts.length}개 보기`}</button>` : ""}
+        </section>
+      </div>`;
+    icons();
+    box.onclick = async (e) => {
+      const chk = e.target.closest("[data-plan-check]");
+      if (chk) {
+        const t = d.tasks.find((x) => x.key === chk.dataset.planCheck);
+        try { st.data = await Store.markPlanTask(id, t.key, !t.done); } catch (err) { toast(err.message); }
+        return drawPlan(id);
+      }
+      const pr = e.target.closest("[data-plan-practice]");
+      if (pr) {
+        const c = d.concepts.find((x) => x.id === pr.dataset.planPractice);
+        const harder = c?.status === "mid" || c?.status === "good";
+        ask({ projectId: id, text: `${c?.name ?? "이 개념"} ${harder ? "조금 어려운" : "기본"} 문제 3개 내줘` });
+        return;
+      }
+      if (e.target.closest("[data-plan-all]")) { st.all = !st.all; return drawPlan(id); }
+      if (e.target.closest("[data-plan-edit]")) return projectModal(p);
+      if (e.target.closest("[data-plan-review]")) {
+        st.draft = $("#pl-fb")?.value ?? "";
+        st.busy = true; st.reviewError = null;
+        drawPlan(id);
+        try {
+          st.data = await Store.reviewPlan(id, st.draft);
+          st.draft = "";
+        } catch (err) {
+          st.reviewError = err?.message || "계획을 검토하지 못했어요";
+        }
+        st.busy = false;
+        if (route().parts[1] === id) drawPlan(id);
+      }
+    };
+    box.oninput = (e) => { if (e.target.id === "pl-fb") st.draft = e.target.value; };
+  }
+
+  // ================= 문제 Deep Dive =================
+  // 내 답을 보고 문제를 작은 질문 3~5개로 쪼개 한 단계씩 다시 따라간다. 끝나면 이해했는지 피드백 → 헷갈리면 더 잘게
+  const diveState = {}; // 문제 id → { data, busy, error, step, picks, wrong }
+  async function renderDive(pid, params) {
+    const back = params?.get("from") ? `#/plan/${params.get("from")}` : "#/notes";
+    const backLabel = params?.get("from") ? "학습 플래너" : "오답노트";
+    if (Store.mode !== "api") {
+      view.innerHTML = '<div class="ai-slot" style="margin-top:16px"><i data-lucide="info"></i><div>Deep Dive는 로그인해서 서버 화면으로 열었을 때 쓸 수 있어요.</div></div>';
+      return;
+    }
+    const st = (diveState[pid] ??= { picks: [], wrong: {}, step: 0 });
+    st.back = back; st.backLabel = backLabel;
+    view.innerHTML = `<div class="dv" id="dv">${skel(6)}</div>`;
+    try {
+      st.problem = await Store.fetchProblem(pid);
+      if (!st.data) {
+        st.data = await Store.deepDive(pid);
+        if (st.data?.completed) { st.step = st.data.steps.length; st.picks = st.data.answers ?? []; }
+      }
+      if (!st.data) { st.busy = true; drawDive(pid); await createDive(pid, false); return; }
+    } catch (err) {
+      st.error = err?.message || "Deep Dive 를 열지 못했어요";
+    }
+    drawDive(pid);
+  }
+
+  async function createDive(pid, retry) {
+    const st = diveState[pid];
+    st.busy = true; st.error = null; drawDive(pid);
+    try {
+      st.data = await Store.createDeepDive(pid, retry);
+      st.step = 0; st.picks = []; st.wrong = {};
+    } catch (err) {
+      st.error = err?.message || "Deep Dive 를 만들지 못했어요";
+    }
+    st.busy = false;
+    if (route().parts[0] === "dive" && route().parts[1] === pid) drawDive(pid);
+  }
+
+  function drawDive(pid) {
+    const box = $("#dv");
+    if (!box) return;
+    const st = diveState[pid], p = st.problem, d = st.data;
+    const c = concept(p?.conceptIds?.[0]);
+    const head = `
+      <a class="ak-back" href="${st.back}"><i data-lucide="arrow-left"></i>${st.backLabel}</a>
+      <header class="dv-head">
+        <span class="pl-eyebrow"><i data-lucide="scan-search"></i>Deep Dive${d?.rounds > 1 ? ` · ${d.rounds}번째` : ""}</span>
+        <h1>한 단계씩, 어디서 막혔는지 찾아요</h1>
+        ${c ? `<p>${esc(c.name)}</p>` : ""}
+      </header>
+      ${p ? `<section class="panel dv-problem"><p data-math>${esc(p.stem)}</p>
+        ${p.choices?.length ? `<ol class="dv-pc">${p.choices.map((ch, i) => `<li><span>${i + 1}</span><span data-math>${esc(ch)}</span></li>`).join("")}</ol>` : ""}</section>` : ""}`;
+    if (st.busy) {
+      box.innerHTML = head + `<div class="pl-busy"><i data-lucide="loader-circle" class="spin"></i>내 답을 보고 문제를 작은 질문으로 쪼개고 있어요 (20~40초)</div>`;
+      return icons();
+    }
+    if (st.error || !d) {
+      box.innerHTML = head + `<div class="pl-busy bad"><i data-lucide="circle-alert"></i>${esc(st.error || "Deep Dive 를 만들지 못했어요")}
+        <button type="button" class="tag" data-dive-retry="0">다시 시도</button></div>`;
+      box.onclick = (e) => { if (e.target.closest("[data-dive-retry]")) createDive(pid, false); };
+      return icons();
+    }
+    const steps = d.steps.slice(0, Math.min(st.step + 1, d.steps.length));
+    const finished = st.step >= d.steps.length;
+    box.innerHTML = head + `
+      <p class="dv-diag"><i data-lucide="stethoscope"></i><span data-math>${esc(d.diagnosis)}</span></p>
+      <div class="dv-progress" aria-label="${Math.min(st.step, d.steps.length)}/${d.steps.length}단계">${d.steps.map((_, i) => `<i class="${i < st.step ? "on" : i === st.step ? "now" : ""}"></i>`).join("")}</div>
+      <ol class="dv-steps">${steps.map((x, i) => {
+        const solved = i < st.step;
+        const wrong = st.wrong[i] ?? [];
+        return `
+        <li class="panel dv-step ${solved ? "ok" : ""}">
+          <div class="dv-q"><span class="dv-n">${i + 1}</span><b data-math>${esc(x.question)}</b></div>
+          <div class="dv-choices">${x.choices.map((ch, j) => {
+            const k = j + 1;
+            const cls = solved && k === x.answer ? "right" : wrong.includes(k) ? "wrong" : "";
+            return `<button type="button" class="${cls}" data-dive-pick="${i}:${k}" ${solved || wrong.includes(k) ? "disabled" : ""}><span>${k}</span><span data-math>${esc(ch)}</span></button>`;
+          }).join("")}</div>
+          ${!solved && wrong.length ? `<p class="dv-hint"><i data-lucide="lightbulb"></i><span data-math>${esc(x.hint)}</span></p>` : ""}
+          ${solved ? `<p class="dv-explain"><i data-lucide="circle-check"></i><span data-math>${esc(x.explain)}</span></p>` : ""}
+        </li>`;
+      }).join("")}</ol>
+      ${finished ? `
+      <section class="panel dv-end">
+        <p class="dv-take"><i data-lucide="key-round"></i><span data-math>${esc(d.takeaway)}</span></p>
+        ${d.feedback === "understood" ? `<p class="dv-fb ok">좋아요! 비슷한 문제로 한 번 더 확인해 봐요.</p>
+          <div class="dv-acts"><button type="button" class="btn-primary" data-dive-similar><i data-lucide="sparkles"></i>비슷한 문제 3개</button>
+          <a class="btn-ghost" href="${st.back}">${st.backLabel}로</a></div>`
+        : d.feedback === "confused" ? `<p class="dv-fb">괜찮아요. 학습 플래너가 이 개념을 앞으로 올렸어요.</p>
+          <div class="dv-acts">${d.rounds < 3 ? '<button type="button" class="btn-primary" data-dive-retry="1"><i data-lucide="layers"></i>더 잘게 다시</button>' : ""}
+          ${c ? `<a class="btn-ghost" href="#/library/concept/${c.id}"><i data-lucide="book-open"></i>개념 레슨</a>` : ""}
+          <a class="btn-ghost" href="${st.back}">${st.backLabel}로</a></div>`
+        : `<p class="dv-ask">이제 이 문제, 이해됐나요?</p>
+          <div class="dv-acts"><button type="button" class="btn-primary" data-dive-fb="understood"><i data-lucide="smile"></i>이해했어요</button>
+          <button type="button" class="btn-ghost" data-dive-fb="confused"><i data-lucide="circle-help"></i>아직 헷갈려요</button></div>`}
+        ${d.completed ? '<button type="button" class="dv-again" data-dive-restart>처음부터 다시 따라가기</button>' : ""}
+      </section>` : ""}`;
+    icons();
+    box.onclick = async (e) => {
+      const pk = e.target.closest("[data-dive-pick]");
+      if (pk) {
+        const [i, k] = pk.dataset.divePick.split(":").map(Number);
+        const x = d.steps[i];
+        if (st.picks[i] == null) st.picks[i] = k; // 처음 고른 보기만 기록
+        if (k === x.answer) st.step = i + 1;
+        else (st.wrong[i] ??= []).push(k);
+        drawDive(pid);
+        if (st.step >= d.steps.length) Store.saveDeepDive(d.id, { answers: st.picks }).catch(() => {});
+        $(`.dv-step:nth-child(${Math.min(st.step + 1, d.steps.length)})`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        return;
+      }
+      const fb = e.target.closest("[data-dive-fb]");
+      if (fb) {
+        try { st.data = await Store.saveDeepDive(d.id, { answers: st.picks, feedback: fb.dataset.diveFb }); } catch (err) { toast(err.message); }
+        delete planState[route().params.get("from")]?.data; // 플래너가 새 피드백으로 다시 계산하게
+        return drawDive(pid);
+      }
+      if (e.target.closest("[data-dive-retry]")) return createDive(pid, true);
+      if (e.target.closest("[data-dive-restart]")) { st.step = 0; st.picks = []; st.wrong = {}; return drawDive(pid); }
+      if (e.target.closest("[data-dive-similar]")) {
+        ask({ text: `${c?.name ?? "이"} 비슷한 문제 3개 내줘` });
+      }
+    };
+  }
+
   // ---------- 다른 풀이 보기: 정석 · 그래프 · 빠른 풀이 (문제마다 한 번 만들어 같이 본다) ----------
   const methodsState = {}; // 문제 id → { open, busy, data, tab, error }
   function methodsInnerHTML(pid) {
@@ -1375,6 +1688,7 @@
         <div class="ins-actions">
           <button type="button" class="tag on" data-suggest="${esc(more)}"><i data-lucide="sparkles"></i>${harder ? "더 어려운 문제 3개" : "비슷한 문제 3개 더"}</button>
           <a class="tag" href="#/library/concept/${c.id}"><i data-lucide="book-open"></i>개념 레슨</a>
+          ${attempt.correct || Store.mode !== "api" ? "" : `<a class="tag" href="#/dive/${p.id}"><i data-lucide="scan-search"></i>Deep Dive</a>`}
           ${attempt.correct ? "" : `<a class="tag" href="#/notes"><i data-lucide="notebook-pen"></i>오답노트</a>`}
         </div>
       </div>`;
@@ -2183,6 +2497,7 @@
             </div>
           </div>
           <div class="ws-actions">
+            ${api ? `<a class="btn-ghost" href="#/plan/${id}"><i data-lucide="calendar-check"></i>AI 학습 플래너</a>` : ""}
             ${api ? '<button class="btn-ghost" data-ws-upload><i data-lucide="upload"></i>기출 올리기</button>' : ""}
             <a class="btn-primary" href="#/?project=${id}"><i data-lucide="square-pen"></i>이 프로젝트에서 새 학습</a>
             <button class="icon-btn" id="project-more" aria-label="프로젝트 메뉴"><i data-lucide="ellipsis"></i></button>
@@ -4968,6 +5283,7 @@
               </select></label>
             <div class="nx-acts">
               ${c.id ? `<a class="nx-btn" href="#/library/concept/${c.id}"><i data-lucide="book-open"></i>개념 레슨</a>` : ""}
+              ${Store.mode === "api" ? `<a class="nx-btn" href="#/dive/${w.problemId}"><i data-lucide="scan-search"></i>Deep Dive</a>` : ""}
               <button class="nx-btn icon" data-del-note="${w.id}" title="삭제" aria-label="삭제"><i data-lucide="trash-2"></i></button>
               <button class="nx-btn primary" data-retry="${w.id}"><i data-lucide="rotate-ccw"></i>${w.resolvedAt ? "한 번 더 풀기" : "다시 풀기"}</button>
             </div>
