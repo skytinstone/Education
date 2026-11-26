@@ -115,7 +115,7 @@
   // ================= 운영 콘솔 (운영자 계정만) =================
   // #/(개요) · #/users[/id] · #/ai · #/logins · #/voc
   const FB_STATUS = { open: "접수", reviewing: "확인 중", resolved: "해결" };
-  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["revenue", "매출", "wallet"], ["ai", "AI 사용량", "cpu"], ["quality", "문제 품질", "gauge"], ["items", "문제 성적표", "clipboard-check"], ["runs", "AI 실행 기록", "activity"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"], ["actions", "관리 기록", "scroll-text"]];
+  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["revenue", "매출", "wallet"], ["ai", "AI 사용량", "cpu"], ["quality", "문제 품질", "gauge"], ["items", "문제 성적표", "clipboard-check"], ["runs", "AI 실행 기록", "activity"], ["evals", "하네스 평가", "target"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"], ["actions", "관리 기록", "scroll-text"]];
   const METHOD_NAME = { password: "이메일", google: "Google", kakao: "카카오" };
   const PURPOSE_NAME = { generate: "문제 생성", verify: "문제 검증", note_generate: "개념 정리 생성", note_verify: "개념 정리 검증",
     course: "코스 만들기", extract: "기출·교재 분석", essay_grade: "서술형 채점", review: "풀이 확인", explain: "계산·설명 풀이", answer_key: "정답지 풀이", answer_verify: "정답지 검산",
@@ -171,6 +171,7 @@
 
   const TAB_DESC = { overview: "가입·이용 현황과 오늘 챙길 것", users: "회원 검색, 상세, 이용 정지·삭제", revenue: "월 구독 결제 매출 · 구독자 · AI 원가와 마진 (부가세·수수료·환율은 추정)", ai: "AI 호출 비용·토큰·실패",
     quality: "AI 가 만든 문제의 검산 통과율과 탈락 이유, 정답지 상태",
+    evals: "골든셋으로 지금 하네스의 품질을 숫자로 — 망가진 문제를 거르는가 · 좋은 문제를 지키는가 · 검색이 맞는가",
     runs: "하네스 — AI 실행 한 번이 어떤 지시문 버전으로 어떤 단계(모델 · 도구 · 검사)를 거쳤는지",
     items: "학생 처음 풀이로 매긴 문제별 성적 — 학생 실력을 감안한 실제 난이도 · 변별도 · 보기 분석",
     logins: "로그인·가입 기록 (90일 보관)", voc: "의견·문제 신고 확인과 답변, 전체 공지",
@@ -198,6 +199,7 @@
       else if (tab === "quality") await adminQuality(body);
       else if (tab === "items") await adminItems(body);
       else if (tab === "runs") await (id ? adminRun(body, id) : adminRuns(body));
+      else if (tab === "evals") await (id ? adminEval(body, id) : adminEvals(body));
       else if (tab === "logins") await adminLogins(body);
       else if (tab === "actions") await adminActions(body);
       else await adminVOC(body);
@@ -457,6 +459,81 @@
       <section class="panel"><h3>단계별 타임라인</h3><ol class="rtimeline">${r.steps.map(stepRow).join("")}</ol></section>
       <section class="panel"><h3>이 실행에 쓴 지시문</h3>
         ${table(["지시문", "버전"], Object.entries(r.prompt_versions).map(([n, v]) => `<tr><td><code>${esc(n)}</code></td><td><code>${esc(v)}</code></td></tr>`), "")}</section>`;
+    icons();
+  }
+
+  // ---------- 하네스 평가 (점수판) ----------
+  const pctv = (v) => (v == null ? "–" : `${Math.round(v * 100)}%`);
+  const DEFECT_NAME = { wrong_key: "정답 번호 오류", multiple_answers: "복수 정답", missing_condition: "조건 누락", no_correct_choice: "맞는 보기 없음" };
+  const delta = (cur, prev, good = "up") => {
+    if (cur == null || prev == null) return "";
+    const d = Math.round((cur - prev) * 100);
+    if (!d) return '<small class="dz">±0</small>';
+    const better = good === "up" ? d > 0 : d < 0;
+    return `<small class="${better ? "du" : "dd"}">${d > 0 ? "+" : ""}${d}%p</small>`;
+  };
+
+  async function adminEvals(body) {
+    const list = await Store.adminGet("/evals");
+    if (!body.isConnected) return;
+    const done = list.filter((e) => e.status === "done" && e.mode === "live");
+    const [cur, prev] = done;
+    const v = cur?.metrics?.verify ?? {}, pv = prev?.metrics?.verify ?? {};
+    const r = cur?.metrics?.retrieval ?? {}, pr = prev?.metrics?.retrieval ?? {};
+    body.innerHTML = `
+      <div class="panel-row top"><p class="mini">골든셋(좋은 문제 + 일부러 망가뜨린 문제)을 <b>실제 문제 생성과 같은 검사 층</b>(검증 AI → 계산 도구 검산 에이전트)에 통과시켜요.
+        하네스 버전마다 점수를 남겨서, 지시문 · 모델 · 도구를 바꿨을 때 좋아졌는지 숫자로 비교해요. 화살표는 바로 앞 평가와의 차이예요.</p>
+        <button class="btn-ghost" data-eval-run><i data-lucide="play"></i>지금 평가 (실제 AI)</button></div>
+      ${cur ? `<div class="kpis">
+        ${kpi("망가진 문제 탐지율", `${pctv(v.detection_rate)} ${delta(v.detection_rate, pv.detection_rate)}`, `${num(v.bad)}문제 중 · 높을수록 좋아요`)}
+        ${kpi("좋은 문제 오탐률", `${pctv(v.false_reject_rate)} ${delta(v.false_reject_rate, pv.false_reject_rate, "down")}`, `${num(v.good)}문제 중 · 낮을수록 좋아요`)}
+        ${kpi("검산 에이전트 추가 탐지", `${pctv(v.math_check_added)} ${delta(v.math_check_added, pv.math_check_added)}`, `검증 AI 혼자 ${pctv(v.verifier_detection)} · Tool Calling 기여`)}
+        ${kpi("RAG 검색 recall@3", `${pctv(r.recall_at_3)} ${delta(r.recall_at_3, pr.recall_at_3)}`, `MRR ${r.mrr ?? "–"}`)}
+      </div>
+      <section class="panel"><h3>결함 종류별 탐지율 <small class="mini">하네스 <code>${esc(cur.harness_version)}</code> · ${when(cur.created_at)}</small></h3>
+        <div class="hbars">${Object.entries(v.by_defect ?? {}).map(([k, d]) => `
+          <div class="hbar"><span>${esc(DEFECT_NAME[k] ?? k)} <small>(${d.cases})</small></span><span class="track"><i class="m-google" style="width:${(d.detected ?? 0) * 100}%"></i></span><b>${pctv(d.detected)}</b></div>`).join("")}</div>
+        <p class="mini">검산 에이전트 판단 정확도 ${pctv(v.math_check_accuracy)} (${num(v.math_check_runs)}번 실행) · 평가 비용 ${usd4(cur.cost_usd)} · 문항당 평균 ${ms(v.avg_ms)}</p></section>`
+        : '<section class="panel"><p class="mini">아직 실제 AI 평가가 없어요. 위 버튼으로 첫 평가(기준점)를 만들어 주세요.</p></section>'}
+      <section class="panel"><h3>평가 기록</h3>
+        ${table(["시각", "하네스 버전", "방식", "상태", "#탐지율", "#오탐률", "#검산 추가", "#recall@3", "#비용"], list.map((e) => {
+          const m = e.metrics?.verify ?? {}, q = e.metrics?.retrieval ?? {};
+          return `<tr class="click" data-eval="${e.id}"><td class="nowrap">${when(e.created_at)}</td><td><code>${esc(e.harness_version)}</code></td>
+            <td>${e.mode === "live" ? "실제 AI" : "재생"}</td>
+            <td>${e.status === "done" ? '<span class="achip ok">완료</span>' : e.status === "running" ? '<span class="achip warn">진행 중</span>' : `<span class="achip bad" title="${esc(e.error ?? "")}">실패</span>`}</td>
+            <td class="n">${pctv(m.detection_rate)}</td><td class="n">${pctv(m.false_reject_rate)}</td><td class="n">${pctv(m.math_check_added)}</td>
+            <td class="n">${pctv(q.recall_at_3)}</td><td class="n">${usd4(e.cost_usd)}</td></tr>`;
+        }), "평가 기록이 없어요")}</section>`;
+    icons();
+  }
+
+  async function adminEval(body, id) {
+    const e = await Store.adminGet(`/evals/${id}`);
+    if (!body.isConnected) return;
+    const vc = e.cases?.verify ?? [], rc = e.cases?.retrieval ?? [];
+    const verdictCell = (c) => {
+      const ok = (c.label === "good") === (c.decision === "pass");
+      return `<span class="achip ${ok ? "ok" : "bad"}">${c.decision === "pass" ? "통과" : "탈락"}${ok ? "" : " ✗"}</span>`;
+    };
+    body.innerHTML = `
+      <p><a href="#/evals">← 하네스 평가</a></p>
+      <div class="kpis">
+        ${kpi("하네스 버전", `<code>${esc(e.harness_version)}</code>`, when(e.created_at))}
+        ${kpi("탐지율 / 오탐률", `${pctv(e.metrics?.verify?.detection_rate)} / ${pctv(e.metrics?.verify?.false_reject_rate)}`, e.mode === "live" ? "실제 AI" : "재생")}
+        ${kpi("recall@3", pctv(e.metrics?.retrieval?.recall_at_3), `MRR ${e.metrics?.retrieval?.mrr ?? "–"}`)}
+        ${kpi("비용 · 시간", usd4(e.cost_usd), ms(e.latency_ms))}
+      </div>
+      ${e.error ? `<section class="panel"><p class="err-text">${esc(e.error)}</p></section>` : ""}
+      <section class="panel"><h3>검증 골든셋 — 문항별 <small class="mini">✗ = 기대와 다른 판정</small></h3>
+        ${table(["문항", "정답", "결함", "판정", "거른 곳", "검증 AI", "검산 에이전트"], vc.map((c) => `
+          <tr><td><code>${esc(c.id)}</code></td><td>${c.label === "good" ? "좋은 문제" : "망가진 문제"}</td><td>${esc(DEFECT_NAME[c.defect] ?? "")}</td>
+            <td>${verdictCell(c)}</td><td>${c.caught_by === "verifier" ? "검증 AI" : c.caught_by === "math_check" ? "검산 에이전트" : "—"}</td>
+            <td class="istem">${c.verifier ? `답 ${esc(c.verifier.verdict.answer)} · ${c.verifier.verdict.well_posed ? "결함 없음" : "결함: " + esc((c.verifier.verdict.issues || []).join(", "))}` : ""}</td>
+            <td class="istem">${c.math ? (c.math.error ? `오류` : `${c.math.checkable ? (c.math.agrees ? "일치" : "불일치") : "계산 대상 아님"} · ${esc(c.math.computed || "")}<small>${esc((c.math.tools || []).join(" → "))}</small>`) : "—"}</td></tr>`), "")}</section>
+      <section class="panel"><h3>RAG 검색 골든셋</h3>
+        ${table(["질문", "기대 개념", "순위", "위 3개 (유사도)"], rc.map((c) => `
+          <tr><td class="istem">${esc(c.query)}</td><td><code>${esc(c.expected)}</code></td><td>${c.rank ? `<span class="achip ok">${c.rank}위</span>` : '<span class="achip bad">없음</span>'}</td>
+            <td class="istem">${c.top.map((h) => `${h.similarity} · ${esc((h.concepts || []).join(","))}`).join("<br>")}</td></tr>`), "")}</section>`;
     icons();
   }
 
@@ -730,6 +807,13 @@
     if ((x = el("[data-revdays]"))) { adminState.revDays = Number(x.dataset.revdays); return rerender(tab); }
     if (el("[data-revtest]")) { adminState.revTest = !adminState.revTest; return rerender(tab); }
     if ((x = el("[data-aidays]"))) { adminState.aiDays = Number(x.dataset.aidays); return rerender(tab); }
+    if ((x = el("[data-eval]"))) { location.hash = `#/evals/${x.dataset.eval}`; return; }
+    if ((x = el("[data-eval-run]"))) {
+      if (!confirm("실제 AI 로 골든셋을 평가해요. 몇 분 걸리고 약 $1 안팎의 비용이 들어요. 진행할까요?")) return;
+      x.disabled = true;
+      try { await Store.adminPost("/evals/run"); toast("평가를 시작했어요. 몇 분 뒤 새로고침해 보세요"); } catch (err) { toast(err.message); }
+      return rerender(tab);
+    }
     if ((x = el("[data-run]"))) { location.hash = `#/runs/${x.dataset.run}`; return; }
     if ((x = el("[data-rkind]"))) { adminState.runs.kind = adminState.runs.kind === x.dataset.rkind ? "" : x.dataset.rkind; return rerender(tab); }
     if ((x = el("[data-rstatus]"))) { adminState.runs.status = adminState.runs.status === x.dataset.rstatus ? "" : x.dataset.rstatus; return rerender(tab); }

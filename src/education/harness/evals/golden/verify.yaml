@@ -1,0 +1,195 @@
+# 검증 골든셋 — 문제 검증 하네스(검증 AI · 검산 에이전트)가 '좋은 문제는 통과, 망가진 문제는 탈락' 시키는지 잰다.
+# 정답은 손으로 계산해 확인했다. label: good | bad, defect: wrong_key(정답 번호가 틀림) · multiple_answers(정답이 둘 이상)
+#   · missing_condition(조건이 빠져 답이 정해지지 않음) · no_correct_choice(맞는 보기가 없음)
+# 객관식 answer 는 보기 번호(1부터).
+cases:
+  # ---------- 좋은 문제 ----------
+  - id: g_log
+    domain: math
+    label: good
+    stem: "$\\log_2 8 + \\log_3 9$의 값은?"
+    choices: ["3", "4", "5", "6", "7"]
+    answer: "3"
+  - id: g_subst
+    domain: math
+    label: good
+    stem: "$\\displaystyle\\int_0^1 2x\\,e^{x^2}\\,dx$의 값은?"
+    choices: ["$e-1$", "$e$", "$e+1$", "$2e-1$", "$\\dfrac{e-1}{2}$"]
+    answer: "1"
+  - id: g_arith
+    domain: math
+    label: good
+    stem: "첫째항이 3, 공차가 4인 등차수열의 제10항은?"
+    choices: ["35", "37", "39", "41", "43"]
+    answer: "3"
+  - id: g_limit
+    domain: math
+    label: good
+    stem: "$\\displaystyle\\lim_{x \\to 0} \\frac{\\sin 3x}{x}$의 값은?"
+    choices: ["0", "1", "3", "$\\dfrac{1}{3}$", "존재하지 않는다"]
+    answer: "3"
+  - id: g_extremum
+    domain: math
+    label: good
+    stem: "함수 $f(x) = x^3 - 3x$의 극솟값은?"
+    choices: ["$-2$", "$-1$", "0", "1", "2"]
+    answer: "1"
+  - id: g_geo_series
+    domain: math
+    label: good
+    stem: "$\\displaystyle\\sum_{n=1}^{\\infty} \\left(\\frac{1}{3}\\right)^n$의 값은?"
+    choices: ["$\\dfrac{1}{3}$", "$\\dfrac{1}{2}$", "$\\dfrac{2}{3}$", "1", "$\\dfrac{3}{2}$"]
+    answer: "2"
+  - id: g_cond_prob
+    domain: math
+    label: good
+    stem: "두 사건 $A$, $B$에 대하여 $P(A) = 0.5$, $P(B \\mid A) = 0.4$일 때, $P(A \\cap B)$의 값은?"
+    choices: ["0.1", "0.2", "0.4", "0.5", "0.9"]
+    answer: "2"
+  - id: g_sin_int
+    domain: math
+    label: good
+    stem: "$\\displaystyle\\int_0^{\\pi} \\sin x\\,dx$의 값은?"
+    choices: ["0", "1", "2", "$\\pi$", "$2\\pi$"]
+    answer: "3"
+  - id: g_deriv
+    domain: math
+    label: good
+    stem: "함수 $f(x) = x^2 e^x$에 대하여 $f'(1)$의 값은?"
+    choices: ["$e$", "$2e$", "$3e$", "$4e$", "$e^2$"]
+    answer: "3"
+  - id: g_exp_eq
+    domain: math
+    label: good
+    stem: "방정식 $3^{2x} = 81$의 해는?"
+    choices: ["1", "2", "3", "4", "9"]
+    answer: "2"
+  - id: g_comb
+    domain: math
+    label: good
+    stem: "서로 다른 5개에서 순서를 생각하지 않고 2개를 고르는 경우의 수는?"
+    choices: ["5", "10", "20", "25", "60"]
+    answer: "2"
+  - id: g_kinematics
+    domain: physics
+    label: good
+    stem: "정지해 있던 물체가 일정한 가속도 $2\\,\\mathrm{m/s^2}$로 직선 운동을 한다. 출발 후 5초 동안 이동한 거리는?"
+    choices: ["10 m", "20 m", "25 m", "50 m", "100 m"]
+    answer: "3"
+  - id: g_momentum
+    domain: physics
+    label: good
+    stem: "질량 2 kg인 물체가 3 m/s의 속력으로 운동하고 있다. 이 물체의 운동량의 크기는?"
+    choices: ["1.5 kg·m/s", "5 kg·m/s", "6 kg·m/s", "9 kg·m/s", "18 kg·m/s"]
+    answer: "3"
+  - id: g_quad_sum
+    domain: math
+    label: good
+    stem: "이차방정식 $x^2 - 5x + 6 = 0$의 두 근의 합은?"
+    choices: ["$-6$", "$-5$", "5", "6", "11"]
+    answer: "3"
+  - id: g_cos
+    domain: math
+    label: good
+    stem: "$\\cos \\dfrac{\\pi}{3}$의 값은?"
+    choices: ["0", "$\\dfrac{1}{2}$", "$\\dfrac{\\sqrt{2}}{2}$", "$\\dfrac{\\sqrt{3}}{2}$", "1"]
+    answer: "2"
+
+  # ---------- 망가진 문제: 정답 번호가 틀림 ----------
+  - id: b_subst_key
+    domain: math
+    label: bad
+    defect: wrong_key
+    stem: "$\\displaystyle\\int_0^1 2x\\,e^{x^2}\\,dx$의 값은?"
+    choices: ["$e-1$", "$e$", "$e+1$", "$2e-1$", "$\\dfrac{e-1}{2}$"]
+    answer: "2"
+  - id: b_series_key
+    domain: math
+    label: bad
+    defect: wrong_key
+    stem: "$\\displaystyle\\sum_{n=1}^{\\infty} \\left(\\frac{1}{3}\\right)^n$의 값은?"
+    choices: ["$\\dfrac{1}{3}$", "$\\dfrac{1}{2}$", "$\\dfrac{2}{3}$", "1", "$\\dfrac{3}{2}$"]
+    answer: "5"
+  - id: b_kinematics_key
+    domain: physics
+    label: bad
+    defect: wrong_key
+    stem: "정지해 있던 물체가 일정한 가속도 $2\\,\\mathrm{m/s^2}$로 직선 운동을 한다. 출발 후 5초 동안 이동한 거리는?"
+    choices: ["10 m", "20 m", "25 m", "50 m", "100 m"]
+    answer: "4"
+  - id: b_extremum_key
+    domain: math
+    label: bad
+    defect: wrong_key
+    stem: "함수 $f(x) = x^3 - 3x$의 극솟값은?"
+    choices: ["$-2$", "$-1$", "0", "1", "2"]
+    answer: "5"
+  - id: b_deriv_key
+    domain: math
+    label: bad
+    defect: wrong_key
+    stem: "함수 $f(x) = x^2 e^x$에 대하여 $f'(1)$의 값은?"
+    choices: ["$e$", "$2e$", "$3e$", "$4e$", "$e^2$"]
+    answer: "2"
+  - id: b_arith_key
+    domain: math
+    label: bad
+    defect: wrong_key
+    stem: "첫째항이 3, 공차가 4인 등차수열의 제10항은?"
+    choices: ["35", "37", "39", "41", "43"]
+    answer: "5"
+
+  # ---------- 망가진 문제: 정답이 둘 이상 ----------
+  - id: b_quad_multi
+    domain: math
+    label: bad
+    defect: multiple_answers
+    stem: "이차방정식 $x^2 - 5x + 6 = 0$의 두 근의 합은?"
+    choices: ["$-5$", "5", "6", "$\\dfrac{10}{2}$", "11"]
+    answer: "2"
+  - id: b_log_multi
+    domain: math
+    label: bad
+    defect: multiple_answers
+    stem: "$\\log_2 8 + \\log_3 9$의 값은?"
+    choices: ["4", "5", "$\\log_2 32$", "6", "7"]
+    answer: "2"
+
+  # ---------- 망가진 문제: 조건이 빠짐 ----------
+  - id: b_geo_missing
+    domain: math
+    label: bad
+    defect: missing_condition
+    stem: "첫째항이 2인 등비수열의 제5항은?"
+    choices: ["10", "16", "32", "48", "162"]
+    answer: "3"
+  - id: b_kin_missing
+    domain: physics
+    label: bad
+    defect: missing_condition
+    stem: "정지해 있던 물체가 일정한 가속도로 직선 운동을 한다. 출발 후 5초 동안 이동한 거리는?"
+    choices: ["10 m", "20 m", "25 m", "50 m", "100 m"]
+    answer: "3"
+  - id: b_prob_missing
+    domain: math
+    label: bad
+    defect: missing_condition
+    stem: "두 사건 $A$, $B$에 대하여 $P(A) = 0.5$일 때, $P(A \\cap B)$의 값은?"
+    choices: ["0.1", "0.2", "0.25", "0.5", "1"]
+    answer: "3"
+
+  # ---------- 망가진 문제: 맞는 보기가 없음 ----------
+  - id: b_sin_none
+    domain: math
+    label: bad
+    defect: no_correct_choice
+    stem: "$\\displaystyle\\int_0^{\\pi} \\sin x\\,dx$의 값은?"
+    choices: ["0", "1", "$\\pi$", "$2\\pi$", "4"]
+    answer: "3"
+  - id: b_momentum_none
+    domain: physics
+    label: bad
+    defect: no_correct_choice
+    stem: "질량 2 kg인 물체가 3 m/s의 속력으로 운동하고 있다. 이 물체의 운동량의 크기는?"
+    choices: ["1.5 kg·m/s", "5 kg·m/s", "9 kg·m/s", "12 kg·m/s", "18 kg·m/s"]
+    answer: "3"
