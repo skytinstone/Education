@@ -42,6 +42,12 @@ class Settings(BaseSettings):
     openai_effort_generate: str = "medium"
     openai_effort_verify: str = "medium"
     ai_max_attempts: int = 2  # 검증에 실패하면 문제당 다시 만드는 최대 횟수
+    # LangChain 에이전트 · RAG (src/education/ai/)
+    ai_tool_check: bool = True          # 수학·물리 문제를 SymPy 도구로 한 번 더 검산 (Tool Calling)
+    ai_tool_check_domains: str = "math,physics"
+    ai_chat_agent: bool = True               # 대화의 현황·상담 질문을 도구를 쓰는 에이전트가 답한다
+    embedding_model: str = "text-embedding-3-small"
+    rag_duplicate_similarity: float = 0.95  # 같은 개념에 이만큼 비슷한 문제가 있으면 중복으로 버린다
     # 한 사람이 하루(서비스 시간대 기준)에 쓸 수 있는 AI — 비용(달러)과 호출 수 중 먼저 닿는 쪽. 0 이면 제한 없음. 운영자는 제외
     ai_daily_limit_usd: float = 0.5   # 계정당 하루 AI 비용 (무료) — 0 이면 제한 없음
     ai_daily_limit_calls: int = 150   # 계정당 하루 AI 호출 수 (무료)

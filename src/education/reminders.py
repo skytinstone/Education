@@ -7,6 +7,7 @@
 import argparse
 
 from education.db.session import SessionLocal
+from education.ai import rag
 from education.services import item_stats, reminders
 
 
@@ -20,6 +21,8 @@ def main() -> None:
             stats = item_stats.refresh(db)
             db.commit()
             print(f"문제 성적표 {stats['problems']}문제")
+            print(f"RAG 임베딩 {rag.backfill(db)}문제")  # 새 문제를 검색에 잡히게
+            db.commit()
     print(" · ".join(f"{k} {v}명" for k, v in sent.items()) or "보낼 알림 없음")
 
 

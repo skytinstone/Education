@@ -4,7 +4,7 @@
 # 외부로 열리는 포트는 Caddy 의 80·443 뿐이고, API 와 DB 는 내부 네트워크에서만 보인다.
 services:
   db:
-    image: postgres:17
+    image: pgvector/pgvector:0.8.7-pg17  # postgres:17 + pgvector (RAG)
     restart: unless-stopped
     environment:
       POSTGRES_USER: eureka

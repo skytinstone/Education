@@ -2248,7 +2248,7 @@
     const scroll = contentEl.scrollTop;
     const p = s.projectId && Store.project(s.projectId);
     // 글로만 답한 경우(현황 보고·일반 답·되묻기)는 AI 가 $…$ 수식을 쓰므로 수식으로 그린다
-    const TEXT_INTENTS = new Set(["project_report", "answer", "clarify"]);
+    const TEXT_INTENTS = new Set(["project_report", "answer", "clarify", "agent"]);
     // 마지막 답변 아래에만 '이어서 보낼 요청' 버튼 (기다리는 중이면 숨김)
     const lastAi = Store.isPending(id) ? -1 : s.messages.findLastIndex((m) => m.role === "ai");
     const busy = Store.isPending(id);

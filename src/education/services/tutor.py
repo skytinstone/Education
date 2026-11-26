@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from education.ai import tutor_agent
+from education.config import get_settings
 from education.db import models as m
 from education.schemas import Domain, VerificationStatus
 from education.services import explain, generator, intent, learning, quota
@@ -125,6 +127,10 @@ def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
             kind, request = r.intent, (r.request.strip() or text)
             if kind == "exam_mode":
                 return exam_reply(db, user, project, session)
+            if kind in ("project_report", "answer") and tutor_agent.enabled():
+                # 현황·상담은 도구를 쓰는 에이전트가 필요한 것만 찾아보고 답한다 (실패하면 위의 한 번 답으로)
+                if (agent_reply := _agent_reply(db, user, project, session, text)) is not None:
+                    return agent_reply
             if kind in ("project_report", "answer", "clarify"):
                 return Reply(r.reply.strip() or "무엇을 도와드릴까요?", intent=kind, suggestions=r.suggestions)
 
@@ -136,6 +142,26 @@ def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
         except LLMError as e:
             log.warning("AI 풀이 실패: %s", e)
     return Reply(*reply(db, user, request, project), intent="make_problems")
+
+
+def _agent_reply(db: Session, user: m.User, project: m.Project | None, session: m.ChatSession | None, text: str) -> Reply | None:
+    """대화 에이전트 (ai/tutor_agent.py). 실패하면 None."""
+    model = get_settings().openai_model_route
+    try:
+        out, u, used = tutor_agent.run(db, user, project, text, history=intent.history_text(db, user, session))
+    except LLMError as e:
+        log.warning("대화 에이전트 실패: %s", e)
+        db.add(m.LLMCall(purpose="agent", model=model, ok=False, error=str(e)[:500], user_id=user.id))
+        db.flush()
+        return None
+    db.add(m.LLMCall(purpose="agent", model=u.model, ok=True, user_id=user.id, cost_usd=u.cost_usd,
+                     input_tokens=u.input_tokens, cached_tokens=u.cached_tokens, output_tokens=u.output_tokens,
+                     reasoning_tokens=u.reasoning_tokens, latency_ms=u.latency_ms))
+    db.flush()
+    if out.start_exam:
+        return exam_reply(db, user, project, session)
+    log.info("대화 에이전트 도구: %s", ", ".join(used) or "없음")
+    return Reply(out.reply.strip() or "무엇을 도와드릴까요?", intent="agent", suggestions=out.suggestions)
 
 
 EXAM_MAX = 40  # 대화 문제로 보는 시험의 최대 문항 수
@@ -217,7 +243,7 @@ def reply(db: Session, user: m.User, text: str, project: m.Project | None) -> tu
                     db, llm, concept_id=plan.concept_id, difficulty=plan.difficulty, count=plan.count, user=user,
                     question_type=project.question_type if project else "multiple_choice",
                     exemplars=exemplars, owner=user if exemplars else None,
-                    textbook=textbook_label(project) if project else None)
+                    textbook=textbook_label(project) if project else None, request=text)
             except (LLMError, ValueError) as e:
                 log.warning("AI 문제 생성 실패: %s", e)
                 report = None
