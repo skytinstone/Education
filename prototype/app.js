@@ -1253,7 +1253,30 @@
       (e) => { w?.close(); toast(e.message); });
   }
 
-  // ================= 음성 입력: 브라우저 음성 인식 + 마이크 음량 미니 게이지 =================
+  // ================= 음성 입력: 브라우저 음성 인식 + 입력창 전체를 채우는 무지개 파형 =================
+  // 마이크가 켜지면 글자 칸 자리에 위아래 바 파형이 뜬다 — 가운데가 높고, 바마다 무지개 색으로 빛나며, 색이 천천히 돈다.
+  // 바 높이는 실제 마이크 소리(말소리 대역 주파수)로 움직이고, 마이크 음량을 못 읽으면 미리 정한 움직임으로 대신한다.
+  const WAVE_STOPS = [[255, 106, 193], [255, 184, 107], [124, 242, 200], [90, 184, 255], [143, 123, 255], [255, 106, 193]];
+  const waveColor = (t) => {
+    const x = t * (WAVE_STOPS.length - 1), k = Math.min(WAVE_STOPS.length - 2, Math.floor(x)), u = x - k;
+    return `rgb(${WAVE_STOPS[k].map((v, j) => Math.round(v + (WAVE_STOPS[k + 1][j] - v) * u)).join(",")})`;
+  };
+  function makeWave(form, input) {
+    const width = input.getBoundingClientRect().width || form.clientWidth || 600;
+    const n = Math.max(24, Math.min(110, Math.floor((width - 12) / 6)));
+    const c = (n - 1) / 2;
+    const bars = Array.from({ length: n }, (_, i) => {
+      const mid = 1 - Math.abs(i - c) / c;
+      const env = 0.15 + 0.85 * Math.abs(Math.sin(i * 0.47) * (0.35 + 0.65 * mid)); // 소리를 못 읽을 때의 움직임
+      return `<i style="--c:${waveColor(i / (n - 1))};--o:${(0.55 + 0.45 * mid).toFixed(2)};--fh:${Math.round(8 + env * 64)}px;--fd:${(0.5 + (i % 5) * 0.13).toFixed(2)}s;--fk:${(-(i * 0.057) % 1.1).toFixed(2)}s"></i>`;
+    }).join("");
+    const wave = document.createElement("div");
+    wave.className = "wave fake";
+    wave.setAttribute("aria-hidden", "true");
+    wave.innerHTML = `<div class="wave-glow"></div><div class="wave-bars">${bars}</div><span class="wave-text"></span>`;
+    input.after(wave);
+    return wave;
+  }
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
   let voice = null; // 지금 듣고 있는 입력창 { btn, stop }
   const MIC_ICON = '<i data-lucide="mic"></i>', STOP_ICON = '<i data-lucide="square"></i>';
@@ -1268,7 +1291,9 @@
   async function startVoice(form, btn) {
     if (!SpeechRec) return toast("이 브라우저는 음성 입력을 지원하지 않아요. Chrome·Edge·Safari에서 써 주세요");
     voice?.stop();
-    const input = $(".cin", form), meter = $(".voice-meter", form), bars = $$("i", meter);
+    const input = $(".cin", form);
+    const wave = makeWave(form, input), bars = $$(".wave-bars i", wave), waveText = $(".wave-text", wave);
+    form.classList.add("listening");
     const placeholder = input.placeholder;
     const base = input.value.trim() ? `${input.value.trimEnd()} ` : "";
     const rec = new SpeechRec();
@@ -1288,7 +1313,8 @@
       stream?.getTracks().forEach((t) => t.stop());
       ctx?.close().catch(() => {});
       hint.remove();
-      meter.hidden = true;
+      wave.remove();
+      form.classList.remove("listening");
       btn.classList.remove("listening");
       btn.innerHTML = MIC_ICON;
       btn.setAttribute("aria-label", "음성 입력");
@@ -1302,7 +1328,6 @@
     btn.innerHTML = STOP_ICON;
     btn.setAttribute("aria-label", "음성 입력 멈추기");
     input.placeholder = "말씀하세요…";
-    meter.hidden = false;
     lucide.createIcons();
 
     rec.onresult = (e) => {
@@ -1312,6 +1337,7 @@
         if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
       }
       input.value = base + finalText + interim;
+      waveText.textContent = (finalText + interim).slice(-60); // 파형 아래에 받아쓴 말을 작게
       input.dispatchEvent(new Event("input", { bubbles: true })); // 보내기 버튼 켜기
     };
     rec.onerror = (e) => {
@@ -1323,7 +1349,7 @@
     rec.onend = () => { cleanup(); input.focus(); };
     try { rec.start(); } catch { cleanup(); return toast("음성 입력을 시작하지 못했어요"); }
 
-    // 미니 음성 게이지: 말소리 대역(약 200Hz~3.5kHz)을 다섯 칸으로 나눠 높이로
+    // 파형: 말소리 대역(약 200Hz~3.5kHz)을 가운데에서 바깥으로 펼쳐 바 높이로 (가운데가 낮은 주파수 · 높게)
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       if (ended) return stream.getTracks().forEach((t) => t.stop());
@@ -1334,19 +1360,24 @@
       ctx.createMediaStreamSource(stream).connect(an);
       const freq = new Uint8Array(an.frequencyBinCount);
       const hz = ctx.sampleRate / an.fftSize;
-      const lo = Math.max(1, Math.round(200 / hz)), hi = Math.round(3500 / hz), span = (hi - lo) / bars.length;
+      const lo = Math.max(1, Math.round(200 / hz)), hi = Math.round(3500 / hz);
+      const c = (bars.length - 1) / 2, maxH = Math.max(40, wave.clientHeight - 14);
+      wave.classList.remove("fake");
       const tick = () => {
         an.getByteFrequencyData(freq);
+        let total = 0;
+        for (let k = lo; k < hi; k++) total += freq[k];
+        const level = Math.min(1, total / (hi - lo) / 120); // 전체 음량
         bars.forEach((b, i) => {
-          let sum = 0;
-          for (let k = Math.floor(lo + i * span); k < lo + (i + 1) * span; k++) sum += freq[k];
-          const v = Math.min(1, sum / span / 170);
-          b.style.height = `${4 + v * 16}px`;
+          const d = Math.abs(i - c) / c; // 0 가운데 · 1 끝
+          const v = Math.min(1, freq[Math.round(lo + d * (hi - lo))] / 200);
+          const h = 3 + (v * 0.65 + level * 0.35) * maxH * (0.4 + 0.6 * (1 - d));
+          b.style.height = `${h.toFixed(1)}px`;
         });
         raf = requestAnimationFrame(tick);
       };
       tick();
-    } catch { /* 게이지 없이도 음성 입력은 된다 */ }
+    } catch { /* 소리를 못 읽어도 음성 입력은 된다 — 파형은 미리 정한 움직임으로 */ }
   }
   window.addEventListener("hashchange", () => voice?.stop());
 
