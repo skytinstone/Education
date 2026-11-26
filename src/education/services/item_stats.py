@@ -194,6 +194,11 @@ def refresh(db: Session) -> dict:
     if rows:
         db.add_all(m.ProblemStats(**r) for r in rows)
     db.flush()
+    from education.harness import review  # D 등급이나 정답 의심은 사람이 본다
+    for r in rows:
+        if r["grade"] == "D" or "key_suspect" in r["flags"]:
+            review.enqueue(db, r["problem_id"], "item_stats",
+                           f"성적 {r['grade']} · " + ", ".join(FLAG_NAME.get(f, f) for f in r["flags"]) + f" · {r['n']}명 풀이")
     grades = defaultdict(int)
     for r in rows:
         grades[r["grade"]] += 1

@@ -15,6 +15,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from education.ai import tutor_agent
+from education.harness import guardrails
 from education.harness.trace import Trace
 from education.config import get_settings
 from education.db import models as m
@@ -97,6 +98,13 @@ def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
     def checkpoint():
         if should_stop():
             raise Stopped
+
+    # 입력 가드레일 — 주입 시도는 표시만 하고, 개인정보는 가린 글만 AI 에 보낸다 (저장된 원문은 그대로)
+    scan = guardrails.scan_input(text)
+    if scan.flags:
+        db.add(m.GuardEvent(kind="input", flags=scan.flags, user_id=user.id, detail=scan.text[:300]))
+        db.flush()
+        text = scan.text
 
     llm = get_llm()
     if files:

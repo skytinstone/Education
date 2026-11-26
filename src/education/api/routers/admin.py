@@ -19,7 +19,7 @@ from education.api.deps import DB, FORCED_PREFIX, AdminUser, admin_user, is_admi
 from education.config import get_settings
 from education.db import models as m
 from education.db.session import session_factory
-from education.harness import prompts
+from education.harness import guardrails, prompts, review
 from education.harness.evals import runner as evals
 from education.services.llm import get_llm
 from education.services import accounts, audit, billing, item_stats, learning
@@ -501,8 +501,17 @@ def harness_overview(db: DB, days: int = Query(30, ge=1, le=180)) -> dict:
         versions.append({**v, "avg_cost_usd": v.pop("cost") / v["runs"], "avg_latency_ms": v.pop("latency") / v["runs"],
                          "first_at": v["first_at"].isoformat()})
     versions.sort(key=lambda v: v["first_at"], reverse=True)
+    week = _since_local(db, 7)
+    guard: dict = {}
+    for kind, flags in db.execute(select(m.GuardEvent.kind, m.GuardEvent.flags).where(m.GuardEvent.created_at >= week)):
+        for f in flags:
+            guard[f"{kind}:{f}"] = guard.get(f"{kind}:{f}", 0) + 1
+    policy = db.scalar(select(func.count()).select_from(m.AgentRun).where(
+        m.AgentRun.created_at >= week, m.AgentRun.output.like("규칙 위반%"))) or 0
     return {"harness_version": prompts.harness_version(), "models": prompts.models(), "prompts": prompts.versions(),
-            "days": days, "versions": versions}
+            "days": days, "versions": versions,
+            "guard": {"input_7d": guard, "policy_rejects_7d": policy, "breakers": guardrails.BREAKER.state()},
+            "review": review.counts(db)}
 
 
 @router.get("/runs")
@@ -574,12 +583,56 @@ def start_eval(db: DB, background: BackgroundTasks, open_session=Depends(session
                                                 m.EvalRun.created_at > func.now() - timedelta(minutes=30)))
     if running:
         return _eval_summary(running)
-    row = m.EvalRun(harness_version=prompts.harness_version(), mode="live", status="running", suites=["verify", "retrieval", "generate"],
+    row = m.EvalRun(harness_version=prompts.harness_version(), mode="live", status="running",
+                    suites=["verify", "retrieval", "generate", "reviewed"],
                     prompt_versions=prompts.versions(), models=prompts.models())
     db.add(row)
     db.commit()
     background.add_task(_run_eval_in_background, open_session, row.id)
     return _eval_summary(row)
+
+
+# ---------- 사람 검토 큐 ----------
+class ReviewDecision(BaseModel):
+    action: str = Field(pattern="^(keep|fix|hide)$")
+    answer: str | None = Field(None, max_length=20)
+    note: str = Field("", max_length=1000)
+
+
+def _review_out(it: m.ReviewItem, p: m.Problem, stats: m.ProblemStats | None, email: str | None) -> dict:
+    return {"id": str(it.id), "status": it.status, "source": it.source, "source_name": review.SOURCE_NAME.get(it.source, it.source),
+            "reason": it.reason, "note": it.note, "created_at": it.created_at.isoformat(),
+            "decided_at": it.decided_at.isoformat() if it.decided_at else None, "decided_by": email,
+            "answer_before": it.answer_before, "answer_after": it.answer_after,
+            "problem": {"id": p.id, "stem": p.stem, "choices": p.choices, "answer": p.answer, "solution": p.solution,
+                        "domain": p.domain, "source": p.source, "verification": p.verification,
+                        "concepts": [c.name for c in p.concepts]},
+            "stats": {"grade": stats.grade, "n": stats.n, "p": stats.p, "flags": stats.flags} if stats else None}
+
+
+@router.get("/review")
+def list_review(db: DB, status_: str = Query("open", alias="status", pattern="^(open|decided)$"), limit: int = Query(50, ge=1, le=200)) -> dict:
+    R = m.ReviewItem
+    q = (select(R, m.Problem, m.ProblemStats, m.User.email).join(m.Problem, m.Problem.id == R.problem_id)
+         .outerjoin(m.ProblemStats, m.ProblemStats.problem_id == R.problem_id).outerjoin(m.User, m.User.id == R.decided_by))
+    q = q.where(R.status == "open").order_by(R.created_at) if status_ == "open" else q.where(R.status != "open").order_by(R.decided_at.desc())
+    return {"counts": review.counts(db), "items": [_review_out(*row) for row in db.execute(q.limit(limit))]}
+
+
+@router.post("/review/{item_id}/decide")
+def decide_review(item_id: UUID, body: ReviewDecision, db: DB, request: Request, me: AdminUser) -> dict:
+    it = db.get(m.ReviewItem, item_id)
+    if it is None:
+        raise HTTPException(404, "검토 항목을 찾을 수 없어요")
+    try:
+        review.decide(db, it, me, body.action, answer=body.answer, note=body.note)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
+    audit.log_admin(db, request, me, f"review_{body.action}", None,
+                    f"문제 {it.problem_id} · {it.answer_before} → {it.answer_after or it.answer_before} · {body.note}")
+    db.commit()
+    p = db.get(m.Problem, it.problem_id)
+    return _review_out(it, p, db.get(m.ProblemStats, p.id), me.email)
 
 
 # ---------- 가입 전환 퍼널 · 주간 재방문 ----------

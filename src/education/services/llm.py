@@ -14,6 +14,7 @@ from typing import Generic, Protocol, TypeVar
 import openai
 from pydantic import BaseModel
 
+from education.harness.guardrails import BREAKER
 from education.config import get_settings
 
 T = TypeVar("T", bound=BaseModel)
@@ -81,6 +82,8 @@ class OpenAILLM:
 
     def structured(self, *, model: str, effort: str, instructions: str, prompt: str, schema: type[T],
                    max_output_tokens: int = 16000, files: list[Attachment] | None = None) -> LLMResult[T]:
+        if (left := BREAKER.allow(model)) is not None:
+            raise LLMError(f"AI 응답이 연속으로 실패해 잠시 쉬어요 ({int(left)}초 뒤 다시)")
         started = time.monotonic()
         content = prompt if not files else [
             {"role": "user", "content": [*(f.to_input() for f in files), {"type": "input_text", "text": prompt}]}]
@@ -90,7 +93,9 @@ class OpenAILLM:
                 reasoning={"effort": effort}, max_output_tokens=max_output_tokens, store=False,
             )
         except openai.APIError as e:
+            BREAKER.record(model, ok=False)  # 연속으로 실패하면 잠시 막는다 (harness/guardrails.py)
             raise LLMError(f"OpenAI 호출 실패: {type(e).__name__}: {e}") from e
+        BREAKER.record(model, ok=True)
         usage = Usage(model=model, latency_ms=int((time.monotonic() - started) * 1000))
         if res.usage:
             usage.input_tokens = res.usage.input_tokens

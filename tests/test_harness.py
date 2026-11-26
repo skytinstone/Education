@@ -52,14 +52,15 @@ def test_generation_runs_are_traced(db):
     assert {r.status for r in runs} == {"passed", "rejected"}
     ok = next(r for r in runs if r.status == "passed")
     assert ok.problem_id == report.accepted[0] and "요청: 치환적분 3점" in ok.input and "난이도 3" in ok.input
-    assert [s["name"] for s in ok.steps] == ["generate", "format_check", "verify"]
-    assert ok.steps[2]["data"]["verifier_answer"] == "1" and ok.steps[0]["tokens"]["in"] == 1000
+    assert [s["name"] for s in ok.steps] == ["generate", "format_check", "policy_check", "verify"]
+    assert ok.steps[3]["data"]["verifier_answer"] == "1" and ok.steps[0]["tokens"]["in"] == 1000
     assert float(ok.cost_usd) == pytest.approx(0.044) and ok.harness_version == prompts.harness_version()
     assert set(ok.prompt_versions) == {"generator.generator_instructions", "generator.verifier_instructions", "generator.repair_instructions"}
     bad = next(r for r in runs if r.status == "rejected")
     # 두 번 시도 — 두 번째 앞에 떨어진 이유를 생성 AI 에 알려 주는 자기 수정 단계
-    assert [s["name"] for s in bad.steps] == ["generate", "format_check", "verify", "self_correct", "generate", "format_check", "verify"]
-    assert not bad.steps[2]["ok"] and bad.output.startswith("정답 불일치")
+    assert [s["name"] for s in bad.steps] == ["generate", "format_check", "policy_check", "verify", "self_correct",
+                                              "generate", "format_check", "policy_check", "verify"]
+    assert not bad.steps[3]["ok"] and bad.output.startswith("정답 불일치")
 
 
 def test_tool_check_steps_are_traced(db, monkeypatch):
@@ -72,8 +73,8 @@ def test_tool_check_steps_are_traced(db, monkeypatch):
     report = generator.generate_problems(db, FakeLLM([good_problem()], [verdict("1")]), concept_id=SUBST, difficulty=3, count=1)
     run = db.scalars(select(m.AgentRun).where(m.AgentRun.problem_id == report.accepted[0])).one()
     names = [s["name"] for s in run.steps]
-    assert names == ["generate", "format_check", "verify", "tool:definite_integral", "math_check"]
-    assert run.steps[3]["data"]["result"].startswith("-1 + E") and "math_check.instructions" in run.prompt_versions
+    assert names == ["generate", "format_check", "policy_check", "verify", "tool:definite_integral", "math_check"]
+    assert run.steps[4]["data"]["result"].startswith("-1 + E") and "math_check.instructions" in run.prompt_versions
 
 
 def test_agent_runs_are_traced_and_admin_can_read(client, auth, db, monkeypatch, new_user):

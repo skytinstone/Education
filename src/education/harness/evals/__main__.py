@@ -19,7 +19,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--replay", type=Path)
     p.add_argument("--record", type=Path)
-    p.add_argument("--suite", action="append", choices=["verify", "retrieval", "generate"])
+    p.add_argument("--suite", action="append", choices=["verify", "retrieval", "generate", "reviewed"])
     a = p.parse_args()
     suites = tuple(a.suite or ["verify", "retrieval"])
     with SessionLocal() as db:

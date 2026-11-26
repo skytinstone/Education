@@ -787,3 +787,40 @@ class EvalRun(Base):
     latency_ms: Mapped[int | None]
     created_at: Mapped[datetime] = created_at()
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class GuardEvent(Base):
+    """가드레일에 걸린 일 (harness/guardrails.py) — 입력의 주입 시도 · 개인정보, 출력의 규칙 위반."""
+    __tablename__ = "guard_events"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    kind: Mapped[str] = mapped_column(String(12))  # input | output
+    flags: Mapped[list[str]] = mapped_column(ARRAY(String(60)))
+    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    detail: Mapped[str] = mapped_column(Text, server_default="")  # 앞부분만 (개인정보는 가린 글)
+    created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (Index("ix_guard_events_created", "created_at"),)
+
+
+class ReviewItem(Base):
+    """사람 검토 큐 (harness/review.py) — 신고 · 성적표 D등급/정답 의심 · 검산 실패 문제를 운영자가 판정한다.
+    판정한 문제는 평가 골든셋(reviewed)으로 자동으로 들어간다."""
+    __tablename__ = "review_items"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    problem_id: Mapped[str] = mapped_column(ForeignKey("problems.id", ondelete="CASCADE"), index=True)
+    source: Mapped[str] = mapped_column(String(16))  # report | item_stats | math_check
+    reason: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(8), server_default="open")  # open | keep | fix | hide
+    answer_before: Mapped[str | None] = mapped_column(Text)
+    answer_after: Mapped[str | None] = mapped_column(Text)
+    note: Mapped[str] = mapped_column(Text, server_default="")
+    decided_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (
+        CheckConstraint("status IN ('open', 'keep', 'fix', 'hide')", name="review_item_status"),
+        Index("uq_review_items_open", "problem_id", unique=True, postgresql_where=text("status = 'open'")),
+    )
