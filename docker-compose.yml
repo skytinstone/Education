@@ -3,7 +3,7 @@
 # 비밀번호는 .env 의 POSTGRES_PASSWORD (git 에 올리지 않음, .env.example 참고)
 services:
   db:
-    image: pgvector/pgvector:0.8.7-pg17  # postgres:17 + pgvector (RAG)
+    image: pgvector/pgvector:0.8.7-pg17-trixie  # postgres:17 + pgvector (RAG) — 원래 postgres:17 과 같은 Debian trixie (glibc 정렬 규칙이 같아야 함)
     container_name: eureka-db
     restart: unless-stopped
     environment:
