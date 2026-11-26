@@ -141,7 +141,7 @@
   });
 
   // 숫자가 0 에서 올라가며 바뀐다 (점수·정답률·D-day 등). 글자 맨 앞 숫자만
-  function countUp(root, sel = ".kpi b, .ws-kpis b, .xt-score > b, .exh-stats b, #goal-card .num b, .xt-stats b") {
+  function countUp(root, sel = ".kpi b, .ws-kpis b, .xt-score > b, .exh-stats b, .xt-stats b") {
     if (noMotion() || !root) return;
     $$(sel, root).forEach((el) => {
       const node = [...el.childNodes].find((n) => n.nodeType === 3 && /\d/.test(n.textContent));
@@ -689,29 +689,6 @@
     for (let d = startOfToday() - DAY; days.has(d); d -= DAY) n++;
     return n;
   }
-  function renderGoal() {
-    const done = Store.todayCount(), goal = Math.max(1, Store.state.user.dailyGoal || 20);
-    const r = 44, len = 2 * Math.PI * r, ratio = Math.min(1, done / goal);
-    const left = goal - done;
-    const streak = done ? Store.streak() : streakUntilYesterday();
-    const streakText = done
-      ? `${streak}일 연속 학습 중`
-      : streak ? `어제까지 ${streak}일 연속 · 오늘도 이어 가요` : "오늘 첫 문제로 연속 학습을 시작해요";
-    $("#goal-card").innerHTML = `
-      <h2>오늘 목표</h2>
-      <div class="ring" role="img" aria-label="오늘 ${goal}문제 중 ${done}문제 풀었어요">
-        <svg viewBox="0 0 100 100"><circle class="track" cx="50" cy="50" r="${r}" /><circle class="fill" cx="50" cy="50" r="${r}" stroke-dasharray="${len}" stroke-dashoffset="${len}" data-offset="${len * (1 - ratio)}" /></svg>
-        <div class="num"><b>${done}</b><small>/ ${goal}문제</small></div>
-      </div>
-      <div class="msg ${left <= 0 ? "done" : ""}">${left <= 0 ? "오늘 목표를 달성했어요!" : `목표까지 ${left}문제`}</div>
-      <span class="streak ${done ? "" : "off"}"><i data-lucide="flame"></i>${streakText}</span>`;
-    // 다음 프레임에 채워서 링이 차오르는 애니메이션
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const c = $("#goal-card .fill");
-      if (c) c.style.strokeDashoffset = c.dataset.offset;
-    }));
-  }
-
   // ---------- 오늘 할 일: 복습 시기 → 약점 → 암기 카드 → 목표 ----------
   const REVIEW_DAYS = [1, 3, 7]; // 서버 알림(services/reminders.py)과 같은 간격
   function renderTodo() {
@@ -778,11 +755,12 @@
   // ---------- 개념별 약점: 내 정답률 막대 + 다른 학습자 평균 눈금 (플래너 데이터가 있으면) ----------
   function renderWeak(plan = null) {
     const tone = (a) => (a < 0.6 ? "#D92D20" : a < 0.8 ? "#E8833A" : "#12833F");
-    let rows;
+    let rows = [];
     if (plan) {
       rows = plan.concepts.filter((c) => c.attempts > 0).sort((a, b) => a.accuracy - b.accuracy).slice(0, 4)
         .map((c) => ({ id: c.id, name: c.name, acc: c.accuracy, n: c.attempts, peer: c.peer_accuracy }));
-    } else {
+    }
+    if (!rows.length) {
       rows = Store.conceptStats().filter((s) => concept(s.conceptId)).slice(0, 4)
         .map((s) => ({ id: s.conceptId, name: concept(s.conceptId).name, acc: s.accuracy, n: s.attempts, peer: null }));
     }
@@ -810,13 +788,13 @@
     }
     const chips = [];
     if (weak) chips.push(["target", `${concept(weak.conceptId).name} 약점 3문제`, `${concept(weak.conceptId).name} 문제 3개 내줘`]);
-    if (open) chips.push(["rotate-ccw", `오답 ${open}문제 다시 풀기`, `오답노트에 있는 문제 ${Math.min(open, 5)}개 다시 풀게 해줘`]);
+    if (open) chips.push(["rotate-ccw", `오답 ${open}문제 다시 풀기`, "", "/notes"]);
     if (p) chips.push(["file-text", "시험지 만들기", ""]);
     if (chips.length < 3) chips.push(["pencil-line", "문제 풀기", "미적분 3점짜리 3문제 내줘"]);
     if (chips.length < 3) chips.push(["book-open", "개념 정리", ""]);
     const el = $("#actions");
     el.classList.add("sg-row");
-    el.innerHTML = chips.map(([icon, label, prompt]) => `<button type="button" class="action sg" data-prompt="${esc(prompt)}"><i data-lucide="${icon}"></i>${esc(label)}</button>`).join("");
+    el.innerHTML = chips.map(([icon, label, prompt, to]) => `<button type="button" class="action sg" data-prompt="${esc(prompt)}"${to ? ` data-go="${to}"` : ""}><i data-lucide="${icon}"></i>${esc(label)}</button>`).join("");
   }
 
   // ---------- 오늘의 플랜: 학습 플래너의 오늘 할 일 (서버 모드 · 시험 프로젝트가 있을 때) ----------
@@ -870,7 +848,9 @@
       stage.classList.toggle("moving", p > 0.002);
       // 쓸어내리는 중간에 가장 밝고, 다 내려가거나 처음 화면이면 꺼진다
       const glow = p <= 0.01 || p >= 0.99 ? 0 : Math.pow(Math.sin(Math.PI * p), 0.7);
-      $("#siri-edge").style.setProperty("--glow", glow.toFixed(3));
+      const edge = $("#siri-edge");
+      edge.style.setProperty("--glow", glow.toFixed(3));
+      edge.classList.toggle("on", glow > 0);
     };
     contentEl.addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(apply); } }, { passive: true });
     $("#scroll-cue").addEventListener("click", () => contentEl.scrollTo({ top: $("#dash").offsetTop - 12, behavior: reduce.matches ? "auto" : "smooth" }));
@@ -878,37 +858,7 @@
     contentEl.classList.toggle("home-snap", !route().parts.length);
   }
 
-  // ---------- 다가오는 시험 ----------
   const WEEKDAY = "일월화수목금토";
-  function renderExam() {
-    const upcoming = Store.state.projects
-      .map((p) => ({ p, n: daysLeft(p.examDate) }))
-      .filter((x) => x.n != null && x.n >= 0)
-      .sort((a, b) => a.n - b.n);
-    if (!upcoming.length) {
-      $("#exam-card").outerHTML = `
-        <article class="panel exam empty-exam" id="exam-card">
-          <h2>다가오는 시험</h2>
-          <p>시험 날짜가 있는 프로젝트를 만들면 D-day와 남은 오답을 여기서 챙겨 드려요.</p>
-          <button type="button" class="btn-ghost" data-wizard><i data-lucide="plus"></i>프로젝트 만들기</button>
-        </article>`;
-      return;
-    }
-    const { p, n } = upcoming[0];
-    const d = new Date(`${p.examDate}T00:00:00`);
-    const acc = Store.accuracy({ projectId: p.id });
-    const notes = Store.openNotes().filter((x) => x.projectId === p.id).length;
-    const next = upcoming[1];
-    $("#exam-card").outerHTML = `
-      <a class="panel exam" id="exam-card" href="#/project/${p.id}" style="--c:${n <= 14 ? "var(--warn)" : COLOR[projectDomain(p)]}">
-        <h2>다가오는 시험</h2>
-        <div class="dd">${ddayLabel(n)}</div>
-        <div class="name">${esc(p.name)}</div>
-        <div class="date">${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAY[d.getDay()]})${p.goal ? ` · 목표 ${esc(p.goal)}` : ""}</div>
-        <div class="facts"><span>정답률 <b>${pct(acc)}</b></span><span>남은 오답 <b>${notes}</b></span></div>
-        ${next ? `<div class="next">그다음 · ${esc(next.p.name)} ${ddayLabel(next.n)}</div>` : ""}
-      </a>`;
-  }
 
   // ---------- 학습 기록: 최근 20주 히트맵 + 이번 주 요약 ----------
   // 칸 하나 12px + 간격 3px. 들어가는 만큼 주를 보여 준다 (12~53주)
@@ -1041,6 +991,7 @@
   $("#actions").addEventListener("click", (e) => {
     const tile = e.target.closest(".action");
     if (!tile) return;
+    if (tile.dataset.go) return go(tile.dataset.go);
     const label = tile.textContent.trim();
     if (TILE_ROUTES[label]) return go(TILE_ROUTES[label]);
     if (label === "시험지 만들기") {
@@ -7568,7 +7519,7 @@
 
   // 무지개 도트: 홈에서는 입력창 중심, 다른 화면에서는 화면 위쪽 가운데
   const composerEl = $("#composer");
-  const homeText = [".hero h1", ".hero p", ".action"].flatMap((s) => $$(s));
+  const homeText = () => [".hero-badge:not([hidden])", ".hero h1", ".hero p", ".action"].flatMap((s) => $$(s));
   // 홈을 뺀 화면: 움직이는 배경 위에 사이드바 같은 흰색 컨테이너를 깔고 그 위에 글 (glass.css body.panel-view)
   // 홈은 입력창 주변으로 도트가 퍼지는 디자인이라 그대로 둔다
   const syncPanel = () => {
@@ -7586,7 +7537,7 @@
       const r = composerEl.getBoundingClientRect();
       return [r.left + r.width / 2, r.top + r.height / 2];
     },
-    clear: () => (home.hidden ? [] : homeText.map((el) => el.getBoundingClientRect())),
+    clear: () => (home.hidden ? [] : homeText().map((el) => el.getBoundingClientRect())),
     scrollY: () => contentEl.scrollTop,
   });
 })();

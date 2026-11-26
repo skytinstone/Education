@@ -253,7 +253,8 @@
 
   /* 아래로 쓸어내리는 동안 화면 가장자리가 시리처럼 빛난다 (--glow: 0~1, app.js) */
   @property --siri-a { syntax: "<angle>"; inherits: true; initial-value: 0deg; }
-  .siri-edge { position: fixed; inset: 0; z-index: 40; pointer-events: none; opacity: var(--glow, 0); --siri-a: 0deg; animation: siriSpin 2.6s linear infinite; }
+  .siri-edge { position: fixed; inset: 0; z-index: 40; pointer-events: none; opacity: var(--glow, 0); --siri-a: 0deg; visibility: hidden; }
+  .siri-edge.on { visibility: visible; animation: siriSpin 2.6s linear infinite; }
   .siri-edge::before, .siri-edge::after {
     content: ""; position: absolute; inset: 0; border-radius: 26px;
     background: conic-gradient(from var(--siri-a), #ff6ac1, #ffb86b, #ffe57a, #7cf2c8, #5ab8ff, #8f7bff, #ff6ac1);
