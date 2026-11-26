@@ -599,8 +599,11 @@
     const soon = planProject();
     const left = soon ? daysLeft(soon.examDate) : null;
     const near = left != null && left >= 0 && left <= 7;
-    $("#greeting").innerHTML = `안녕하세요${name ? `, <span class="nm">${esc(name)}</span>님` : ""}!<br><span class="gl2">${near ? "이제 시험이 얼마 남지 않았어요!" : "오늘은 어떤 것을 해볼까요?"}</span>`;
-    $("#hero-sub").textContent = near ? "끝까지 열심히 해서, 좋은 결과 얻도록 노력해봐요!" : "문제 요청, 풀이 질문, 사진 첨부까지 — 말하듯 물어보세요";
+    const l2 = !near ? "오늘은 어떤 것을 해볼까요?" : left === 0 ? "오늘이 바로 시험날이에요" : left === 1 ? "드디어 내일이 시험이에요" : `시험까지 ${left}일, 이제 마무리할 때예요`;
+    const sub = !near ? "문제 요청, 풀이 질문, 사진 첨부까지 — 말하듯 물어보세요"
+      : left === 0 ? "준비한 만큼 충분히 해낼 거예요. 끝까지 응원할게요!" : "새로운 것보다 약점과 오답을 다지는 게 가장 효과적이에요. 끝까지 함께할게요!";
+    $("#greeting").innerHTML = `안녕하세요${name ? `, <span class="nm">${esc(name)}</span>님` : ""}!<br><span class="gl2">${l2}</span>`;
+    $("#hero-sub").textContent = sub;
     $("#hero-sub").classList.toggle("cheer", near);
 
     renderOnboard();

@@ -49,9 +49,9 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     rag_duplicate_similarity: float = 0.95  # 같은 개념에 이만큼 비슷한 문제가 있으면 중복으로 버린다
     # 한 사람이 하루(서비스 시간대 기준)에 쓸 수 있는 AI — 비용(달러)과 호출 수 중 먼저 닿는 쪽. 0 이면 제한 없음. 운영자는 제외
-    ai_daily_limit_usd: float = 0.5   # 계정당 하루 AI 비용 (무료) — 0 이면 제한 없음
-    ai_daily_limit_calls: int = 150   # 계정당 하루 AI 호출 수 (무료)
-    ai_monthly_limit_usd: float = 1.5  # 계정당 한 달 AI 비용 (무료)
+    ai_daily_limit_usd: float = 0.0   # 계정당 하루 AI 비용 (무료) — 0 이면 제한 없음 (지금은 해제)
+    ai_daily_limit_calls: int = 0     # 계정당 하루 AI 호출 수 (무료) — 0 이면 제한 없음 (지금은 해제)
+    ai_monthly_limit_usd: float = 0.0  # 계정당 한 달 AI 비용 (무료) — 0 이면 제한 없음 (지금은 해제)
     ai_global_daily_limit_usd: float = 20.0  # 서비스 전체 하루 AI 비용 — 넘으면 운영자 빼고 모두 멈추고 메일 알림
 
     # 오류 추적 (Sentry). DSN 을 넣으면 서버 오류가 Sentry 로 모인다
