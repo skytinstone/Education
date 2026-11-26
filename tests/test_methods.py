@@ -66,3 +66,13 @@ def test_methods_too_few_fails(client, auth, monkeypatch):
     client.post("/api/attempts", json={"problem_id": PID, "answer": "1"}, headers=auth)
     r = client.post(f"/api/problems/{PID}/methods", headers=auth)
     assert r.status_code == 502 and "두 가지" in r.json()["detail"]
+
+
+def test_methods_are_committed(client, auth, db, monkeypatch):
+    """만든 풀이는 요청이 끝나기 전에 커밋돼야 한다 (안 하면 운영에서는 세션이 닫히며 사라진다)."""
+    use(monkeypatch, FakeLLM([Methods(methods=[method("정석"), method("빠르게")])]))
+    client.post("/api/attempts", json={"problem_id": PID, "answer": "1"}, headers=auth)
+    commits, real = [], db.commit
+    monkeypatch.setattr(db, "commit", lambda: (commits.append(1), real())[1])
+    assert client.post(f"/api/problems/{PID}/methods", headers=auth).status_code == 201
+    assert commits
