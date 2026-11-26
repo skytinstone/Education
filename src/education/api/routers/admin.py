@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from education.api.deps import DB, FORCED_PREFIX, AdminUser, admin_user, is_admin
 from education.config import get_settings
 from education.db import models as m
+from education.harness import prompts
 from education.services import accounts, audit, billing, item_stats, learning
 
 router = APIRouter(prefix="/admin", tags=["운영"], dependencies=[Depends(admin_user)])
@@ -472,6 +473,60 @@ def item_stats_refresh(db: DB) -> dict:
     out = item_stats.refresh(db)
     db.commit()
     return out
+
+
+# ---------- 하네스: AI 실행 기록 · 지시문 버전 ----------
+@router.get("/harness")
+def harness_overview(db: DB, days: int = Query(30, ge=1, le=180)) -> dict:
+    """지금 하네스 버전 · 지시문 버전 · 모델, 그리고 버전별 실행 결과 (통과율 · 평균 비용 · 평균 시간)."""
+    since = _since_local(db, days)
+    R = m.AgentRun
+    rows = db.execute(
+        select(R.harness_version, R.kind, R.status, func.count(), func.avg(R.cost_usd), func.avg(R.latency_ms), func.min(R.created_at))
+        .where(R.created_at >= since).group_by(R.harness_version, R.kind, R.status)).all()
+    by_version: dict = {}
+    for ver, kind, st, n, cost, ms, first in rows:
+        v = by_version.setdefault((ver, kind), {"harness_version": ver, "kind": kind, "runs": 0, "statuses": {}, "cost": 0.0,
+                                               "latency": 0.0, "first_at": first})
+        v["runs"] += n
+        v["statuses"][st] = n
+        v["cost"] += float(cost or 0) * n
+        v["latency"] += float(ms or 0) * n
+        v["first_at"] = min(v["first_at"], first)
+    versions = []
+    for v in by_version.values():
+        versions.append({**v, "avg_cost_usd": v.pop("cost") / v["runs"], "avg_latency_ms": v.pop("latency") / v["runs"],
+                         "first_at": v["first_at"].isoformat()})
+    versions.sort(key=lambda v: v["first_at"], reverse=True)
+    return {"harness_version": prompts.harness_version(), "models": prompts.models(), "prompts": prompts.versions(),
+            "days": days, "versions": versions}
+
+
+@router.get("/runs")
+def list_runs(db: DB, kind: str | None = None, status: str | None = None, limit: int = Query(50, ge=1, le=200)) -> list[dict]:
+    R = m.AgentRun
+    q = select(R, m.User.email).outerjoin(m.User, m.User.id == R.user_id).order_by(R.created_at.desc()).limit(limit)
+    if kind:
+        q = q.where(R.kind == kind)
+    if status:
+        q = q.where(R.status == status)
+    return [{"id": str(r.id), "kind": r.kind, "status": r.status, "email": email, "problem_id": r.problem_id,
+             "harness_version": r.harness_version, "input": r.input[:120], "output": r.output[:120],
+             "steps": len(r.steps), "tools": sum(1 for x in r.steps if x["name"].startswith("tool:")),
+             "cost_usd": float(r.cost_usd) if r.cost_usd is not None else None, "latency_ms": r.latency_ms,
+             "created_at": r.created_at.isoformat()} for r, email in db.execute(q)]
+
+
+@router.get("/runs/{run_id}")
+def get_run(run_id: UUID, db: DB) -> dict:
+    r = db.get(m.AgentRun, run_id)
+    if r is None:
+        raise HTTPException(404, "실행 기록을 찾을 수 없어요")
+    email = db.scalar(select(m.User.email).where(m.User.id == r.user_id)) if r.user_id else None
+    return {"id": str(r.id), "kind": r.kind, "status": r.status, "email": email, "problem_id": r.problem_id,
+            "harness_version": r.harness_version, "prompt_versions": r.prompt_versions, "input": r.input, "output": r.output,
+            "steps": r.steps, "cost_usd": float(r.cost_usd) if r.cost_usd is not None else None, "latency_ms": r.latency_ms,
+            "created_at": r.created_at.isoformat()}
 
 
 # ---------- 가입 전환 퍼널 · 주간 재방문 ----------

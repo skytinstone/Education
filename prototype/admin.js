@@ -115,7 +115,7 @@
   // ================= 운영 콘솔 (운영자 계정만) =================
   // #/(개요) · #/users[/id] · #/ai · #/logins · #/voc
   const FB_STATUS = { open: "접수", reviewing: "확인 중", resolved: "해결" };
-  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["revenue", "매출", "wallet"], ["ai", "AI 사용량", "cpu"], ["quality", "문제 품질", "gauge"], ["items", "문제 성적표", "clipboard-check"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"], ["actions", "관리 기록", "scroll-text"]];
+  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["revenue", "매출", "wallet"], ["ai", "AI 사용량", "cpu"], ["quality", "문제 품질", "gauge"], ["items", "문제 성적표", "clipboard-check"], ["runs", "AI 실행 기록", "activity"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"], ["actions", "관리 기록", "scroll-text"]];
   const METHOD_NAME = { password: "이메일", google: "Google", kakao: "카카오" };
   const PURPOSE_NAME = { generate: "문제 생성", verify: "문제 검증", note_generate: "개념 정리 생성", note_verify: "개념 정리 검증",
     course: "코스 만들기", extract: "기출·교재 분석", essay_grade: "서술형 채점", review: "풀이 확인", explain: "계산·설명 풀이", answer_key: "정답지 풀이", answer_verify: "정답지 검산",
@@ -138,6 +138,7 @@
     logins: { q: "", result: "all", method: "" },
     voc: { state: "open", kind: "", q: "", user_id: "" },
     items: { flag: "", grade: "" },
+    runs: { kind: "", status: "" },
   };
   const num = (n) => Number(n ?? 0).toLocaleString("ko-KR");
   const compact = (n) => new Intl.NumberFormat("ko-KR", { notation: "compact", maximumFractionDigits: 1 }).format(Number(n ?? 0));
@@ -170,6 +171,7 @@
 
   const TAB_DESC = { overview: "가입·이용 현황과 오늘 챙길 것", users: "회원 검색, 상세, 이용 정지·삭제", revenue: "월 구독 결제 매출 · 구독자 · AI 원가와 마진 (부가세·수수료·환율은 추정)", ai: "AI 호출 비용·토큰·실패",
     quality: "AI 가 만든 문제의 검산 통과율과 탈락 이유, 정답지 상태",
+    runs: "하네스 — AI 실행 한 번이 어떤 지시문 버전으로 어떤 단계(모델 · 도구 · 검사)를 거쳤는지",
     items: "학생 처음 풀이로 매긴 문제별 성적 — 학생 실력을 감안한 실제 난이도 · 변별도 · 보기 분석",
     logins: "로그인·가입 기록 (90일 보관)", voc: "의견·문제 신고 확인과 답변, 전체 공지",
     actions: "운영자가 한 조치 — 정지·해제·삭제·강제 로그아웃·VOC·공지 (누가 · 언제 · 누구에게)" };
@@ -195,6 +197,7 @@
       else if (tab === "ai") await adminAI(body);
       else if (tab === "quality") await adminQuality(body);
       else if (tab === "items") await adminItems(body);
+      else if (tab === "runs") await (id ? adminRun(body, id) : adminRuns(body));
       else if (tab === "logins") await adminLogins(body);
       else if (tab === "actions") await adminActions(body);
       else await adminVOC(body);
@@ -375,6 +378,85 @@
             <td>${choiceBar(x)}</td>
             <td>${x.flags.map((k) => `<span class="achip ${["neg_disc", "key_suspect"].includes(k) ? "bad" : "warn"}">${esc(r.flag_names[k] ?? k)}</span>`).join(" ") || '<span class="mini">—</span>'}</td></tr>`),
           total ? "조건에 맞는 문제가 없어요" : `아직 ${r.min_n}명 이상 푼 문제가 없어요. 풀이가 쌓이면 매일 아침 자동으로 매겨요`)}</section>`;
+    icons();
+  }
+
+  // ---------- 하네스: AI 실행 기록 ----------
+  const RUN_KIND = { generate: "문제 생성", agent: "대화 에이전트" };
+  const RUN_STATUS = { passed: ["통과", "ok"], rejected: ["탈락", "warn"], answered: ["답변", "ok"], failed: ["실패", "bad"] };
+  const STEP_NAME = { generate: "생성 AI", format_check: "형식 검사", verify: "검증 AI (독립 재풀이)", math_check: "검산 에이전트 판정",
+    duplicate_check: "RAG 중복 확인", agent: "대화 에이전트 답" };
+  const statusChip = (st) => { const [t, tone] = RUN_STATUS[st] ?? [st, ""]; return `<span class="achip ${tone}">${esc(t)}</span>`; };
+  const ms = (v) => (v == null ? "–" : v >= 1000 ? `${(v / 1000).toFixed(1)}초` : `${v}ms`);
+  const usd4 = (v) => (v == null ? "–" : `$${Number(v).toFixed(4)}`);
+
+  async function adminRuns(body) {
+    const f = adminState.runs;
+    const [h, runs] = await Promise.all([Store.adminGet("/harness", { days: 30 }),
+      Store.adminGet("/runs", { ...(f.kind && { kind: f.kind }), ...(f.status && { status: f.status }), limit: 80 })]);
+    if (!body.isConnected) return;
+    body.innerHTML = `
+      <div class="panel-row top"><p class="mini">AI 실행 한 번마다 <b>하네스 버전</b>(모든 지시문 버전 + 모델 설정의 해시)과 단계별 기록이 남아요.
+        지시문 파일(<code>harness/prompts/</code>)을 한 글자라도 바꾸면 버전이 바뀌어서, 버전끼리 결과를 비교할 수 있어요.</p></div>
+      <div class="kpis">
+        ${kpi("지금 하네스 버전", `<code>${esc(h.harness_version)}</code>`, `지시문 ${Object.keys(h.prompts).length}개`)}
+        ${kpi("생성 · 검증 모델", esc(h.models.generate.split("/")[0]), `검증 ${esc(h.models.verify)}`)}
+        ${kpi("대화 모델", esc(h.models.route.split("/")[0]), `임베딩 ${esc(h.models.embedding)}`)}
+      </div>
+      <section class="panel"><h3>버전별 결과 (최근 ${h.days}일)</h3>
+        ${table(["하네스 버전", "종류", "#실행", "결과", "#평균 비용", "#평균 시간", "처음 쓰인 때"], h.versions.map((v) => `
+          <tr><td><code>${esc(v.harness_version)}</code>${v.harness_version === h.harness_version ? ' <span class="achip ok">지금</span>' : ""}</td>
+            <td>${esc(RUN_KIND[v.kind] ?? v.kind)}</td><td class="n">${num(v.runs)}</td>
+            <td>${Object.entries(v.statuses).map(([st, n]) => `${statusChip(st)} ${num(n)}`).join(" ")}</td>
+            <td class="n">${usd4(v.avg_cost_usd)}</td><td class="n">${ms(Math.round(v.avg_latency_ms))}</td><td class="nowrap">${when(v.first_at)}</td></tr>`),
+          "아직 기록된 실행이 없어요")}</section>
+      <section class="panel"><h3>실행 기록</h3>
+        <div class="ichips">${Object.entries(RUN_KIND).map(([k, t]) => `<button type="button" class="itag ${f.kind === k ? "on" : ""}" data-rkind="${k}">${t}</button>`).join("")}
+          ${Object.entries(RUN_STATUS).map(([k, [t]]) => `<button type="button" class="itag ${f.status === k ? "on" : ""}" data-rstatus="${k}">${t}</button>`).join("")}</div>
+        ${table(["시각", "종류", "결과", "입력 → 결과", "#단계", "#도구", "#비용", "#시간"], runs.map((r) => `
+          <tr class="click" data-run="${r.id}"><td class="nowrap">${when(r.created_at)}<small>${esc(r.email ?? "")}</small></td>
+            <td>${esc(RUN_KIND[r.kind] ?? r.kind)}<small><code>${esc(r.harness_version)}</code></small></td><td>${statusChip(r.status)}</td>
+            <td class="istem">${esc(r.input)}<small>${esc(r.output)}</small></td>
+            <td class="n">${num(r.steps)}</td><td class="n">${num(r.tools)}</td><td class="n">${usd4(r.cost_usd)}</td><td class="n">${ms(r.latency_ms)}</td></tr>`),
+          "조건에 맞는 실행이 없어요")}</section>
+      <section class="panel"><h3>지시문 버전</h3>
+        ${table(["지시문", "버전"], Object.entries(h.prompts).map(([n, v]) => `<tr><td><code>${esc(n)}</code></td><td><code>${esc(v)}</code></td></tr>`), "")}</section>`;
+    icons();
+  }
+
+  async function adminRun(body, id) {
+    const r = await Store.adminGet(`/runs/${id}`);
+    if (!body.isConnected) return;
+    const stepRow = (s, i) => {
+      const tool = s.name.startsWith("tool:");
+      const title = tool ? `도구 · ${s.name.slice(5)}` : (STEP_NAME[s.name] ?? s.name);
+      const d = s.data ?? {};
+      const detail = tool ? `<code>${esc(JSON.stringify(d.args ?? {}))}</code> → <b>${esc(String(d.result ?? ""))}</b>`
+        : Object.entries(d).map(([k, v]) => `<span class="rk">${esc(k)}</span> ${esc(typeof v === "string" ? v : JSON.stringify(v))}`).join("<br>");
+      return `
+        <li class="rstep ${s.ok ? "ok" : "bad"} ${tool ? "tool" : ""}">
+          <span class="rdot">${i + 1}</span>
+          <div class="rbody">
+            <div class="rhead"><b>${esc(title)}</b>${s.ok ? "" : ' <span class="achip bad">실패</span>'}
+              <span class="rmeta">${s.model ? esc(s.model) + " · " : ""}${s.tokens ? `토큰 ${num(s.tokens.in)}/${num(s.tokens.out)} · ` : ""}${s.cost != null ? usd4(s.cost) + " · " : ""}${ms(s.ms)}</span></div>
+            ${detail ? `<div class="rdetail">${detail}</div>` : ""}
+            ${s.error ? `<div class="rdetail err-text">${esc(s.error)}</div>` : ""}
+          </div>
+        </li>`;
+    };
+    body.innerHTML = `
+      <p><a href="#/runs">← 실행 기록</a></p>
+      <div class="kpis">
+        ${kpi("결과", statusChip(r.status), esc(RUN_KIND[r.kind] ?? r.kind))}
+        ${kpi("하네스 버전", `<code>${esc(r.harness_version)}</code>`, when(r.created_at))}
+        ${kpi("비용", usd4(r.cost_usd), `단계 ${r.steps.length}개`)}
+        ${kpi("걸린 시간", ms(r.latency_ms), r.email ? esc(r.email) : "")}
+      </div>
+      <section class="panel"><h3>입력</h3><p class="rtext">${esc(r.input)}</p>
+        <h3>결과</h3><p class="rtext">${esc(r.output)}${r.problem_id ? ` · 문제 <code>${esc(r.problem_id)}</code>` : ""}</p></section>
+      <section class="panel"><h3>단계별 타임라인</h3><ol class="rtimeline">${r.steps.map(stepRow).join("")}</ol></section>
+      <section class="panel"><h3>이 실행에 쓴 지시문</h3>
+        ${table(["지시문", "버전"], Object.entries(r.prompt_versions).map(([n, v]) => `<tr><td><code>${esc(n)}</code></td><td><code>${esc(v)}</code></td></tr>`), "")}</section>`;
     icons();
   }
 
@@ -648,6 +730,9 @@
     if ((x = el("[data-revdays]"))) { adminState.revDays = Number(x.dataset.revdays); return rerender(tab); }
     if (el("[data-revtest]")) { adminState.revTest = !adminState.revTest; return rerender(tab); }
     if ((x = el("[data-aidays]"))) { adminState.aiDays = Number(x.dataset.aidays); return rerender(tab); }
+    if ((x = el("[data-run]"))) { location.hash = `#/runs/${x.dataset.run}`; return; }
+    if ((x = el("[data-rkind]"))) { adminState.runs.kind = adminState.runs.kind === x.dataset.rkind ? "" : x.dataset.rkind; return rerender(tab); }
+    if ((x = el("[data-rstatus]"))) { adminState.runs.status = adminState.runs.status === x.dataset.rstatus ? "" : x.dataset.rstatus; return rerender(tab); }
     if ((x = el("[data-igrade]"))) { adminState.items.grade = adminState.items.grade === x.dataset.igrade ? "" : x.dataset.igrade; return rerender(tab); }
     if ((x = el("[data-iflag]"))) { adminState.items.flag = adminState.items.flag === x.dataset.iflag ? "" : x.dataset.iflag; return rerender(tab); }
     if ((x = el("[data-irefresh]"))) {

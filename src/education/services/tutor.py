@@ -15,6 +15,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from education.ai import tutor_agent
+from education.harness.trace import Trace
 from education.config import get_settings
 from education.db import models as m
 from education.schemas import Domain, VerificationStatus
@@ -147,20 +148,26 @@ def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
 def _agent_reply(db: Session, user: m.User, project: m.Project | None, session: m.ChatSession | None, text: str) -> Reply | None:
     """대화 에이전트 (ai/tutor_agent.py). 실패하면 None."""
     model = get_settings().openai_model_route
+    run = Trace("agent", prompts_used=["tutor_agent.instructions"], user=user,
+                input=(f"[{project.name}] " if project else "") + text)
     try:
-        out, u, used = tutor_agent.run(db, user, project, text, history=intent.history_text(db, user, session))
+        out, u, messages = tutor_agent.run(db, user, project, text, history=intent.history_text(db, user, session))
     except LLMError as e:
         log.warning("대화 에이전트 실패: %s", e)
         db.add(m.LLMCall(purpose="agent", model=model, ok=False, error=str(e)[:500], user_id=user.id))
+        run.step("agent", model=model, error=str(e))
+        run.save(db, status="failed", output="에이전트 실패 → 한 번 답으로")
         db.flush()
         return None
+    run.tool_steps(messages)
+    run.step("agent", usage=u, data={"suggestions": out.suggestions, "start_exam": out.start_exam})
+    run.save(db, status="answered", output=out.reply)
     db.add(m.LLMCall(purpose="agent", model=u.model, ok=True, user_id=user.id, cost_usd=u.cost_usd,
                      input_tokens=u.input_tokens, cached_tokens=u.cached_tokens, output_tokens=u.output_tokens,
                      reasoning_tokens=u.reasoning_tokens, latency_ms=u.latency_ms))
     db.flush()
     if out.start_exam:
         return exam_reply(db, user, project, session)
-    log.info("대화 에이전트 도구: %s", ", ".join(used) or "없음")
     return Reply(out.reply.strip() or "무엇을 도와드릴까요?", intent="agent", suggestions=out.suggestions)
 
 
