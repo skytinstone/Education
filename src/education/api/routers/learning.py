@@ -226,9 +226,12 @@ def create_methods(problem_id: str, user: CurrentUser, db: DB) -> dict:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 아직 설정되지 않았어요")
     quota.check(db, user)
     try:
-        return solutions.create(db, llm, user, p)
+        content = solutions.create(db, llm, user, p)
     except solutions.MethodsError as e:
+        db.commit()  # 실패한 호출 기록(비용)은 남긴다
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"다른 풀이를 만들지 못했어요. 잠시 후 다시 시도해 주세요 ({e})") from None
+    db.commit()  # 만든 풀이를 저장해야 다음 사람은 AI 를 부르지 않는다
+    return content
 
 
 @router.post("/attempts", tags=["문제"], status_code=status.HTTP_201_CREATED)
