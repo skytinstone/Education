@@ -682,3 +682,37 @@ class SavedProblem(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     problem_id: Mapped[str] = mapped_column(ForeignKey("problems.id", ondelete="CASCADE"), primary_key=True)
     created_at: Mapped[datetime] = created_at()
+
+
+# ---------- AI 학습 플래너 · Deep Dive ----------
+class StudyPlan(Base):
+    """프로젝트(시험) 하나의 학습 계획 (services/planner.py). 분석은 매번 새로 계산하고, 여기에는 AI 검토와 체크한 할 일만 둔다."""
+    __tablename__ = "study_plans"
+
+    project_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("projects.id", ondelete="CASCADE"), primary_key=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    review: Mapped[dict | None] = mapped_column(JSONB)  # AI 검토 {headline, diagnosis, phases, today_focus, advice, feedback_reply}
+    feedback: Mapped[str] = mapped_column(Text, server_default="")  # 마지막으로 남긴 계획 피드백
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    done: Mapped[dict] = mapped_column(JSONB, server_default="{}")  # {"2026-11-26": ["lesson:개념id", ...]} — 오늘 것만 남긴다
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class DeepDive(Base):
+    """한 문제를 작은 질문으로 쪼개 다시 따라가는 Deep Dive (services/deepdive.py). 내 답을 보고 만들기 때문에 사람마다 따로."""
+    __tablename__ = "deep_dives"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    problem_id: Mapped[str] = mapped_column(ForeignKey("problems.id", ondelete="CASCADE"))
+    content: Mapped[dict] = mapped_column(JSONB)  # {diagnosis, steps: [{question, choices, answer, hint, explain}], takeaway}
+    answers: Mapped[list] = mapped_column(JSONB, server_default="[]")  # 단계마다 처음 고른 보기 번호
+    feedback: Mapped[str | None] = mapped_column(String(12))  # understood | confused
+    rounds: Mapped[int] = mapped_column(SmallInteger, server_default="1")  # '더 잘게 다시' 로 몇 번 만들었는지
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "problem_id", name="uq_deep_dive_user_problem"),
+        CheckConstraint("feedback IN ('understood', 'confused')", name="deep_dive_feedback"),
+    )
