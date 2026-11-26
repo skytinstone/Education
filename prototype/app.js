@@ -605,7 +605,7 @@
       : left === 1 ? `드디어 내일이 시험이에요. 오늘 ${slot}엔 가볍게 정리해 볼까요?`
       : near ? `시험까지 ${left === 7 ? "일주일" : `${left}일`}, 오늘 ${slot}엔 무엇을 해볼까요?`
       : `오늘 ${slot}엔 무엇을 해볼까요?`;
-    $("#greeting").innerHTML = name ? `${hello},<br><span class="nm">${esc(name)}</span>님` : `${hello}!`;
+    $("#greeting").innerHTML = name ? `어서와요 <span class="nm">${esc(name)}</span>님,<br>${hello}` : `어서와요,<br>${hello}`;
     $("#hero-sub").textContent = sub;
 
     renderOnboard();
@@ -781,10 +781,10 @@
 
   // 시간대 인사와 그 시간대를 부르는 말 (서비스 시간 = 브라우저 시간)
   function timeGreeting(h) {
-    if (h >= 5 && h < 11) return ["좋은 아침이에요", "아침"];
-    if (h >= 11 && h < 17) return ["좋은 오후예요", "오후"];
-    if (h >= 17 && h < 22) return ["좋은 저녁이에요", "저녁"];
-    return ["늦은 밤까지 수고 많아요", "밤"];
+    if (h >= 5 && h < 11) return ["좋은 아침이에요!", "아침"];
+    if (h >= 11 && h < 17) return ["좋은 오후예요!", "오후"];
+    if (h >= 17 && h < 22) return ["좋은 저녁이에요!", "저녁"];
+    return ["늦은 밤까지 수고가 많아요!", "밤"];
   }
 
   // ---------- 첫 화면 추천 칩 + D-day · 시험 · 연속 학습 칩 ----------
