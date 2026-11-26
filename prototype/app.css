@@ -1678,3 +1678,8 @@ body.work-full-open { overflow: hidden; }
   .pl-tact { width: 100%; justify-content: flex-end; }
   .dv-choices, .dv-hint, .dv-explain { margin-left: 0; }
 }
+.pl-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.pl-switch { max-width: 100%; min-height: 36px; font-size: 13.5px; }
+.pl-none { max-width: 560px; margin: 48px auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.pl-none h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.35; word-break: keep-all; }
+.pl-none p { font-size: 14px; color: var(--ink-2); line-height: 1.6; word-break: keep-all; }

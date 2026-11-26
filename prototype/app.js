@@ -351,7 +351,6 @@
     const [page, id] = route().parts;
     if (!page) return "home";
     if (page === "chat" || page === "project") return `${page}:${id}`;
-    if (page === "plan") return `project:${id}`;
     return page;
   }
 
@@ -717,6 +716,11 @@
     const left = (st.user.dailyGoal || 20) - Store.todayCount();
 
     const items = [];
+    const planP = Store.mode === "api" && planProject();
+    if (planP) {
+      const n = daysLeft(planP.examDate);
+      items.push({ href: `#/plan/${planP.id}`, icon: "calendar-check", c: "var(--accent)", title: `AI 학습 플래너${n != null && n >= 0 ? ` · ${ddayLabel(n)}` : ""}`, meta: `${planP.name} · 오늘 할 일과 약점 분석` });
+    }
     if (due.length) items.push({ href: "#/notes", icon: "rotate-ccw", c: "var(--warn)", title: `복습할 오답 ${due.length}문제`, meta: "틀린 지 1·3·7일째 — 지금 다시 풀면 오래 기억돼요" });
     else if (open.length) items.push({ href: "#/notes", icon: "circle-x", c: "var(--warn)", title: `아직 안 푼 오답 ${open.length}문제`, meta: "맞히면 오답노트에서 졸업해요" });
     if (weak) {
@@ -1321,7 +1325,27 @@
   const PLAN_STATUS = { weak: ["약점", "weak"], mid: ["보통", "mid"], good: ["강점", "good"], few: ["기록 적음", "new"], untouched: ["아직 안 봄", "new"] };
   const TASK_ICON = { lesson: "book-open", practice: "pencil-line", review: "rotate-ccw", deepdive: "scan-search" };
 
+  // 플래너를 볼 프로젝트 — 다가오는 시험 중 가장 가까운 것, 없으면 고정 · 최근 프로젝트
+  function planProject() {
+    const ps = Store.state.projects;
+    const soon = ps.map((p) => ({ p, n: daysLeft(p.examDate) })).filter((x) => x.n != null && x.n >= 0).sort((a, b) => a.n - b.n);
+    return soon[0]?.p ?? [...ps].sort((a, b) => (b.pinned - a.pinned) || (b.createdAt - a.createdAt))[0] ?? null;
+  }
+
   async function renderPlan(id) {
+    if (!id) {
+      const pick = planProject();
+      if (pick) return location.replace(`#/plan/${pick.id}`);
+      view.innerHTML = `
+        <section class="pl-none">
+          <span class="pl-eyebrow"><i data-lucide="calendar-check"></i>AI 학습 플래너</span>
+          <h1>시험 프로젝트를 만들면<br />남은 기간에 맞춰 계획을 짜 드려요</h1>
+          <p>과목 · 범위 · 시험일을 정하면 개념별 정답률과 다른 학습자 평균으로 오늘 할 일을 정해요.</p>
+          <button type="button" class="btn-primary" data-wizard><i data-lucide="plus"></i>프로젝트 만들기</button>
+        </section>`;
+      view.onclick = (e) => { if (e.target.closest("[data-wizard]")) projectWizard(); };
+      return;
+    }
     const p = Store.project(id);
     if (!p) { toast("프로젝트를 찾을 수 없어요"); return go("/"); }
     if (Store.mode !== "api") {
@@ -1430,7 +1454,12 @@
     const concepts = st.all ? d.concepts : d.concepts.slice(0, 8);
     const done = d.tasks.filter((t) => t.done).length;
     box.innerHTML = `
-      <a class="ak-back" href="#/project/${id}"><i data-lucide="arrow-left"></i>${esc(p.name)}</a>
+      <div class="pl-bar">
+        <a class="ak-back" href="#/project/${id}"><i data-lucide="folder"></i>프로젝트 열기</a>
+        ${Store.state.projects.length > 1 ? `<select class="select pl-switch" data-plan-switch aria-label="플래너를 볼 프로젝트">
+          ${Store.state.projects.map((x) => `<option value="${x.id}" ${x.id === id ? "selected" : ""}>${esc(x.name)}${daysLeft(x.examDate) != null && daysLeft(x.examDate) >= 0 ? ` · ${ddayLabel(daysLeft(x.examDate))}` : ""}</option>`).join("")}
+        </select>` : ""}
+      </div>
       <header class="pl-head">
         <div>
           <span class="pl-eyebrow"><i data-lucide="calendar-check"></i>AI 학습 플래너</span>
@@ -1497,6 +1526,7 @@
       }
     };
     box.oninput = (e) => { if (e.target.id === "pl-fb") st.draft = e.target.value; };
+    box.onchange = (e) => { if (e.target.matches("[data-plan-switch]")) go(`/plan/${e.target.value}`); };
   }
 
   // ================= 문제 Deep Dive =================
