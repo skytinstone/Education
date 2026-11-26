@@ -24,6 +24,8 @@ PRICES: dict[str, tuple[float, float]] = {
     "gpt-6-astra": (10.0, 50.0),
     "gpt-6.1-sol": (2.0, 10.0),
     "gpt-6-luna": (0.10, 0.50),
+    "text-embedding-3-small": (0.02, 0.0),  # 임베딩 (RAG) — 입력 토큰만
+    "text-embedding-3-large": (0.13, 0.0),
 }
 
 

@@ -26,6 +26,7 @@ from education.concepts import load_template_courses
 from education.config import get_settings
 from education.db import models as m
 from education.schemas import ProblemSource, ProblemType, VerificationStatus
+from education.ai import math_check, rag
 from education.services import item_stats, learning
 from education.services.llm import LLM, LLMError, Usage
 
@@ -336,8 +337,9 @@ FORMATS = {
 }
 
 
-def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multiple_choice", choice_count: int = 5) -> Candidate:
-    """문제 하나: 생성 → 형식 검사 → 독립 검증. 실패하면 max_attempts 까지 다시 만든다."""
+def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multiple_choice", choice_count: int = 5,
+         tool_check: bool = False) -> Candidate:
+    """문제 하나: 생성 → 형식 검사 → 독립 검증 → (수학·물리) 계산 도구 검산. 실패하면 max_attempts 까지 다시 만든다."""
     s = get_settings()
     gen_schema, ver_schema, describe, question_of, agrees = FORMATS[question_type]
     prompt = f"{prompt}\n문제 형태: {describe(choice_count)}"
@@ -372,9 +374,35 @@ def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multipl
         elif not agrees(problem, verdict):
             got = getattr(verdict, "answer", "모범 답안 오류")
             last = Candidate(problem, verdict, f"정답 불일치: 출제 {getattr(problem, 'answer', '')}, 검증 {got}", calls)
+        elif tool_check and (why := _tool_check(problem, question, calls)):
+            last = Candidate(problem, verdict, why, calls)
         else:
             return Candidate(problem, verdict, None, calls)
     return last
+
+
+def _answer_for_check(problem) -> str:
+    answer, _ = _answer_fields(problem)
+    choices = getattr(problem, "choices", None)
+    if choices and answer.isdigit() and 1 <= int(answer) <= len(choices):
+        return f"{answer}번 ({choices[int(answer) - 1]})"
+    return answer
+
+
+def _tool_check(problem, question: str, calls: list[CallLog]) -> str | None:
+    """계산 도구 검산 (ai/math_check.py). 다르면 버릴 이유를, 같거나 확인할 수 없거나 검산이 실패하면 None."""
+    if isinstance(problem, GeneratedEssay):
+        return None
+    s = get_settings()
+    try:
+        res, usage = math_check.check(question, _answer_for_check(problem))
+    except LLMError as e:
+        calls.append(CallLog("math_check", None, s.openai_model_verify, str(e)))
+        return None  # 검산이 실패해도 문제를 막지 않는다 (이미 독립 재풀이 검증을 통과)
+    calls.append(CallLog("math_check", usage, s.openai_model_verify))
+    if res.checkable and not res.agrees:
+        return f"검산 불일치: 계산 {res.computed or '?'} — {res.reason[:120]}"
+    return None
 
 
 @dataclass
@@ -426,15 +454,26 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
                       user: m.User | None = None, question_type: str = "multiple_choice",
                       exemplars: list[m.Problem] | None = None, owner: m.User | None = None,
                       textbook: str | None = None, formats: list[str] | None = None,
-                      choice_count: int | None = None) -> GenerationReport:
+                      choice_count: int | None = None, request: str | None = None) -> GenerationReport:
     """question_type: multiple_choice · short_answer · mixed(번갈아).
     exemplars: 본보기로 삼을 기출 문제. owner: 만든 문제를 그 사용자만 보게 할 때 (기출 기반 문제).
     textbook: 학생이 공부하는 교재 — 그 교재의 단원 구성·문제 유형·난이도 결을 따르게 한다 (문제를 베끼지는 않음).
-    formats·choice_count: 코스 대신 쓸 문제 형식·보기 개수 (기출 기반 문제는 올린 기출을 따른다 — past_format)."""
+    formats·choice_count: 코스 대신 쓸 문제 형식·보기 개수 (기출 기반 문제는 올린 기출을 따른다 — past_format).
+    request: 학생이 실제로 한 요청 — RAG 로 본보기를 고를 때 검색어로 쓴다 (없으면 개념 이름·난이도)."""
     concept = db.get(m.Concept, concept_id)
     if concept is None or concept.level != "concept":
         raise ValueError(f"개념이 아님: {concept_id}")
     s = get_settings()
+    query = request or f"{concept.name} · 난이도 {difficulty} ({DIFFICULTY_GUIDE[difficulty]})"
+    references: list[m.Problem] = []
+    if exemplars and len(exemplars) > 3:  # 올린 기출이 많으면 요청과 의미가 가장 가까운 것부터
+        rag.index(db, exemplars)
+        if (vec := rag.embed(db, [query], user=user)):
+            ranked = rag.similar(db, vec[0], user=owner or user, k=3, verified_only=False, only=[e.id for e in exemplars])
+            if ranked:
+                exemplars = [h.problem for h in ranked]
+    elif not exemplars:  # 기출이 없으면 같은 개념의 검증된 좋은 문제(성적표 C·D 제외)를 참고 문제로
+        references = [h.problem for h in rag.search(db, user, query, concept_id=concept_id, k=3, good_only=True)]
     recent = list(db.scalars(
         select(m.Problem.stem).join(m.ProblemConcept).where(m.ProblemConcept.concept_id == concept_id)
         .order_by(m.Problem.created_at.desc()).limit(5)))
@@ -443,7 +482,10 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
                  "교재에 실린 문제를 그대로 옮기지 말고 새로 만든다" if textbook else "")
               + ("\n이미 있는 문제 (겹치지 않게):\n" + "\n".join(f"- {r[:120]}" for r in recent) if recent else "")
               + ("\n\n참고할 기출 문제 (이 결을 따르되 베끼지 말 것 · 수준과 표기는 코스보다 기출을 따른다):\n\n"
-                 + "\n\n---\n\n".join(_exemplar_text(e) for e in exemplars[:3]) if exemplars else ""))
+                 + "\n\n---\n\n".join(_exemplar_text(e) for e in exemplars[:3]) if exemplars else "")
+              + ("\n\n잘 만들어진 기존 문제 (비슷한 요청으로 찾은 것 — 형식·수준·함정의 결만 참고하고 새로 만들 것):\n\n"
+                 + "\n\n---\n\n".join(_exemplar_text(e) for e in references) if references else ""))
+    tool_check = math_check.enabled(concept.domain)
     # 실제 학생 풀이로 본 기존 문제 성적 — 난이도 보정 · 잘 먹힌 함정 · 죽은 보기 · 모호했던 문제
     if feedback := item_stats.concept_feedback(db, concept_id):
         prompt += "\n\n" + feedback
@@ -460,10 +502,21 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
 
     # 문제마다 독립적이라 동시에 만든다 (DB 기록은 아래에서 한 스레드로)
     with ThreadPoolExecutor(max_workers=min(count, 4)) as pool:
-        candidates = list(pool.map(lambda i: (_one(llm, prompt, s.ai_max_attempts, types[i % len(types)], choice_count),
+        candidates = list(pool.map(lambda i: (_one(llm, prompt, s.ai_max_attempts, types[i % len(types)], choice_count, tool_check),
                                               types[i % len(types)]), range(count)))
 
+    # RAG 중복 확인 — 검증을 통과한 새 문제가 같은 개념의 기존 문제와 의미상 거의 같으면 버린다
+    passed = [c for c, _ in candidates if c.problem is not None and c.reason is None]
+    vectors = rag.embed(db, [c.problem.stem + "\n" + " / ".join(getattr(c.problem, "choices", None) or []) for c in passed], user=user) or []
+    vec_of: dict[int, list[float]] = {}
+    for c, v, dup in zip(passed, vectors, rag.duplicates(db, vectors, concept_id=concept_id, user=owner or user) if vectors else []):
+        if dup is not None:
+            c.reason = f"중복: 기존 문제와 거의 같아요 (유사도 {dup.similarity:.2f})"
+        else:
+            vec_of[id(c)] = v
+
     report = GenerationReport(accepted=[], rejected=[], reasons=[], cost_usd=0.0)
+    new_index: list[tuple[str, list[float]]] = []
     for cand, qtype in candidates:
         pid = None
         if cand.problem is not None and not format_issues(cand.problem, choice_count):
@@ -480,6 +533,7 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
                     "generate_model": s.openai_model_generate, "verify_model": s.openai_model_verify,
                     "verifier_answer": str(getattr(cand.verdict, "answer", "")) if cand.verdict else None,
                     "exemplar_ids": [e.id for e in exemplars[:3]] if exemplars else [],
+                    "reference_ids": [r.id for r in references],
                     "verifier_issues": cand.verdict.issues if cand.verdict else [],
                     "verifier_work": cand.verdict.work if cand.verdict else None,
                     "reject_reason": cand.reason,
@@ -488,6 +542,8 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
             db.flush()
             db.add(m.ProblemConcept(problem_id=pid, concept_id=concept_id))
             (report.accepted if ok else report.rejected).append(pid)
+            if ok and id(cand) in vec_of:
+                new_index.append((pid, vec_of[id(cand)]))
         if cand.reason:
             report.reasons.append(cand.reason)
         for c in cand.calls:
@@ -500,5 +556,7 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
                     "output_tokens": c.usage.output_tokens, "reasoning_tokens": c.usage.reasoning_tokens,
                     "latency_ms": c.usage.latency_ms} if c.usage else {}),
             ))
+    if new_index:  # 새로 통과한 문제는 바로 검색에 잡히게
+        rag.index(db, [db.get(m.Problem, pid) for pid, _ in new_index], vectors=[v for _, v in new_index])
     db.commit()
     return report

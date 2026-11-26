@@ -119,7 +119,8 @@
   const METHOD_NAME = { password: "이메일", google: "Google", kakao: "카카오" };
   const PURPOSE_NAME = { generate: "문제 생성", verify: "문제 검증", note_generate: "개념 정리 생성", note_verify: "개념 정리 검증",
     course: "코스 만들기", extract: "기출·교재 분석", essay_grade: "서술형 채점", review: "풀이 확인", explain: "계산·설명 풀이", answer_key: "정답지 풀이", answer_verify: "정답지 검산",
-    methods: "다른 풀이", plan: "학습 계획 검토", deep_dive: "Deep Dive" };
+    methods: "다른 풀이", plan: "학습 계획 검토", deep_dive: "Deep Dive", math_check: "계산 도구 검산 (에이전트)", embed: "임베딩 (RAG)",
+    agent: "대화 에이전트 (도구)", route: "대화 의도 판단" };
   // 접속 상태
   const PAGE_NAME = { home: "홈", chat: "대화", project: "프로젝트", notes: "오답노트", library: "라이브러리", settings: "설정",
     "answer-key": "정답지", exam: "시험", admin: "운영 콘솔" };

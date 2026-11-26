@@ -28,6 +28,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -732,3 +733,17 @@ class ProblemStats(Base):
     flags: Mapped[list[str]] = mapped_column(ARRAY(String(20)), server_default="{}")
     grade: Mapped[str] = mapped_column(String(1))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class ProblemEmbedding(Base):
+    """문제 임베딩 (RAG · ai/rag.py) — 비슷한 문제 검색(본보기 · 중복 확인 · 대화 에이전트의 문제 검색).
+    누가 볼 수 있는지·개념은 problems 와 조인해서 거른다 (임베딩만으로는 아무것도 보여 주지 않음)."""
+    __tablename__ = "problem_embeddings"
+
+    problem_id: Mapped[str] = mapped_column(ForeignKey("problems.id", ondelete="CASCADE"), primary_key=True)
+    embedding: Mapped[list[float]] = mapped_column(Vector(1536))
+    model: Mapped[str] = mapped_column(String(40))
+    created_at: Mapped[datetime] = created_at()
+
+    __table_args__ = (Index("ix_problem_embeddings_hnsw", "embedding", postgresql_using="hnsw",
+                            postgresql_ops={"embedding": "vector_cosine_ops"}),)

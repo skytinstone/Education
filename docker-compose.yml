@@ -3,7 +3,7 @@
 # 비밀번호는 .env 의 POSTGRES_PASSWORD (git 에 올리지 않음, .env.example 참고)
 services:
   db:
-    image: postgres:17
+    image: pgvector/pgvector:0.8.7-pg17  # postgres:17 + pgvector (RAG)
     container_name: eureka-db
     restart: unless-stopped
     environment:
