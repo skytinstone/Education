@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import DateTime, Select, distinct, func, literal, or_, select, text, union
 from sqlalchemy.orm import Session
@@ -18,7 +18,10 @@ from sqlalchemy.orm import Session
 from education.api.deps import DB, FORCED_PREFIX, AdminUser, admin_user, is_admin
 from education.config import get_settings
 from education.db import models as m
+from education.db.session import session_factory
 from education.harness import prompts
+from education.harness.evals import runner as evals
+from education.services.llm import get_llm
 from education.services import accounts, audit, billing, item_stats, learning
 
 router = APIRouter(prefix="/admin", tags=["운영"], dependencies=[Depends(admin_user)])
@@ -527,6 +530,56 @@ def get_run(run_id: UUID, db: DB) -> dict:
             "harness_version": r.harness_version, "prompt_versions": r.prompt_versions, "input": r.input, "output": r.output,
             "steps": r.steps, "cost_usd": float(r.cost_usd) if r.cost_usd is not None else None, "latency_ms": r.latency_ms,
             "created_at": r.created_at.isoformat()}
+
+
+# ---------- 하네스 평가 (골든셋 점수판) ----------
+def _eval_summary(r: m.EvalRun) -> dict:
+    return {"id": str(r.id), "harness_version": r.harness_version, "mode": r.mode, "status": r.status, "suites": r.suites,
+            "metrics": r.metrics, "error": r.error, "cost_usd": float(r.cost_usd) if r.cost_usd is not None else None,
+            "latency_ms": r.latency_ms, "created_at": r.created_at.isoformat()}
+
+
+@router.get("/evals")
+def list_evals(db: DB, limit: int = Query(30, ge=1, le=100)) -> list[dict]:
+    return [_eval_summary(r) for r in db.scalars(select(m.EvalRun).order_by(m.EvalRun.created_at.desc()).limit(limit))]
+
+
+@router.get("/evals/{eval_id}")
+def get_eval(eval_id: UUID, db: DB) -> dict:
+    r = db.get(m.EvalRun, eval_id)
+    if r is None:
+        raise HTTPException(404, "평가 기록을 찾을 수 없어요")
+    return {**_eval_summary(r), "cases": r.cases, "prompt_versions": r.prompt_versions, "models": r.models}
+
+
+def _run_eval_in_background(open_session, eval_id: UUID) -> None:
+    with open_session() as db:
+        row = db.get(m.EvalRun, eval_id)
+        try:
+            evals.run(db, llm=get_llm(), mode="live", eval_run=row)
+        except Exception as e:  # 평가가 실패해도 기록은 남긴다
+            db.rollback()
+            row = db.get(m.EvalRun, eval_id)
+            row.status, row.error = "failed", f"{type(e).__name__}: {e}"[:1000]
+        db.commit()
+
+
+@router.post("/evals/run", status_code=status.HTTP_202_ACCEPTED)
+def start_eval(db: DB, background: BackgroundTasks, open_session=Depends(session_factory)) -> dict:
+    """실제 AI 로 골든셋 평가를 돌린다 (몇 분 · 약 $1 안팎). 이미 도는 평가가 있으면 그것을 돌려준다."""
+    if get_llm() is None:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "AI 가 아직 설정되지 않았어요")
+    # 서버가 다시 시작되며 끊긴 평가(30분 넘게 running)는 무시한다
+    running = db.scalar(select(m.EvalRun).where(m.EvalRun.status == "running", m.EvalRun.mode == "live",
+                                                m.EvalRun.created_at > func.now() - timedelta(minutes=30)))
+    if running:
+        return _eval_summary(running)
+    row = m.EvalRun(harness_version=prompts.harness_version(), mode="live", status="running", suites=["verify", "retrieval"],
+                    prompt_versions=prompts.versions(), models=prompts.models())
+    db.add(row)
+    db.commit()
+    background.add_task(_run_eval_in_background, open_session, row.id)
+    return _eval_summary(row)
 
 
 # ---------- 가입 전환 퍼널 · 주간 재방문 ----------

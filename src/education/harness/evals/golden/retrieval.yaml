@@ -1,0 +1,21 @@
+# RAG 검색 골든셋 — 학생 요청 같은 문장으로 검색했을 때, 위 3개 안에 기대 개념의 문제가 나오는지 (recall@3 · MRR).
+# 운영 DB 에 공개 문제가 있는 개념으로 만든다 (문제 은행이 바뀌면 함께 고친다).
+cases:
+  - id: r_thermo
+    query: "열기관의 효율과 열역학 제1법칙 문제"
+    concept_id: physics.physics1.mechanics_energy.thermodynamics
+  - id: r_series
+    query: "무한등비급수가 수렴할 때 합 구하기"
+    concept_id: math.calculus.seq_limit.series
+  - id: r_inflection
+    query: "변곡점과 극값으로 그래프 개형 판단하기"
+    concept_id: math.calculus.diff_methods.diff_applications_adv
+  - id: r_induction
+    query: "코일을 지나는 자기 선속이 변할 때 유도 기전력"
+    concept_id: physics.physics1.matter_em.em_induction
+  - id: r_limit
+    query: "좌극한과 우극한이 달라서 극한값이 존재하지 않는 경우"
+    concept_id: ce333c5dce2.u1.c1
+  - id: r_python
+    query: "파이썬 변수와 input 입출력 기초"
+    concept_id: c07b1069773.u1.c1

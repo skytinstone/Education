@@ -8,7 +8,7 @@ Eureka 의 LangChain · Tool Calling · RAG(→ [AI_AGENT.md](AI_AGENT.md))는 �
 | 단계 | 내용 | 상태 |
 |---|---|---|
 | 1 | **관측 + 버전 관리** — 실행 추적(`agent_runs`), 프롬프트 레지스트리, 운영 콘솔 실행 타임라인 | ✅ |
-| 2 | **평가** — 골든셋(정상 + 일부러 망가뜨린 문제), 결함 탐지율 · 오탐률 · 검산 정확도 · RAG 검색 정확도 · 비용, CI 회귀 + 정기 실측, 버전별 점수판 | 예정 |
+| 2 | **평가** — 골든셋(정상 + 일부러 망가뜨린 문제), 결함 탐지율 · 오탐률 · 검산 정확도 · RAG 검색 정확도 · 비용, CI 회귀 + 정기 실측, 버전별 점수판 | ✅ |
 | 3 | **자기 수정 루프** — 검증 지적 · 검산 결과를 생성 AI 에 되돌려 고치게, 효과는 2단계 평가로 측정 | 예정 |
 | 4 | **가드레일 + 사람 검토** — 입력·출력 검사 파이프라인, 단계·시간·비용 상한과 대체 모델, 검토 큐 → 골든셋 | 예정 |
 
@@ -35,3 +35,37 @@ Eureka 의 LangChain · Tool Calling · RAG(→ [AI_AGENT.md](AI_AGENT.md))는 �
 - 실행 목록(종류 · 결과 필터) → **단계별 타임라인**
 
 API: `GET /api/admin/harness`, `GET /api/admin/runs`, `GET /api/admin/runs/{id}` (운영자만).
+
+## 2단계 — 평가 (Evals)
+
+### 골든셋 (`harness/evals/golden/`)
+- `verify.yaml` — 손으로 정답을 확인한 객관식 **좋은 문제 15개** + 일부러 망가뜨린 **나쁜 문제 13개**
+  (정답 번호 오류 6 · 복수 정답 2 · 조건 누락 3 · 맞는 보기 없음 2). 정답 번호만 바꾼 문제는 같은 본문의 좋은 문제와 짝이다.
+- `retrieval.yaml` — 학생 요청 같은 문장 6개와 기대 개념 (운영 문제 은행 기준).
+
+### 무엇을 재나 (`harness/evals/runner.py`)
+실제 문제 생성과 **같은 검사 층**(검증 AI → 계산 도구 검산 에이전트)에 골든셋을 통과시킨다.
+
+| 지표 | 뜻 |
+|---|---|
+| detection_rate | 망가진 문제를 거른 비율 ↑ |
+| false_reject_rate | 좋은 문제를 잘못 버린 비율 ↓ |
+| verifier_detection / math_check_added | 검증 AI 혼자 거른 비율 / 검산 에이전트가 **추가로** 거른 비율 → Tool Calling 의 기여 |
+| math_check_accuracy | 검산 에이전트 판단이 맞은 비율 |
+| by_defect | 결함 종류별 탐지율 |
+| recall_at_3 · mrr | RAG 검색 품질 |
+| cost_usd · avg_ms | 평가 비용 · 문항당 시간 |
+
+### 녹화 · 재생
+- **live** — 실제 AI 로 평가하고 응답을 카세트에 녹화한다. 결과는 `eval_runs` 에 하네스 버전과 함께 저장.
+- **replay** — 녹화된 응답으로 판정과 지표를 다시 계산한다 (AI 를 부르지 않음). 운영에서 녹화한 기준점 카세트
+  (`harness/evals/cassettes/baseline.json`)를 CI 가 매번 재생해, 판정 로직이나 지표 계산이 바뀌면 숫자가 달라졌다고 알려 준다.
+
+```sh
+python -m education.harness.evals --record baseline.json   # 실제 AI 평가 + 녹화
+python -m education.harness.evals --replay baseline.json   # 재생
+```
+
+### 운영 콘솔 — 하네스 평가 (`/admin#/evals`)
+지표 카드(바로 앞 평가 대비 증감) · 결함 종류별 탐지율 · 평가 기록 · 문항별 판정(어느 층이 걸렀는지, 검증 AI 답, 검산 도구 호출) ·
+RAG 검색 순위. '지금 평가' 버튼은 실제 AI 로 백그라운드 평가를 돌린다 (약 $1 안팎).

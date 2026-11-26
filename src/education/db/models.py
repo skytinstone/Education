@@ -767,3 +767,23 @@ class AgentRun(Base):
     cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6))
     latency_ms: Mapped[int | None]
     created_at: Mapped[datetime] = created_at()
+
+
+class EvalRun(Base):
+    """하네스 평가 한 번 (harness/evals) — 골든셋에 대한 지표와 문항별 결과. 하네스 버전끼리 점수를 비교한다."""
+    __tablename__ = "eval_runs"
+
+    id: Mapped[uuid.UUID] = uuid_pk()
+    harness_version: Mapped[str] = mapped_column(String(16), index=True)
+    mode: Mapped[str] = mapped_column(String(8))  # live | replay
+    status: Mapped[str] = mapped_column(String(10))  # running | done | failed
+    suites: Mapped[list[str]] = mapped_column(ARRAY(String(20)))
+    prompt_versions: Mapped[dict] = mapped_column(JSONB)
+    models: Mapped[dict] = mapped_column(JSONB)
+    metrics: Mapped[dict] = mapped_column(JSONB, server_default="{}")
+    cases: Mapped[dict] = mapped_column(JSONB, server_default="{}")
+    error: Mapped[str | None] = mapped_column(Text)
+    cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6))
+    latency_ms: Mapped[int | None]
+    created_at: Mapped[datetime] = created_at()
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
