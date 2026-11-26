@@ -595,13 +595,15 @@
 
     const st = Store.state;
     const name = st.user?.name;
-    $("#greeting").textContent = name ? `${name}님, 오늘은 무엇을 공부할까요?` : "오늘은 무엇을 공부할까요?";
+    $("#hero-sub").textContent = `${name ? `${name}님, ` : ""}문제 요청, 풀이 질문, 사진 첨부까지 — 말하듯 물어보세요`;
 
     renderOnboard();
-    renderGoal();
     renderTodo();
-    renderExam();
+    renderKpis();
+    renderWeak();
+    renderSuggest();
     renderActivity();
+    loadHomePlan();
 
     const recent = [...st.sessions].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4);
     $("#cards-recent").innerHTML = recent.map((s) => {
@@ -739,9 +741,135 @@
       const inner = `
         <span class="ic" style="--c:${t.c}"><i data-lucide="${t.icon}"></i></span>
         <span class="tx"><b>${esc(t.title)}</b><small>${esc(t.meta)}</small></span>
-        <i data-lucide="chevron-right" class="go"></i>`;
-      return t.href ? `<a class="todo-item" href="${t.href}">${inner}</a>` : `<button type="button" class="todo-item" data-fill="${esc(t.fill)}">${inner}</button>`;
+        ${t.prog ? `<span class="prog">${t.prog}</span>` : '<i data-lucide="chevron-right" class="go"></i>'}`;
+      const cls = `todo-item${t.done ? " done" : ""}`;
+      return t.href ? `<a class="${cls}" href="${t.href}">${inner}</a>` : `<button type="button" class="${cls}" data-fill="${esc(t.fill)}">${inner}</button>`;
     }).join("") : '<div class="todo-done"><i data-lucide="party-popper"></i><span>오늘 할 일을 모두 끝냈어요.<br />내일도 이 화면에서 챙겨 드릴게요</span></div>';
+  }
+
+  // ---------- 오늘 현황: 숫자 4개 (시험까지 · 오늘 목표 · 이번 주 정답률 · 남은 오답) ----------
+  function renderKpis() {
+    const st = Store.state;
+    const p = planProject();
+    const n = p ? daysLeft(p.examDate) : null;
+    const done = Store.todayCount(), goal = Math.max(1, st.user.dailyGoal || 20);
+    const streak = done ? Store.streak() : streakUntilYesterday();
+    const now = new Date(startOfToday());
+    const monday = now.getTime() - ((now.getDay() + 6) % 7) * DAY;
+    const week = st.attempts.filter((a) => dayKey(a.at) >= monday);
+    const acc = week.length ? Math.round((week.filter((a) => a.correct).length / week.length) * 100) : null;
+    const open = Store.openNotes().length;
+    const cards = st.cards.filter((c) => c.known !== true).length;
+    const d = n != null && n >= 0 ? new Date(`${p.examDate}T00:00:00`) : null;
+    $("#hks").innerHTML = `
+      ${d ? `<a class="hk hl" href="${Store.mode === "api" ? `#/plan/${p.id}` : `#/project/${p.id}`}"><span>시험까지</span><b>${ddayLabel(n)}</b><small class="s">${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAY[d.getDay()]})</small></a>`
+        : '<button type="button" class="hk hl" data-wizard style="text-align:left;border:0;cursor:pointer"><span>다가오는 시험</span><b style="font-size:24px">시험 정하기</b><small class="s">D-day와 계획을 챙겨 드려요</small></button>'}
+      <div class="hk"><span>오늘 목표</span><b>${done}<small>/${goal}</small></b><small class="s">${streak ? `${streak}일 연속` : "연속 0일"}</small></div>
+      <div class="hk"><span>이번 주 정답률</span><b>${acc ?? "–"}${acc == null ? "" : "<small>%</small>"}</b><small class="s">${week.length}문제</small></div>
+      <a class="hk" href="#/notes"><span>남은 오답</span><b class="${open ? "warn" : ""}">${open}</b><small class="s">${cards ? `카드 ${cards}장` : "오답노트 열기"}</small></a>`;
+  }
+
+  // ---------- 개념별 약점: 내 정답률 막대 + 다른 학습자 평균 눈금 (플래너 데이터가 있으면) ----------
+  function renderWeak(plan = null) {
+    const tone = (a) => (a < 0.6 ? "#D92D20" : a < 0.8 ? "#E8833A" : "#12833F");
+    let rows;
+    if (plan) {
+      rows = plan.concepts.filter((c) => c.attempts > 0).sort((a, b) => a.accuracy - b.accuracy).slice(0, 4)
+        .map((c) => ({ id: c.id, name: c.name, acc: c.accuracy, n: c.attempts, peer: c.peer_accuracy }));
+    } else {
+      rows = Store.conceptStats().filter((s) => concept(s.conceptId)).slice(0, 4)
+        .map((s) => ({ id: s.conceptId, name: concept(s.conceptId).name, acc: s.accuracy, n: s.attempts, peer: null }));
+    }
+    const hasPeer = rows.some((r) => r.peer != null);
+    $("#weak-card").innerHTML = `
+      <div class="panel-head"><h2>개념별 약점</h2><span>${hasPeer ? "막대 = 나 · 눈금 = 다른 학습자 평균" : "정답률 낮은 순"}</span></div>
+      ${rows.length ? rows.map((r) => `
+        <a class="wk" href="#/library/concept/${r.id}" style="--lv:${tone(r.acc)}">
+          <div class="wk-row"><b>${esc(r.name)}</b><span>${Math.round(r.acc * 100)}% · ${r.n}문제</span></div>
+          <div class="wk-bar"><i style="width:${Math.max(2, Math.round(r.acc * 100))}%"></i>${r.peer != null ? `<em style="left:${Math.round(r.peer * 100)}%" title="다른 학습자 평균 ${Math.round(r.peer * 100)}%"></em>` : ""}</div>
+        </a>`).join("") : '<p class="empty">문제를 풀면 개념별 정답률과 약점이 여기에 나타나요</p>'}`;
+  }
+
+  // ---------- 첫 화면 추천 칩 + D-day 배지 ----------
+  function renderSuggest() {
+    const p = planProject();
+    const n = p ? daysLeft(p.examDate) : null;
+    const weak = Store.conceptStats().find((s) => s.attempts >= 2 && s.accuracy < 0.8 && concept(s.conceptId));
+    const open = Store.openNotes().length;
+    const badge = $("#hero-badge");
+    badge.hidden = !(p && n != null && n >= 0);
+    if (!badge.hidden) {
+      badge.textContent = `${p.name} ${ddayLabel(n)}`;
+      badge.href = Store.mode === "api" ? `#/plan/${p.id}` : `#/project/${p.id}`;
+    }
+    const chips = [];
+    if (weak) chips.push(["target", `${concept(weak.conceptId).name} 약점 3문제`, `${concept(weak.conceptId).name} 문제 3개 내줘`]);
+    if (open) chips.push(["rotate-ccw", `오답 ${open}문제 다시 풀기`, `오답노트에 있는 문제 ${Math.min(open, 5)}개 다시 풀게 해줘`]);
+    if (p) chips.push(["file-text", "시험지 만들기", ""]);
+    if (chips.length < 3) chips.push(["pencil-line", "문제 풀기", "미적분 3점짜리 3문제 내줘"]);
+    if (chips.length < 3) chips.push(["book-open", "개념 정리", ""]);
+    const el = $("#actions");
+    el.classList.add("sg-row");
+    el.innerHTML = chips.map(([icon, label, prompt]) => `<button type="button" class="action sg" data-prompt="${esc(prompt)}"><i data-lucide="${icon}"></i>${esc(label)}</button>`).join("");
+  }
+
+  // ---------- 오늘의 플랜: 학습 플래너의 오늘 할 일 (서버 모드 · 시험 프로젝트가 있을 때) ----------
+  let homePlanSeq = 0;
+  async function loadHomePlan() {
+    const p = Store.mode === "api" && planProject();
+    $("#plan-link").href = p ? `#/plan/${p.id}` : "#/plan";
+    if (!p) return;
+    const seq = ++homePlanSeq;
+    let plan;
+    try { plan = await Store.plan(p.id); } catch { return; } // 실패하면 기본 할 일 목록을 그대로 둔다
+    if (seq !== homePlanSeq || route().parts.length) return;
+    const ICON = { lesson: ["book-open", "var(--accent)"], practice: ["pencil-line", "var(--accent)"], review: ["rotate-ccw", "var(--warn)"], deepdive: ["scan-search", "#6D3FE0"] };
+    const name = (cid) => plan.concepts.find((c) => c.id === cid)?.name ?? "";
+    const items = plan.tasks.map((t) => {
+      const [icon, c] = ICON[t.kind];
+      const it = { icon, c, title: t.title, meta: t.why, done: t.done, prog: t.target > 1 ? `${t.progress}/${t.target}` : t.done ? "완료" : "" };
+      if (t.kind === "lesson") it.href = `#/library/concept/${t.concept_id}`;
+      else if (t.kind === "practice") it.fill = `${name(t.concept_id)} 문제 3개 내줘`;
+      else if (t.kind === "review") it.href = "#/notes";
+      else it.href = `#/dive/${t.problem_id}?from=${p.id}`;
+      return it;
+    });
+    if (items.length) {
+      const done = items.filter((x) => x.done).length;
+      $("#todo-count").textContent = `${done}/${items.length} 완료`;
+      $("#todo").innerHTML = items.map((t) => {
+        const inner = `
+        <span class="ic" style="--c:${t.c}"><i data-lucide="${t.icon}"></i></span>
+        <span class="tx"><b>${esc(t.title)}</b><small>${esc(t.meta)}</small></span>
+        ${t.prog ? `<span class="prog">${t.prog}</span>` : '<i data-lucide="chevron-right" class="go"></i>'}`;
+        const cls = `todo-item${t.done ? " done" : ""}`;
+        return t.href ? `<a class="${cls}" href="${t.href}">${inner}</a>` : `<button type="button" class="${cls}" data-fill="${esc(t.fill)}">${inner}</button>`;
+      }).join("");
+    }
+    renderWeak(plan);
+    icons();
+  }
+
+  // ---------- 아래로 쓸어내리기: 첫 화면이 흐려지며 물러나고, 가장자리가 시리처럼 빛난다 ----------
+  {
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+    let ticking = false;
+    const apply = () => {
+      ticking = false;
+      if (home.hidden || reduce.matches) return;
+      const stage = $("#stage");
+      const h = Math.max(1, stage.offsetHeight * 0.85);
+      const p = Math.min(1, Math.max(0, contentEl.scrollTop / h));
+      stage.style.setProperty("--p", p.toFixed(3));
+      stage.classList.toggle("moving", p > 0.002);
+      // 쓸어내리는 중간에 가장 밝고, 다 내려가거나 처음 화면이면 꺼진다
+      const glow = p <= 0.01 || p >= 0.99 ? 0 : Math.pow(Math.sin(Math.PI * p), 0.7);
+      $("#siri-edge").style.setProperty("--glow", glow.toFixed(3));
+    };
+    contentEl.addEventListener("scroll", () => { if (!ticking) { ticking = true; requestAnimationFrame(apply); } }, { passive: true });
+    $("#scroll-cue").addEventListener("click", () => contentEl.scrollTo({ top: $("#dash").offsetTop - 12, behavior: reduce.matches ? "auto" : "smooth" }));
+    window.addEventListener("hashchange", () => { contentEl.classList.toggle("home-snap", !route().parts.length); requestAnimationFrame(apply); });
+    contentEl.classList.toggle("home-snap", !route().parts.length);
   }
 
   // ---------- 다가오는 시험 ----------
@@ -7423,7 +7551,7 @@
   document.addEventListener("visibilitychange", pingNow);
 
   // 홈 요소: 스크롤하면 아래에서 위로 떠오름
-  [[".hero h1", ".hero p", ".hero .composer"], [".action"], [".today > .panel"], [".activity"], [".section-head"], ["#cards-recent .card"], [".subject"]]
+  [[".hero h1", ".hero p", ".hero .composer"], [".dash-top > .panel", "#hks"], [".dash-mid > .panel"], [".section-head"], ["#cards-recent .card"], [".subject"]]
     .forEach((group) => group.flatMap((s) => $$(s)).forEach((el, i) => { el.classList.add("reveal"); el.style.setProperty("--d", `${i * 70}ms`); }));
   revealer = new IntersectionObserver((entries) => {
     for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); revealer.unobserve(e.target); }
