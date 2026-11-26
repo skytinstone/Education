@@ -28,6 +28,7 @@ from education.config import get_settings
 from education.db import models as m
 from education.schemas import ProblemSource, ProblemType, VerificationStatus
 from education.ai import math_check, rag
+from education.harness import guardrails, review
 from education.harness.trace import Trace
 from education.services import item_stats, learning
 from education.services.llm import LLM, LLMError, Usage
@@ -247,6 +248,7 @@ class Candidate:
     reason: str | None  # 통과 못 한 이유. None 이면 통과
     calls: list[CallLog] = field(default_factory=list)
     trace: Trace | None = None  # 실행 기록 (harness/trace.py)
+    needs_review: str | None = None  # 통과했지만 사람이 확인할 것 (검산 에이전트 실패 등)
 
 
 GEN_PROMPTS = ["generator.generator_instructions", "generator.verifier_instructions", "generator.repair_instructions"]
@@ -376,6 +378,12 @@ def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multipl
             repair = repair_prompt(problem, last.reason) if s.ai_self_correct else ""
             continue
         t.step("format_check")
+        if issues := guardrails.check_problem(problem):  # 출력 가드레일 (수식 표기 · 보기 중복 · 정답 노출 등)
+            t.step("policy_check", ok=False, data={"issues": issues})
+            last = Candidate(problem, None, f"규칙 위반: {', '.join(issues)}", calls, t)
+            repair = repair_prompt(problem, last.reason) if s.ai_self_correct else ""
+            continue
+        t.step("policy_check")
 
         question = question_of(problem)
         try:
@@ -400,7 +408,8 @@ def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multipl
         elif tool_check and (why := _tool_check(problem, question, calls, t, check)):
             last = Candidate(problem, verdict, why, calls, t)
         else:
-            return Candidate(problem, verdict, None, calls, t)
+            return Candidate(problem, verdict, None, calls, t,
+                             needs_review="검산 에이전트가 실패해 계산을 확인하지 못했어요" if check.get("error") else None)
         repair = repair_prompt(problem, last.reason, verdict, check) if s.ai_self_correct else ""
     return last
 
@@ -424,7 +433,9 @@ def _tool_check(problem, question: str, calls: list[CallLog], trace: Trace | Non
         calls.append(CallLog("math_check", None, s.openai_model_verify, str(e)))
         if trace:
             trace.step("math_check", model=s.openai_model_verify, error=str(e))
-        return None  # 검산이 실패해도 문제를 막지 않는다 (이미 독립 재풀이 검증을 통과)
+        if out is not None:
+            out["error"] = str(e)
+        return None  # 검산이 실패해도 문제를 막지 않는다 (이미 독립 재풀이 검증을 통과) — 대신 사람 검토 큐로
     calls.append(CallLog("math_check", usage, s.openai_model_verify))
     if trace:
         trace.tool_steps(messages)
@@ -584,6 +595,8 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
             (report.accepted if ok else report.rejected).append(pid)
             if ok and id(cand) in vec_of:
                 new_index.append((pid, vec_of[id(cand)]))
+            if ok and cand.needs_review:
+                review.enqueue(db, pid, "math_check", cand.needs_review)
         if cand.reason:
             report.reasons.append(cand.reason)
         if cand.trace:

@@ -115,7 +115,7 @@
   // ================= 운영 콘솔 (운영자 계정만) =================
   // #/(개요) · #/users[/id] · #/ai · #/logins · #/voc
   const FB_STATUS = { open: "접수", reviewing: "확인 중", resolved: "해결" };
-  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["revenue", "매출", "wallet"], ["ai", "AI 사용량", "cpu"], ["quality", "문제 품질", "gauge"], ["items", "문제 성적표", "clipboard-check"], ["runs", "AI 실행 기록", "activity"], ["evals", "하네스 평가", "target"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"], ["actions", "관리 기록", "scroll-text"]];
+  const ADMIN_TABS = [["overview", "개요", "layout-dashboard"], ["users", "회원", "users"], ["revenue", "매출", "wallet"], ["ai", "AI 사용량", "cpu"], ["quality", "문제 품질", "gauge"], ["items", "문제 성적표", "clipboard-check"], ["runs", "AI 실행 기록", "activity"], ["evals", "하네스 평가", "target"], ["review", "검토 큐", "list-checks"], ["logins", "로그인 기록", "log-in"], ["voc", "VOC", "inbox"], ["actions", "관리 기록", "scroll-text"]];
   const METHOD_NAME = { password: "이메일", google: "Google", kakao: "카카오" };
   const PURPOSE_NAME = { generate: "문제 생성", verify: "문제 검증", note_generate: "개념 정리 생성", note_verify: "개념 정리 검증",
     course: "코스 만들기", extract: "기출·교재 분석", essay_grade: "서술형 채점", review: "풀이 확인", explain: "계산·설명 풀이", answer_key: "정답지 풀이", answer_verify: "정답지 검산",
@@ -139,6 +139,7 @@
     voc: { state: "open", kind: "", q: "", user_id: "" },
     items: { flag: "", grade: "" },
     runs: { kind: "", status: "" },
+    review: { status: "open" },
   };
   const num = (n) => Number(n ?? 0).toLocaleString("ko-KR");
   const compact = (n) => new Intl.NumberFormat("ko-KR", { notation: "compact", maximumFractionDigits: 1 }).format(Number(n ?? 0));
@@ -171,13 +172,14 @@
 
   const TAB_DESC = { overview: "가입·이용 현황과 오늘 챙길 것", users: "회원 검색, 상세, 이용 정지·삭제", revenue: "월 구독 결제 매출 · 구독자 · AI 원가와 마진 (부가세·수수료·환율은 추정)", ai: "AI 호출 비용·토큰·실패",
     quality: "AI 가 만든 문제의 검산 통과율과 탈락 이유, 정답지 상태",
+    review: "자동 검사로 확신할 수 없는 문제를 사람이 판정 — 판정 결과는 평가 골든셋으로 자동으로 들어가요",
     evals: "골든셋으로 지금 하네스의 품질을 숫자로 — 망가진 문제를 거르는가 · 좋은 문제를 지키는가 · 검색이 맞는가",
     runs: "하네스 — AI 실행 한 번이 어떤 지시문 버전으로 어떤 단계(모델 · 도구 · 검사)를 거쳤는지",
     items: "학생 처음 풀이로 매긴 문제별 성적 — 학생 실력을 감안한 실제 난이도 · 변별도 · 보기 분석",
     logins: "로그인·가입 기록 (90일 보관)", voc: "의견·문제 신고 확인과 답변, 전체 공지",
     actions: "운영자가 한 조치 — 정지·해제·삭제·강제 로그아웃·VOC·공지 (누가 · 언제 · 누구에게)" };
   const ACTION_NAME = { suspend: ["이용 정지", "bad"], unsuspend: ["정지 해제", "ok"], delete: ["계정 삭제", "bad"], logout: ["강제 로그아웃", "warn"],
-    voc_status: ["VOC 상태 변경", ""], voc_reply: ["VOC 답변", ""], announce: ["전체 공지", ""], restore: ["문제 복구", ""] };
+    voc_status: ["VOC 상태 변경", ""], voc_reply: ["VOC 답변", ""], announce: ["전체 공지", ""], restore: ["문제 복구", ""], review_keep: ["검토 · 유지", "ok"], review_fix: ["검토 · 정답 수정", "warn"], review_hide: ["검토 · 숨김", "bad"] };
   const actionChip = (a) => { const [t, tone] = ACTION_NAME[a] ?? [a, ""]; return `<span class="achip ${tone}">${esc(t)}</span>`; };
   async function renderAdmin(tab = "overview", id = null) {
     if (tab !== "users" || id) clearInterval(liveTimer);
@@ -200,6 +202,7 @@
       else if (tab === "items") await adminItems(body);
       else if (tab === "runs") await (id ? adminRun(body, id) : adminRuns(body));
       else if (tab === "evals") await (id ? adminEval(body, id) : adminEvals(body));
+      else if (tab === "review") await adminReview(body);
       else if (tab === "logins") await adminLogins(body);
       else if (tab === "actions") await adminActions(body);
       else await adminVOC(body);
@@ -387,7 +390,7 @@
   const RUN_KIND = { generate: "문제 생성", agent: "대화 에이전트" };
   const RUN_STATUS = { passed: ["통과", "ok"], rejected: ["탈락", "warn"], answered: ["답변", "ok"], failed: ["실패", "bad"] };
   const STEP_NAME = { generate: "생성 AI", format_check: "형식 검사", verify: "검증 AI (독립 재풀이)", math_check: "검산 에이전트 판정",
-    duplicate_check: "RAG 중복 확인", agent: "대화 에이전트 답", self_correct: "자기 수정 — 떨어진 이유를 생성 AI 에 전달" };
+    duplicate_check: "RAG 중복 확인", policy_check: "출력 가드레일 (규칙 검사)", agent: "대화 에이전트 답", self_correct: "자기 수정 — 떨어진 이유를 생성 AI 에 전달" };
   const statusChip = (st) => { const [t, tone] = RUN_STATUS[st] ?? [st, ""]; return `<span class="achip ${tone}">${esc(t)}</span>`; };
   const ms = (v) => (v == null ? "–" : v >= 1000 ? `${(v / 1000).toFixed(1)}초` : `${v}ms`);
   const usd4 = (v) => (v == null ? "–" : `$${Number(v).toFixed(4)}`);
@@ -405,6 +408,14 @@
         ${kpi("생성 · 검증 모델", esc(h.models.generate.split("/")[0]), `검증 ${esc(h.models.verify)}`)}
         ${kpi("대화 모델", esc(h.models.route.split("/")[0]), `임베딩 ${esc(h.models.embedding)}`)}
       </div>
+      <section class="panel"><h3>가드레일 (최근 7일)</h3>
+        <div class="kpis">
+          ${kpi("입력 가드레일", num(Object.values(h.guard.input_7d).reduce((a, b) => a + b, 0)), Object.entries(h.guard.input_7d).map(([k, n]) => `${esc(k.replace("input:", ""))} ${n}`).join(" · ") || "걸린 입력 없음")}
+          ${kpi("출력 규칙 위반으로 다시 만든 문제", num(h.guard.policy_rejects_7d), "수식 표기 · 보기 중복 · 정답 노출 등")}
+          ${kpi("AI 호출 차단기", Object.values(h.guard.breakers).some((b) => b.open_for_s) ? '<span class="achip bad">열림</span>' : '<span class="achip ok">정상</span>',
+            Object.entries(h.guard.breakers).map(([k, b]) => `${esc(k)} 연속 실패 ${b.failures}${b.open_for_s ? ` · ${b.open_for_s}초 차단` : ""}`).join(" · ") || "연속 실패 없음")}
+          ${kpi("검토 큐", num(h.review.open ?? 0), '<a href="#/review">검토하러 가기 →</a>')}
+        </div></section>
       <section class="panel"><h3>버전별 결과 (최근 ${h.days}일)</h3>
         ${table(["하네스 버전", "종류", "#실행", "결과", "#평균 비용", "#평균 시간", "처음 쓰인 때"], h.versions.map((v) => `
           <tr><td><code>${esc(v.harness_version)}</code>${v.harness_version === h.harness_version ? ' <span class="achip ok">지금</span>' : ""}</td>
@@ -552,6 +563,49 @@
         ${table(["질문", "기대 개념", "순위", "위 3개 (유사도)"], rc.map((c) => `
           <tr><td class="istem">${esc(c.query)}</td><td><code>${esc(c.expected)}</code></td><td>${c.rank ? `<span class="achip ok">${c.rank}위</span>` : '<span class="achip bad">없음</span>'}</td>
             <td class="istem">${c.top.map((h) => `${h.similarity} · ${esc((h.concepts || []).join(","))}`).join("<br>")}</td></tr>`), "")}</section>`;
+    icons();
+  }
+
+  // ---------- 사람 검토 큐 ----------
+  const RV_ACTION = { keep: ["유지", "ok"], fix: ["정답 수정", "warn"], hide: ["숨김", "bad"] };
+  async function adminReview(body) {
+    const f = adminState.review;
+    const r = await Store.adminGet("/review", { status: f.status });
+    if (!body.isConnected) return;
+    const open = r.counts.open ?? 0, decided = Object.entries(r.counts).filter(([k]) => k !== "open").reduce((a, [, n]) => a + n, 0);
+    const badge = $("#review-badge");
+    if (badge) { badge.textContent = open; badge.hidden = !open; }
+    const card = (it) => {
+      const p = it.problem;
+      return `
+      <article class="panel rv-card" data-id="${it.id}">
+        <div class="rv-top"><span class="achip ${it.source === "report" ? "bad" : "warn"}">${esc(it.source_name)}</span>
+          <span class="rv-reason">${esc(it.reason)}</span><small class="mini">${when(it.created_at)}</small></div>
+        <p class="rv-stem">${esc(texPlain(p.stem))}</p>
+        ${p.choices ? `<div class="rv-choices">${p.choices.map((c, i) => {
+          const n = String(i + 1);
+          const cls = [n === p.answer ? "cur" : "", it.answer_after === n ? "pick" : ""].join(" ");
+          return `<button type="button" class="${cls}" ${it.status === "open" ? `data-rvpick="${n}"` : "disabled"}><b>${n}</b> ${esc(texPlain(c))}${n === p.answer ? ' <small>지금 정답</small>' : ""}</button>`;
+        }).join("")}</div>` : `<p class="mini">정답: ${esc(p.answer)}</p>`}
+        ${p.solution ? `<details><summary>해설</summary><p class="rv-sol">${esc(p.solution)}</p></details>` : ""}
+        <p class="mini">${esc(p.concepts.join(", "))} · ${esc(p.id)}${it.stats ? ` · 성적 ${it.stats.grade} · ${it.stats.n}명 · 정답률 ${Math.round(it.stats.p * 100)}%` : ""}</p>
+        ${it.status === "open" ? `
+          <textarea rows="2" placeholder="메모 (선택)"></textarea>
+          <div class="rv-acts">
+            <button class="btn-ghost" data-decide="keep"><i data-lucide="check"></i>문제 맞음 · 유지</button>
+            <button class="btn-ghost" data-decide="fix"><i data-lucide="pencil"></i>고른 보기로 정답 수정</button>
+            <button class="btn-ghost danger" data-decide="hide"><i data-lucide="eye-off"></i>숨기기</button>
+          </div>`
+        : `<p class="mini">판정: <span class="achip ${RV_ACTION[it.status][1]}">${RV_ACTION[it.status][0]}</span>
+            ${it.status === "fix" ? ` ${esc(it.answer_before)}번 → ${esc(it.answer_after)}번` : ""} · ${esc(it.decided_by ?? "")} · ${when(it.decided_at)}${it.note ? ` · ${esc(it.note)}` : ""}</p>`}
+      </article>`;
+    };
+    body.innerHTML = `
+      <div class="panel-row top"><p class="mini">학생 신고, 문제 성적표 D 등급·정답 의심, 계산 도구 검산 실패 문제가 여기로 모여요.
+        판정하면 바로 문제에 반영되고(유지·정답 수정·숨김), 판정한 객관식 문제는 <b>평가 골든셋(reviewed)</b>으로 들어가 다음 평가부터 쓰여요.</p></div>
+      <div class="ichips"><button type="button" class="itag ${f.status === "open" ? "on" : ""}" data-rvstatus="open">기다리는 항목 <b>${num(open)}</b></button>
+        <button type="button" class="itag ${f.status === "decided" ? "on" : ""}" data-rvstatus="decided">판정한 항목 <b>${num(decided)}</b></button></div>
+      <div class="rv-list">${r.items.map(card).join("") || `<section class="panel"><p class="mini">${f.status === "open" ? "검토를 기다리는 문제가 없어요" : "아직 판정한 항목이 없어요"}</p></section>`}</div>`;
     icons();
   }
 
@@ -825,6 +879,24 @@
     if ((x = el("[data-revdays]"))) { adminState.revDays = Number(x.dataset.revdays); return rerender(tab); }
     if (el("[data-revtest]")) { adminState.revTest = !adminState.revTest; return rerender(tab); }
     if ((x = el("[data-aidays]"))) { adminState.aiDays = Number(x.dataset.aidays); return rerender(tab); }
+    if ((x = el("[data-rvstatus]"))) { adminState.review.status = x.dataset.rvstatus; return rerender(tab); }
+    if ((x = el("[data-rvpick]"))) {
+      const card = x.closest(".rv-card");
+      card.querySelectorAll("[data-rvpick]").forEach((b) => b.classList.toggle("pick", b === x));
+      card.dataset.answer = x.dataset.rvpick;
+      return;
+    }
+    if ((x = el("[data-decide]"))) {
+      const card = x.closest(".rv-card");
+      const action = x.dataset.decide;
+      if (action === "fix" && !card.dataset.answer) { toast("보기에서 올바른 정답을 먼저 눌러 주세요"); return; }
+      x.disabled = true;
+      try {
+        await Store.adminPost(`/review/${card.dataset.id}/decide`, { action, answer: card.dataset.answer || null, note: card.querySelector("textarea")?.value || "" });
+        toast({ keep: "문제를 유지했어요", fix: "정답을 고쳤어요", hide: "문제를 숨겼어요" }[action]);
+      } catch (err) { toast(err.message); x.disabled = false; return; }
+      return rerender(tab);
+    }
     if ((x = el("[data-eval]"))) { location.hash = `#/evals/${x.dataset.eval}`; return; }
     if ((x = el("[data-eval-run]"))) {
       if (!confirm("실제 AI 로 골든셋 평가와 문제 생성 평가를 돌려요. 10분 안팎 걸리고 약 $1~2 의 비용이 들어요. 진행할까요?")) return;

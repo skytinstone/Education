@@ -104,7 +104,7 @@ def verify_metrics(results: list[dict]) -> dict:
         rows = [r for r in bad if r["defect"] == d]
         by_defect[d] = {"cases": len(rows), "detected": rate(rows, lambda r: r["decision"] == "reject")}
     ran = [r for r in results if r.get("math") and "error" not in r["math"] and r["math"].get("checkable")]
-    should_fail = {"wrong_key", "no_correct_choice", "subtle_wrong_key"}
+    should_fail = {"wrong_key", "no_correct_choice", "subtle_wrong_key", "reviewed_bad"}
     math_ok = lambda r: r["math"]["agrees"] if r["label"] == "good" else (not r["math"]["agrees"]) if r["defect"] in should_fail else True  # noqa: E731
     return {
         "cases": len(results), "good": len(good), "bad": len(bad),
@@ -221,6 +221,19 @@ def run(db: Session, *, llm: LLM | None = None, mode: str = "live", cassette: di
             tape["verify"][r["id"]] = {k: r[k] for k in ("verifier", "ms") if k in r} | ({"math": r["math"]} if "math" in r else {})
         metrics["verify"] = verify_metrics(results)
         cases["verify"] = results
+
+    if "reviewed" in suites:  # 사람이 판정한 문제 (DB 에서 — 데이터 플라이휠)
+        from education.harness import review
+        golden = review.reviewed_cases(db)
+        recs = (cassette or {}).get("reviewed", {})
+        if mode == "replay":
+            golden = [c for c in golden if c["id"] in recs]
+        with ThreadPoolExecutor(max_workers=workers if mode == "live" else 1) as pool:
+            results = list(pool.map(lambda c: _verify_case(c, llm, recs.get(c["id"]) if mode == "replay" else None, tool_check), golden))
+        tape["reviewed"] = {r["id"]: {k: r[k] for k in ("verifier", "ms") if k in r} | ({"math": r["math"]} if "math" in r else {})
+                            for r in results}
+        metrics["reviewed"] = verify_metrics(results) if results else {"cases": 0}
+        cases["reviewed"] = results
 
     if "retrieval" in suites:
         golden = load("retrieval")

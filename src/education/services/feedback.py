@@ -33,6 +33,9 @@ def submit(db: Session, user: m.User, *, kind: str, message: str, problem_id: st
     db.add(fb)
     db.flush()
     hidden = problem is not None and kind in REPORT_KINDS and _maybe_hide(db, problem)
+    if problem is not None and kind in REPORT_KINDS and problem.owner_user_id is None:
+        from education.harness import review  # 사람 검토 큐 (공용 문제만)
+        review.enqueue(db, problem.id, "report", f"{KIND_NAME[kind]}: {fb.message[:300]}")
     db.commit()
 
     s = get_settings()
