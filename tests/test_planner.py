@@ -144,7 +144,7 @@ def test_deep_dive_flow(client, auth, db, monkeypatch):
     r = client.patch(f"/api/deep-dives/{d['id']}", json={"answers": [2, 1], "feedback": "confused"}, headers=auth)
     assert r.json()["completed"] and r.json()["answers"] == [2, 1]
     plan = client.get(f"/api/projects/{pj}/plan", headers=auth).json()
-    assert concept_of(plan, LOG)["confused"] == 1
+    assert concept_of(plan, LOG)["confused"] == 1 and concept_of(plan, LOG)["status"] == "few"  # 한 문제로는 약점이라 하지 않는다
     assert next(t for t in plan["tasks"] if t["kind"] == "deepdive")["done"]
     # 더 잘게 다시 — 이전 기록은 비우고 회차가 오른다
     r = client.post(f"/api/problems/{PID}/deep-dive", json={"retry": True}, headers=auth)

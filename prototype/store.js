@@ -551,6 +551,18 @@ const Store = (() => {
     // 다른 풀이 보기 — 답을 낸 문제만 (아직 없으면 null)
     problemMethods: (problemId) => (local ? Promise.resolve(null) : api(`/problems/${problemId}/methods`)),
     createProblemMethods: (problemId) => api(`/problems/${problemId}/methods`, { method: "POST" }),
+    // AI 학습 플래너 — 프로젝트(시험)별 분석 · 오늘 할 일 · AI 검토
+    plan: (projectId) => api(`/projects/${projectId}/plan`),
+    reviewPlan: (projectId, feedback = "") => api(`/projects/${projectId}/plan/review`, { method: "POST", body: { feedback } }),
+    markPlanTask: (projectId, key, done) => api(`/projects/${projectId}/plan/tasks`, { method: "PUT", body: { key, done } }),
+    // 문제 Deep Dive — 작은 질문으로 쪼개 다시 따라가기 (답을 낸 문제만)
+    deepDive: (problemId) => api(`/problems/${problemId}/deep-dive`),
+    createDeepDive: (problemId, retry = false) => api(`/problems/${problemId}/deep-dive`, { method: "POST", body: { retry } }),
+    saveDeepDive: (id, body) => api(`/deep-dives/${id}`, { method: "PATCH", body }),
+    async fetchProblem(id) {
+      if (!bank[id]) mergeProblem(await api(`/problems/${id}`));
+      return bank[id];
+    },
     createLesson: (conceptId) => api(`/concepts/${conceptId}/lesson`, { method: "POST" }),
     conceptChat: (conceptId, body) => api(`/concepts/${conceptId}/chat`, { method: "POST", body }),
     clips: (conceptId) => (local ? Promise.resolve([]) : api(`/concepts/${conceptId}/clips`)),

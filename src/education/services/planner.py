@@ -129,6 +129,8 @@ def _score(rows: list[ConceptRow], today: date, days_left: int | None) -> None:
         acc = r.accuracy
         if r.attempts == 0:
             r.status = "untouched"
+        elif r.attempts == 1:
+            r.status = "few"  # 한 문제로는 판단하지 않는다
         elif r.attempts >= 2 and acc < 0.6:
             r.status = "weak"
         elif r.attempts >= 3 and acc >= 0.8:
