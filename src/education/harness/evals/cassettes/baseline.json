@@ -1,22 +1,22 @@
 {
- "harness_version": "d3c4366f",
+ "harness_version": "7f220ef4",
  "verify": {
   "g_log": {
    "verifier": {
     "verdict": {
      "answer": "3",
-     "work": "log₂8 = 3이고 log₃9 = 2이므로 합은 3 + 2 = 5이다. 따라서 3번이다.",
+     "work": "2³=8이므로 log₂8=3이고, 3²=9이므로 log₃9=2이다. 따라서 합은 3+2=5이므로 3번이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 642,
-     "out": 58,
-     "cost": 0.001864
+     "out": 68,
+     "cost": 0.001964
     }
    },
-   "ms": 14207,
+   "ms": 14232,
    "math": {
     "checkable": true,
     "computed": "5",
@@ -38,23 +38,23 @@
    "verifier": {
     "verdict": {
      "answer": "1",
-     "work": "u=x²로 치환하면 du=2x dx이고 적분 구간은 0에서 1이다. 따라서 ∫₀¹ 2x e^(x²) dx=∫₀¹ e^u du=[e^u]₀¹=e−1이다.",
+     "work": "치환 t=x²을 사용하면 dt=2x dx이고, 적분 구간은 0에서 1이다. 따라서 ∫₀¹ 2x e^(x²) dx = ∫₀¹ eᵗ dt = [eᵗ]₀¹ = e−1이므로 1번이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 664,
-     "out": 87,
-     "cost": 0.002198
+     "out": 98,
+     "cost": 0.002308
     }
    },
-   "ms": 14564,
+   "ms": 15099,
    "math": {
     "checkable": true,
     "computed": "e-1",
     "agrees": true,
-    "reason": "definite_integral 도구로 정적분을 계산한 결과 e-1을 얻었다. are_equal로 1번 보기 e-1과 같음을 확인했다.",
+    "reason": "정적분 도구로 계산한 값은 e-1이며, are_equal로 1번 보기 e-1과 같음을 확인했다.",
     "tools": [
      "definite_integral",
      "are_equal"
@@ -62,8 +62,8 @@
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 2585,
-     "out": 136,
-     "cost": 0.00653
+     "out": 130,
+     "cost": 0.00647
     }
    }
   },
@@ -71,18 +71,18 @@
    "verifier": {
     "verdict": {
      "answer": "3",
-     "work": "등차수열의 제10항은 a₁₀ = a₁ + 9d = 3 + 9×4 = 39이므로 3번이다.",
+     "work": "등차수열의 제n항은 a_n=a_1+(n-1)d이므로, a_10=3+(10-1)×4=39이다. 따라서 3번이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 647,
-     "out": 64,
-     "cost": 0.001934
+     "out": 68,
+     "cost": 0.001974
     }
    },
-   "ms": 14667,
+   "ms": 15128,
    "math": {
     "checkable": true,
     "computed": "39",
@@ -104,23 +104,23 @@
    "verifier": {
     "verdict": {
      "answer": "3",
-     "work": "기본 극한 lim(t→0) sin t/t = 1을 이용하면, lim(x→0) sin(3x)/x = 3·lim(x→0) sin(3x)/(3x) = 3이다.",
+     "work": "표준 극한 lim(t→0) sin t/t = 1을 이용하면, lim(x→0) sin(3x)/x = 3 lim(x→0) sin(3x)/(3x) = 3이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 656,
-     "out": 76,
-     "cost": 0.002072
+     "out": 75,
+     "cost": 0.002062
     }
    },
-   "ms": 13335,
+   "ms": 15092,
    "math": {
     "checkable": true,
     "computed": "3",
     "agrees": true,
-    "reason": "limit_of 도구로 극한값이 3임을 계산했고, are_equal 도구로 3번 보기의 값 3과 같음을 확인했다.",
+    "reason": "limit_of 도구로 극한값이 3임을 계산했고, are_equal 도구로 출제 정답인 3번의 보기 값 3과 같음을 확인했다.",
     "tools": [
      "limit_of",
      "are_equal"
@@ -128,8 +128,8 @@
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 2506,
-     "out": 119,
-     "cost": 0.006202
+     "out": 124,
+     "cost": 0.006252
     }
    }
   },
@@ -137,36 +137,35 @@
    "verifier": {
     "verdict": {
      "answer": "1",
-     "work": "f'(x)=3x²-3=3(x-1)(x+1)이므로 임계점은 x=-1, 1이다. x=1에서 도함수의 부호가 음에서 양으로 바뀌므로 극소이고, 극솟값은 f(1)=1-3=-2이다.",
+     "work": "f'(x)=3x²−3=3(x−1)(x+1)이므로 임계점은 x=−1, 1이다. x=1에서 도함수의 부호가 음에서 양으로 바뀌므로 극소이며, 극솟값은 f(1)=1−3=−2이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 648,
-     "out": 119,
-     "cost": 0.002486
+     "out": 117,
+     "cost": 0.002466
     }
    },
-   "ms": 23549,
+   "ms": 24253,
    "math": {
     "checkable": true,
     "computed": "-2",
     "agrees": true,
-    "reason": "미분 및 방정식 도구로 임계점 x=-1, 1을 구하고, 이계도함수가 x=1에서 6>0임을 확인했다. 계산 도구로 구한 극솟값 -2를 are_equal로 출제 정답 1번의 값 -2와 비교하여 같음을 확인했다.",
+    "reason": "미분 도구와 방정식 풀이 도구로 임계점 x=-1, 1을 구하고, x=1에서 이계도함수가 6>0임을 확인했다. calculate로 구한 극솟값 -2를 are_equal로 출제 정답 1번의 값 -2와 비교하여 일치함을 확인했다.",
     "tools": [
      "derivative",
      "solve_equation",
-     "derivative",
      "derivative",
      "calculate",
      "are_equal"
     ],
     "usage": {
      "model": "gpt-6.1-sol",
-     "in": 4576,
-     "out": 287,
-     "cost": 0.012022
+     "in": 4498,
+     "out": 263,
+     "cost": 0.011626
     }
    }
   },
@@ -174,23 +173,23 @@
    "verifier": {
     "verdict": {
      "answer": "2",
-     "work": "첫째항과 공비가 모두 1/3이고 |1/3|<1이므로, 무한등비급수의 합은 (1/3)/(1-1/3)=1/2이다.",
+     "work": "첫째항과 공비가 모두 1/3인 수렴하는 무한등비급수이므로, 합은 (1/3)/(1-1/3)=1/2이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 678,
-     "out": 72,
-     "cost": 0.002076
+     "out": 67,
+     "cost": 0.002026
     }
    },
-   "ms": 14438,
+   "ms": 14462,
    "math": {
     "checkable": true,
     "computed": "1/2",
     "agrees": true,
-    "reason": "등비급수의 합 (1/3)/(1-1/3)을 calculate로 계산하여 1/2을 얻었다. are_equal로 2번 보기 값 1/2과 같음을 확인했다.",
+    "reason": "등비급수의 합 (1/3)/(1-1/3)을 calculate로 계산하여 1/2을 얻었다. are_equal로 2번 보기의 값 1/2과 같음을 확인했다.",
     "tools": [
      "calculate",
      "are_equal"
@@ -198,8 +197,8 @@
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 2603,
-     "out": 133,
-     "cost": 0.006536
+     "out": 134,
+     "cost": 0.006546
     }
    }
   },
@@ -207,32 +206,32 @@
    "verifier": {
     "verdict": {
      "answer": "2",
-     "work": "조건부확률의 정의에 따라 P(A∩B)=P(A)P(B|A)=0.5×0.4=0.2이다.",
+     "work": "조건부확률의 정의에 따라 P(A∩B)=P(A)P(B|A)=0.5×0.4=0.2이므로 정답은 2번이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 682,
-     "out": 59,
-     "cost": 0.001954
+     "out": 67,
+     "cost": 0.002034
     }
    },
-   "ms": 14023,
+   "ms": 13345,
    "math": {
     "checkable": true,
     "computed": "0.2",
     "agrees": true,
-    "reason": "조건부확률 공식에 따라 calculate로 P(A∩B)=0.5*0.4=0.2를 계산했다. are_equal로 출제 정답 2번의 보기 값 0.2와 같음을 확인했다.",
+    "reason": "calculate로 P(A∩B)=P(A)P(B|A)=0.5×0.4=0.2를 계산했다. are_equal로 출제 정답 2번의 보기 값 0.2와 같음을 확인했다.",
     "tools": [
      "calculate",
      "are_equal"
     ],
     "usage": {
      "model": "gpt-6.1-sol",
-     "in": 2604,
-     "out": 139,
-     "cost": 0.006598
+     "in": 2600,
+     "out": 136,
+     "cost": 0.00656
     }
    }
   },
@@ -240,23 +239,23 @@
    "verifier": {
     "verdict": {
      "answer": "3",
-     "work": "∫₀^π sin x dx = [-cos x]₀^π = -cos π + cos 0 = 1 + 1 = 2이므로 3번이다.",
+     "work": "∫₀^π sin x dx = [−cos x]₀^π = −cos π + cos 0 = 1 + 1 = 2이므로 3번이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 647,
-     "out": 66,
-     "cost": 0.001954
+     "out": 67,
+     "cost": 0.001964
     }
    },
-   "ms": 14340,
+   "ms": 13755,
    "math": {
     "checkable": true,
     "computed": "2",
     "agrees": true,
-    "reason": "정적분 도구로 sin(x)를 0부터 pi까지 적분한 값은 2이다. are_equal로 3번 보기 값 2와 같음을 확인했다.",
+    "reason": "정적분 도구로 ∫₀^π sin(x) dx = 2를 계산했고, are_equal로 3번 보기 값 2와 같음을 확인했습니다.",
     "tools": [
      "definite_integral",
      "are_equal"
@@ -284,12 +283,12 @@
      "cost": 0.002052
     }
    },
-   "ms": 15629,
+   "ms": 13265,
    "math": {
     "checkable": true,
     "computed": "3*e",
     "agrees": true,
-    "reason": "derivative 도구로 f'(1)=3e를 계산했고, are_equal 도구로 3번 보기의 값 3e와 같음을 확인했다.",
+    "reason": "derivative 도구로 f'(1)=3e를 계산했고, are_equal 도구로 출제 정답 3번의 보기 값 3e와 같음을 확인했다.",
     "tools": [
      "derivative",
      "are_equal"
@@ -297,8 +296,8 @@
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 2533,
-     "out": 126,
-     "cost": 0.006326
+     "out": 130,
+     "cost": 0.006366
     }
    }
   },
@@ -306,23 +305,23 @@
    "verifier": {
     "verdict": {
      "answer": "2",
-     "work": "81=3^4이므로 3^{2x}=3^4에서 2x=4, 따라서 x=2이다.",
+     "work": "81=3^4이므로 3^{2x}=3^4에서 2x=4이다. 따라서 x=2이므로 정답은 2번이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 641,
-     "out": 53,
-     "cost": 0.001812
+     "out": 62,
+     "cost": 0.001902
     }
    },
-   "ms": 13707,
+   "ms": 12436,
    "math": {
     "checkable": true,
     "computed": "2",
     "agrees": true,
-    "reason": "solve_equation으로 실수해 x=2를 구했고, are_equal로 2번 보기 값 2와 같음을 확인했다.",
+    "reason": "solve_equation 도구로 실수해 x=2를 구했고, are_equal로 2번 보기 값 2와 같음을 확인했다.",
     "tools": [
      "solve_equation",
      "are_equal"
@@ -330,8 +329,8 @@
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 2487,
-     "out": 112,
-     "cost": 0.006094
+     "out": 114,
+     "cost": 0.006114
     }
    }
   },
@@ -339,23 +338,23 @@
    "verifier": {
     "verdict": {
      "answer": "2",
-     "work": "순서를 고려하지 않고 서로 다른 5개 중 2개를 고르는 조합이므로, 경우의 수는 ₅C₂ = (5×4)/(2×1) = 10이다.",
+     "work": "순서를 생각하지 않고 2개를 고르므로 조합을 사용한다. 경우의 수는 ₅C₂ = (5×4)/(2×1) = 10이므로 정답은 2번이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 647,
-     "out": 70,
-     "cost": 0.001994
+     "out": 74,
+     "cost": 0.002034
     }
    },
-   "ms": 15611,
+   "ms": 12399,
    "math": {
     "checkable": true,
     "computed": "10",
     "agrees": true,
-    "reason": "calculate로 5*4/(2*1)을 계산하여 10을 얻었고, are_equal로 출제 정답 2번의 보기 값 10과 같음을 확인했다.",
+    "reason": "calculate로 5*4/(2*1)=10을 계산했고, are_equal로 출제 정답 2번의 보기 값 10과 같음을 확인했다.",
     "tools": [
      "calculate",
      "are_equal"
@@ -363,8 +362,8 @@
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 2463,
-     "out": 118,
-     "cost": 0.006106
+     "out": 114,
+     "cost": 0.006066
     }
    }
   },
@@ -372,23 +371,23 @@
    "verifier": {
     "verdict": {
      "answer": "3",
-     "work": "초기 속도가 0이고 가속도가 일정하므로 이동 거리는 s = ½at² = ½ × 2 × 5² = 25 m이다. 따라서 정답은 3번이다.",
+     "work": "초기 속도가 0이고 가속도가 일정하므로 이동 거리는 s = (1/2)at² = (1/2)×2×5² = 25 m이다. 따라서 정답은 3번이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 672,
-     "out": 71,
-     "cost": 0.002054
+     "out": 75,
+     "cost": 0.002094
     }
    },
-   "ms": 14910,
+   "ms": 13123,
    "math": {
     "checkable": true,
     "computed": "25 m",
     "agrees": true,
-    "reason": "등가속도 운동의 이동 거리 s=(1/2)at^2에 따라 calculate로 (1/2)*2*5^2=25를 계산했다. are_equal로 출제 정답 3번의 보기 값 25와 같음을 확인했다.",
+    "reason": "정지 상태에서 등가속도 운동의 이동 거리 s=(1/2)at^2에 따라 calculate로 (1/2)*2*5^2=25를 계산했다. are_equal로 3번 보기의 25와 같음을 확인했다.",
     "tools": [
      "calculate",
      "are_equal"
@@ -396,8 +395,8 @@
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 2545,
-     "out": 138,
-     "cost": 0.00647
+     "out": 137,
+     "cost": 0.00646
     }
    }
   },
@@ -416,12 +415,12 @@
      "cost": 0.001934
     }
    },
-   "ms": 15730,
+   "ms": 12632,
    "math": {
     "checkable": true,
     "computed": "6 kg·m/s",
     "agrees": true,
-    "reason": "calculate로 운동량 p=mv=2*3=6을 계산하고, are_equal로 3번 보기의 값 6과 같음을 확인했다.",
+    "reason": "calculate로 운동량 p=mv=2*3=6을 계산했고, are_equal로 3번 보기의 값 6과 같음을 확인했다.",
     "tools": [
      "calculate",
      "are_equal"
@@ -438,23 +437,23 @@
    "verifier": {
     "verdict": {
      "answer": "3",
-     "work": "이차방정식 ax²+bx+c=0의 두 근의 합은 -b/a이다. 따라서 두 근의 합은 -(-5)/1=5이므로 3번이다.",
+     "work": "근과 계수의 관계에 따라 두 근의 합은 -(-5)/1=5이다. 따라서 정답은 3번이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 653,
-     "out": 67,
-     "cost": 0.001976
+     "out": 55,
+     "cost": 0.001856
     }
    },
-   "ms": 17640,
+   "ms": 12459,
    "math": {
     "checkable": true,
     "computed": "5",
     "agrees": true,
-    "reason": "calculate로 근과 계수의 관계에 따른 두 근의 합 -(-5)/1을 계산하여 5를 얻었다. are_equal로 보기 3번의 값 5와 같음을 확인했다.",
+    "reason": "calculate로 근과 계수의 관계에 따른 두 근의 합 -(-5)/1 = 5를 계산했다. are_equal로 보기 3번의 값 5와 같음을 확인했다.",
     "tools": [
      "calculate",
      "are_equal"
@@ -462,8 +461,8 @@
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 2475,
-     "out": 119,
-     "cost": 0.00614
+     "out": 117,
+     "cost": 0.00612
     }
    }
   },
@@ -482,12 +481,12 @@
      "cost": 0.001834
     }
    },
-   "ms": 14709,
+   "ms": 10909,
    "math": {
     "checkable": true,
     "computed": "1/2",
     "agrees": true,
-    "reason": "calculate로 cos(pi/3)=1/2임을 계산했고, are_equal로 2번 보기의 값 1/2과 같음을 확인했다.",
+    "reason": "calculate로 cos(pi/3)=1/2임을 계산했고, are_equal로 출제 정답 2번의 보기 값 1/2과 같음을 확인했다.",
     "tools": [
      "calculate",
      "are_equal"
@@ -495,8 +494,8 @@
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 2543,
-     "out": 114,
-     "cost": 0.006226
+     "out": 118,
+     "cost": 0.006266
     }
    }
   },
@@ -504,109 +503,109 @@
    "verifier": {
     "verdict": {
      "answer": "1",
-     "work": "u=x²로 치환하면 du=2x dx이고, 적분 구간은 0부터 1까지이다. 따라서 ∫₀¹ 2x e^(x²) dx=∫₀¹ e^u du=[e^u]₀¹=e−1이다.",
+     "work": "치환 t=x²를 쓰면 dt=2x dx이고 적분 구간은 0에서 1이다. 따라서 ∫₀¹ 2x e^(x²) dx=∫₀¹ eᵗ dt=[eᵗ]₀¹=e−1이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 664,
-     "out": 89,
-     "cost": 0.002218
+     "out": 90,
+     "cost": 0.002228
     }
    },
-   "ms": 2812
+   "ms": 2924
   },
   "b_series_key": {
    "verifier": {
     "verdict": {
      "answer": "2",
-     "work": "첫째항과 공비가 모두 1/3인 무한등비급수이다. |1/3|<1이므로 합은 (1/3)/(1-1/3)=1/2이다.",
+     "work": "첫째항과 공비가 모두 1/3인 등비급수이다. |1/3|<1이므로 합은 (1/3)/(1-1/3)=1/2이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 678,
-     "out": 72,
-     "cost": 0.002076
+     "out": 70,
+     "cost": 0.002056
     }
    },
-   "ms": 2359
+   "ms": 2580
   },
   "b_kinematics_key": {
    "verifier": {
     "verdict": {
      "answer": "3",
-     "work": "처음 속도가 0이고 가속도가 일정하므로 이동 거리는 s=½at²=½×2×5²=25 m이다. 따라서 정답은 3번이다.",
+     "work": "처음 속도가 0이고 가속도가 일정하므로 이동 거리는 s = ½at² = ½×2×5² = 25 m이다. 따라서 정답은 3번이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 672,
-     "out": 66,
-     "cost": 0.002004
+     "out": 69,
+     "cost": 0.002034
     }
    },
-   "ms": 2901
+   "ms": 2996
   },
   "b_extremum_key": {
    "verifier": {
     "verdict": {
      "answer": "1",
-     "work": "f'(x)=3x²-3=3(x-1)(x+1)이다. x=1에서 도함수의 부호가 음에서 양으로 바뀌므로 극소이고, 극솟값은 f(1)=1-3=-2이다.",
+     "work": "f'(x)=3x²-3=3(x-1)(x+1)이므로 임계점은 x=-1, 1이다. x=1에서 도함수의 부호가 음에서 양으로 바뀌므로 극소이며, 극솟값은 f(1)=1-3=-2이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 648,
-     "out": 103,
-     "cost": 0.002326
+     "out": 113,
+     "cost": 0.002426
     }
    },
-   "ms": 3508
+   "ms": 4091
   },
   "b_deriv_key": {
    "verifier": {
     "verdict": {
      "answer": "3",
-     "work": "곱의 미분법에 따라 f'(x)=2xe^x+x^2e^x=(2x+x^2)e^x이므로, f'(1)=3e이다.",
+     "work": "곱의 미분법에 따라 f'(x)=2xe^x+x^2e^x=(2x+x^2)e^x이다. 따라서 f'(1)=3e이므로 정답은 3번이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 656,
-     "out": 66,
-     "cost": 0.001972
+     "out": 74,
+     "cost": 0.002052
     }
    },
-   "ms": 2433
+   "ms": 3032
   },
   "b_arith_key": {
    "verifier": {
     "verdict": {
      "answer": "3",
-     "work": "등차수열의 제n항은 a_n=a_1+(n-1)d이므로, 제10항은 3+(10-1)×4=39이다. 따라서 3번이다.",
+     "work": "등차수열의 일반항은 a_n=a_1+(n-1)d이므로, 제10항은 3+(10-1)×4=39이다. 따라서 3번이다.",
      "well_posed": true,
      "issues": []
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 647,
-     "out": 69,
-     "cost": 0.001984
+     "out": 68,
+     "cost": 0.001974
     }
    },
-   "ms": 2542
+   "ms": 3338
   },
   "b_quad_multi": {
    "verifier": {
     "verdict": {
      "answer": "2",
-     "work": "근과 계수의 관계에 따라 두 근의 합은 -(-5)/1=5이다. 따라서 2번이 맞지만, 4번의 10/2도 5이므로 4번 역시 정답이다.",
+     "work": "근과 계수의 관계에 따라 두 근의 합은 -(-5)/1=5이다. 2번의 5와 4번의 10/2가 모두 5이므로 둘 다 정답이다.",
      "well_posed": false,
      "issues": [
       "2번과 4번의 값이 모두 5이므로 정답이 두 개이다."
@@ -615,17 +614,17 @@
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 658,
-     "out": 124,
-     "cost": 0.002556
+     "out": 95,
+     "cost": 0.002266
     }
    },
-   "ms": 3815
+   "ms": 2919
   },
   "b_log_multi": {
    "verifier": {
     "verdict": {
      "answer": "2",
-     "work": "log₂8=3, log₃9=2이므로 합은 5이다. 따라서 2번이 맞지만, 3번의 log₂32도 5이므로 3번 역시 정답이다.",
+     "work": "log₂8=3, log₃9=2이므로 합은 5이다. 2번은 5이고, 3번의 log₂32도 5이므로 2번과 3번이 모두 정답이다.",
      "well_posed": false,
      "issues": [
       "2번과 3번의 값이 모두 5이므로 정답이 두 개이다."
@@ -634,106 +633,806 @@
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 646,
-     "out": 119,
-     "cost": 0.002482
+     "out": 147,
+     "cost": 0.002762
     }
    },
-   "ms": 4524
+   "ms": 4763
   },
   "b_geo_missing": {
    "verifier": {
     "verdict": {
      "answer": "none",
-     "work": "공비를 r이라 하면 제5항은 a₅=2r⁴이다. 공비가 주어지지 않아 제5항을 하나로 결정할 수 없다. 예를 들어 r=2이면 32(3번), r=3이면 162(5번)이다.",
+     "work": "공비를 r라 하면 등비수열의 제5항은 a₅=2r⁴이다. 공비가 주어지지 않아 제5항을 하나로 결정할 수 없다. 실제로 r=2이면 32(3번), r=3이면 162(5번)이다.",
      "well_posed": false,
      "issues": [
-      "공비 또는 공비를 결정할 추가 조건이 누락되어 정답을 유일하게 정할 수 없다. 실제로 보기 1~5 모두 적절한 실수 공비를 택하면 가능하다."
+      "공비 또는 공비를 결정할 추가 조건이 누락되어 제5항을 유일하게 정할 수 없다."
      ]
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 641,
-     "out": 168,
-     "cost": 0.002962
+     "out": 119,
+     "cost": 0.002472
     }
    },
-   "ms": 4977
+   "ms": 3217
   },
   "b_kin_missing": {
    "verifier": {
     "verdict": {
      "answer": "none",
-     "work": "초기 속도가 0이고 가속도가 일정하므로, 5초 동안 이동한 거리는 s = ½|a|t² = 12.5|a| m이다(a의 단위: m/s²). 가속도의 크기가 주어지지 않아 이동 거리를 하나로 결정할 수 없다.",
+     "work": "정지 상태에서 일정한 가속도 a로 5초 동안 이동한 거리는 s=(1/2)at²=(1/2)a×25이다. 가속도의 크기가 주어지지 않아 이동 거리를 결정할 수 없다.",
      "well_posed": false,
      "issues": [
-      "가속도의 크기가 누락되어 이동 거리를 계산할 수 없으며, 보기 중 정답을 하나로 결정할 수 없다."
+      "가속도의 크기가 누락되어 이동 거리를 구할 수 없다. 각 보기에 해당하는 가속도가 모두 가능하므로 정답을 하나로 정할 수 없다."
      ]
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 660,
-     "out": 124,
-     "cost": 0.00256
+     "out": 117,
+     "cost": 0.00249
     }
    },
-   "ms": 3504
+   "ms": 3616
   },
   "b_prob_missing": {
    "verifier": {
     "verdict": {
      "answer": "none",
-     "work": "교집합 확률은 0 ≤ P(A∩B) ≤ P(A)=0.5를 만족한다. B에 관한 조건이 없으므로 값을 하나로 결정할 수 없으며, 보기 1~4는 모두 가능한 값이다.",
+     "work": "교집합은 A의 부분사건이므로 0 ≤ P(A∩B) ≤ P(A)=0.5이다. B에 관한 조건이 없어 교집합의 확률은 정해지지 않으며, 보기 1~4의 값은 모두 가능하다.",
      "well_posed": false,
      "issues": [
-      "사건 B의 확률이나 A와 B의 관계에 관한 조건이 누락되어 P(A∩B)를 결정할 수 없다. 보기 1~4가 모두 가능하므로 정답이 유일하지 않다."
+      "P(B)나 A와 B의 관계에 관한 조건이 누락되어 P(A∩B)를 유일하게 결정할 수 없다. 보기 1~4가 모두 가능한 값이다."
      ]
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 667,
-     "out": 128,
-     "cost": 0.002614
+     "out": 127,
+     "cost": 0.002604
     }
    },
-   "ms": 3951
+   "ms": 4221
   },
   "b_sin_none": {
    "verifier": {
     "verdict": {
      "answer": "none",
-     "work": "∫₀^π sin x dx = [-cos x]₀^π = -cos π + cos 0 = 2이다. 따라서 정답에 해당하는 보기가 없다.",
+     "work": "∫₀^π sin x dx = [-cos x]₀^π = -cos π + cos 0 = 2이다. 보기에는 2가 없다.",
      "well_posed": false,
      "issues": [
-      "적분값은 2이지만 보기에 2가 없어 정답을 선택할 수 없다."
+      "정확한 값은 2이지만 보기에 없어 정답을 선택할 수 없다."
      ]
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 646,
-     "out": 107,
-     "cost": 0.002362
+     "out": 100,
+     "cost": 0.002292
     }
    },
-   "ms": 3596
+   "ms": 4222
   },
   "b_momentum_none": {
    "verifier": {
     "verdict": {
      "answer": "none",
-     "work": "운동량의 크기는 p=mv=2×3=6 kg·m/s이다. 보기에 6 kg·m/s가 없다.",
+     "work": "운동량의 크기는 p=mv=2×3=6 kg·m/s이다. 따라서 주어진 보기에는 정답이 없다.",
      "well_posed": false,
      "issues": [
-      "계산 결과인 6 kg·m/s에 해당하는 보기가 없어 정답을 고를 수 없다."
+      "계산된 정답 6 kg·m/s가 보기에 없다."
      ]
     },
     "usage": {
      "model": "gpt-6.1-sol",
      "in": 677,
-     "out": 81,
-     "cost": 0.002164
+     "out": 72,
+     "cost": 0.002074
     }
    },
-   "ms": 2970
+   "ms": 3304
+  },
+  "g_xlnx": {
+   "verifier": {
+    "verdict": {
+     "answer": "1",
+     "work": "부분적분에서 u=ln x, dv=x²dx로 두면 ∫x²ln x dx=(x³/3)ln x−x³/9이다. 따라서 주어진 정적분은 [ (x³/3)ln x−x³/9 ]₁ᵉ=2e³/9+1/9=(2e³+1)/9이므로 1번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 696,
+     "out": 114,
+     "cost": 0.002532
+    }
+   },
+   "ms": 13293,
+   "math": {
+    "checkable": true,
+    "computed": "(2*e^3+1)/9",
+    "agrees": true,
+    "reason": "definite_integral 도구로 정적분을 계산하여 1/9+2*exp(3)/9를 얻었다. are_equal 도구로 1번 보기 (2*e^3+1)/9와 같음을 확인했다.",
+    "tools": [
+     "definite_integral",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2735,
+     "out": 173,
+     "cost": 0.0072
+    }
+   }
+  },
+  "b_xlnx_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "1",
+     "work": "부분적분에서 u=ln x, dv=x² dx로 두면 ∫x² ln x dx=(x³/3)ln x−x³/9이다. 따라서 주어진 정적분은 (e³/3−e³/9)−(−1/9)=(2e³+1)/9이므로 1번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 696,
+     "out": 102,
+     "cost": 0.002412
+    }
+   },
+   "ms": 3456
+  },
+  "g_x3ex": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "부분적분을 반복하면 ∫x³eˣ dx=eˣ(x³−3x²+6x−6)+C이다. 따라서 주어진 정적분은 [eˣ(x³−3x²+6x−6)]₀¹=−2e−(−6)=6−2e이므로 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 656,
+     "out": 151,
+     "cost": 0.002822
+    }
+   },
+   "ms": 13815,
+   "math": {
+    "checkable": true,
+    "computed": "6-2e",
+    "agrees": true,
+    "reason": "definite_integral 도구로 정적분을 계산한 결과 6-2e입니다. are_equal로 3번 보기의 값 6-2e와 같음을 확인했습니다.",
+    "tools": [
+     "definite_integral",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2568,
+     "out": 143,
+     "cost": 0.006566
+    }
+   }
+  },
+  "b_x3ex_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "부분적분을 반복하면 ∫x³eˣ dx=eˣ(x³−3x²+6x−6)+C이다. 따라서 주어진 정적분은 [eˣ(x³−3x²+6x−6)]₀¹=−2e−(−6)=6−2e이므로 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 656,
+     "out": 152,
+     "cost": 0.002832
+    }
+   },
+   "ms": 4386
+  },
+  "g_sumsq": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "제곱의 합 공식에 따라 ∑(k=1~20) k² = 20×21×41/6 = 2870이므로 정답은 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 648,
+     "out": 95,
+     "cost": 0.002246
+    }
+   },
+   "ms": 13199,
+   "math": {
+    "checkable": true,
+    "computed": "2870",
+    "agrees": true,
+    "reason": "calculate로 제곱합 공식 20*(20+1)*(2*20+1)/6을 계산하여 2870을 얻었다. are_equal로 출제 정답 3번의 보기 값 2870과 같음을 확인했다.",
+    "tools": [
+     "calculate",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2483,
+     "out": 138,
+     "cost": 0.006346
+    }
+   }
+  },
+  "b_sumsq_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "제곱의 합 공식을 적용하면 ∑(k=1부터 20까지) k² = 20×21×41÷6 = 2870이므로 정답은 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 648,
+     "out": 99,
+     "cost": 0.002286
+    }
+   },
+   "ms": 4110
+  },
+  "g_quotient": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "몫의 미분법에 의해 f'(x)=[6x(x²+1)²(x+1)−(x²+1)³]/(x+1)²이다. 따라서 f'(2)=(6·2·25·3−125)/9=775/9이므로 정답은 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 684,
+     "out": 142,
+     "cost": 0.002788
+    }
+   },
+   "ms": 13495,
+   "math": {
+    "checkable": true,
+    "computed": "775/9",
+    "agrees": true,
+    "reason": "derivative 도구로 f'(2)=775/9를 계산했다. are_equal로 3번 보기의 값 775/9와 같음을 확인했다.",
+    "tools": [
+     "derivative",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2647,
+     "out": 132,
+     "cost": 0.006614
+    }
+   }
+  },
+  "b_quotient_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "몫의 미분법에 따라 f'(x) = [6x(x²+1)²(x+1) − (x²+1)³]/(x+1)²이다. 따라서 f'(2) = (6·2·25·3 − 125)/9 = 775/9이므로 정답은 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 684,
+     "out": 158,
+     "cost": 0.002948
+    }
+   },
+   "ms": 4589
+  },
+  "g_explimit": {
+   "verifier": {
+    "verdict": {
+     "answer": "4",
+     "work": "테일러 전개로 e^{2x}=1+2x+2x^2+O(x^3)이므로, (e^{2x}-1-2x)/x^2=2+O(x)이다. 따라서 극한값은 2로, 정답은 4번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 665,
+     "out": 91,
+     "cost": 0.00224
+    }
+   },
+   "ms": 12219,
+   "math": {
+    "checkable": true,
+    "computed": "2",
+    "agrees": true,
+    "reason": "limit_of 도구로 주어진 극한을 계산한 결과 2를 얻었다. are_equal로 4번 보기 값 2와 비교하여 같음을 확인했다.",
+    "tools": [
+     "limit_of",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2549,
+     "out": 129,
+     "cost": 0.006388
+    }
+   }
+  },
+  "b_explimit_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "4",
+     "work": "테일러 전개에 의해 e^{2x}=1+2x+2x²+O(x³)이므로, (e^{2x}-1-2x)/x²=2+O(x)이다. 따라서 극한값은 2이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 665,
+     "out": 81,
+     "cost": 0.00214
+    }
+   },
+   "ms": 3835
+  },
+  "g_xsinx": {
+   "verifier": {
+    "verdict": {
+     "answer": "2",
+     "work": "부분적분하면 ∫₀^{π/2} x sin x dx = [-x cos x + sin x]₀^{π/2} = 1이다. 따라서 정답은 2번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 662,
+     "out": 71,
+     "cost": 0.002034
+    }
+   },
+   "ms": 13287,
+   "math": {
+    "checkable": true,
+    "computed": "1",
+    "agrees": true,
+    "reason": "definite_integral 도구로 정적분을 계산한 결과 1입니다. are_equal 도구로 2번 보기 값 1과 같음을 확인했습니다.",
+    "tools": [
+     "definite_integral",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2540,
+     "out": 126,
+     "cost": 0.00634
+    }
+   }
+  },
+  "b_xsinx_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "2",
+     "work": "부분적분하면 ∫₀^{π/2} x sin x dx = [-x cos x + sin x]₀^{π/2} = 1이다. 따라서 정답은 2번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 662,
+     "out": 71,
+     "cost": 0.002034
+    }
+   },
+   "ms": 4200
+  },
+  "g_cubes": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "13³ = 2197, 7³ = 343이므로 13³ - 7³ = 2197 - 343 = 1854이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 643,
+     "out": 84,
+     "cost": 0.002126
+    }
+   },
+   "ms": 14506,
+   "math": {
+    "checkable": true,
+    "computed": "1854",
+    "agrees": true,
+    "reason": "calculate로 13^3 - 7^3을 계산한 결과 1854입니다. are_equal로 3번 보기 값 1854와 같음을 확인했습니다.",
+    "tools": [
+     "calculate",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2458,
+     "out": 117,
+     "cost": 0.006086
+    }
+   }
+  },
+  "b_cubes_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "13³ = 2197, 7³ = 343이므로 13³ − 7³ = 2197 − 343 = 1854이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 643,
+     "out": 82,
+     "cost": 0.002106
+    }
+   },
+   "ms": 4570
+  },
+  "g_logeq": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "로그의 정의역에서 x>1이다. 로그의 성질을 이용하면 log₂((x+3)(x−1))=5이므로 (x+3)(x−1)=32이다. 따라서 x²+2x−35=(x−5)(x+7)=0이고, x=5 또는 −7이다. 정의역을 만족하는 해는 x=5이므로 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 652,
+     "out": 153,
+     "cost": 0.002834
+    }
+   },
+   "ms": 14785,
+   "math": {
+    "checkable": true,
+    "computed": "5",
+    "agrees": true,
+    "reason": "solve_equation으로 (x+3)*(x-1)=2^5의 해 -7, 5를 구했고, 로그의 정의역 x>1에 따라 해는 5입니다. are_equal로 보기 3번의 값 5와 같음을 확인했습니다.",
+    "tools": [
+     "solve_equation",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2512,
+     "out": 147,
+     "cost": 0.006494
+    }
+   }
+  },
+  "b_logeq_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "로그의 정의역은 x>1이다. 로그의 성질을 적용하면 (x+3)(x-1)=2^5=32이므로 x²+2x-35=(x+7)(x-5)=0이다. 두 근 -7, 5 중 정의역을 만족하는 해는 x=5이므로 정답은 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 652,
+     "out": 145,
+     "cost": 0.002754
+    }
+   },
+   "ms": 5345
+  },
+  "g_throw": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "최고점에서 속력이 0이므로 v²=v₀²−2gh에 따라 h=v₀²/(2g)=20²/(2×10)=20 m이다. 따라서 정답은 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 687,
+     "out": 74,
+     "cost": 0.002114
+    }
+   },
+   "ms": 12578,
+   "math": {
+    "checkable": true,
+    "computed": "20 m",
+    "agrees": true,
+    "reason": "calculate로 최고 높이 h=v^2/(2g)=20^2/(2*10)=20 m를 계산했다. are_equal로 3번 보기 값 20과 같음을 확인했다.",
+    "tools": [
+     "calculate",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2586,
+     "out": 121,
+     "cost": 0.006382
+    }
+   }
+  },
+  "b_throw_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "최고점에서는 속력이 0이므로 v²=v₀²−2gh에 대입하면 0=20²−2×10×h이다. 따라서 최고 높이는 h=20 m로, 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 687,
+     "out": 75,
+     "cost": 0.002124
+    }
+   },
+   "ms": 8720
+  },
+  "g_parallel": {
+   "verifier": {
+    "verdict": {
+     "answer": "4",
+     "work": "병렬 연결의 합성 저항은 1/R = 1/6 + 1/3 = 1/2이므로 R = 2 Ω이다. 따라서 전체 전류는 I = V/R = 12/2 = 6 A로, 정답은 4번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 681,
+     "out": 88,
+     "cost": 0.002242
+    }
+   },
+   "ms": 14788,
+   "math": {
+    "checkable": true,
+    "computed": "6 A",
+    "agrees": true,
+    "reason": "calculate로 병렬 저항의 전체 전류 12*(1/6+1/3)을 계산하여 6 A를 얻었다. are_equal로 4번 보기의 6 A와 같음을 확인했다.",
+    "tools": [
+     "calculate",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2572,
+     "out": 127,
+     "cost": 0.006414
+    }
+   }
+  },
+  "b_parallel_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "4",
+     "work": "병렬 연결의 합성 저항은 1/R = 1/6 + 1/3 = 1/2이므로 R = 2 Ω이다. 따라서 전체 전류는 I = V/R = 12/2 = 6 A로, 4번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 681,
+     "out": 85,
+     "cost": 0.002212
+    }
+   },
+   "ms": 4806
+  },
+  "g_dice": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "6의 눈이 하나도 나오지 않을 확률은 (5/6)^3=125/216이다. 따라서 6의 눈이 적어도 하나 나올 확률은 1-125/216=91/216이므로 정답은 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 681,
+     "out": 83,
+     "cost": 0.002192
+    }
+   },
+   "ms": 14678,
+   "math": {
+    "checkable": true,
+    "computed": "91/216",
+    "agrees": true,
+    "reason": "calculate로 여사건의 확률을 이용한 1-(5/6)^3을 계산하여 91/216을 얻었다. are_equal로 3번 보기의 값 91/216과 같음을 확인했다.",
+    "tools": [
+     "calculate",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2606,
+     "out": 131,
+     "cost": 0.006522
+    }
+   }
+  },
+  "b_dice_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "6의 눈이 하나도 나오지 않을 확률은 (5/6)^3=125/216이다. 따라서 6의 눈이 적어도 하나 나올 확률은 1-125/216=91/216이므로 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 681,
+     "out": 80,
+     "cost": 0.002162
+    }
+   },
+   "ms": 4548
+  },
+  "g_odds": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "1부터 시작하는 홀수 30개는 1, 3, …, 59이다. 합은 30×(1+59)÷2=900이므로 정답은 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 636,
+     "out": 90,
+     "cost": 0.002172
+    }
+   },
+   "ms": 14181,
+   "math": {
+    "checkable": true,
+    "computed": "900",
+    "agrees": true,
+    "reason": "처음 n개의 홀수의 합은 n^2이므로 calculate로 30^2=900을 계산했다. are_equal로 출제 정답 3번의 보기 값 900과 같음을 확인했다.",
+    "tools": [
+     "calculate",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2420,
+     "out": 119,
+     "cost": 0.00603
+    }
+   }
+  },
+  "b_odds_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "3",
+     "work": "1부터 시작하는 홀수 30개는 1, 3, …, 59이다. 합은 30×(1+59)÷2=900이므로 정답은 3번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 636,
+     "out": 70,
+     "cost": 0.001972
+    }
+   },
+   "ms": 4509
+  },
+  "g_arctan": {
+   "verifier": {
+    "verdict": {
+     "answer": "2",
+     "work": "∫₀² 1/(x²+4) dx = [(1/2)arctan(x/2)]₀² = (1/2)(π/4) = π/8이므로 2번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 676,
+     "out": 75,
+     "cost": 0.002102
+    }
+   },
+   "ms": 14187,
+   "math": {
+    "checkable": true,
+    "computed": "pi/8",
+    "agrees": true,
+    "reason": "definite_integral 도구로 정적분을 계산한 결과 pi/8을 얻었습니다. are_equal로 출제 정답 2번의 값 pi/8과 같음을 확인했습니다.",
+    "tools": [
+     "definite_integral",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2629,
+     "out": 140,
+     "cost": 0.006658
+    }
+   }
+  },
+  "b_arctan_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "2",
+     "work": "∫₀² 1/(x²+4) dx = [(1/2)arctan(x/2)]₀² = (1/2)(π/4) = π/8이므로 정답은 2번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 676,
+     "out": 78,
+     "cost": 0.002132
+    }
+   },
+   "ms": 4454
+  },
+  "g_trigderiv": {
+   "verifier": {
+    "verdict": {
+     "answer": "2",
+     "work": "곱의 미분법으로 f'(x)=2sin x cos²x−sin³x이다. 따라서 f'(π/3)=2·(√3/2)·(1/2)²−(√3/2)³=√3/4−3√3/8=−√3/8이므로 정답은 2번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 701,
+     "out": 146,
+     "cost": 0.002862
+    }
+   },
+   "ms": 14924,
+   "math": {
+    "checkable": true,
+    "computed": "-sqrt(3)/8",
+    "agrees": true,
+    "reason": "derivative 도구로 f'(pi/3)=-sqrt(3)/8을 계산했고, are_equal 도구로 2번 보기와 같음을 확인했다.",
+    "tools": [
+     "derivative",
+     "are_equal"
+    ],
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 2711,
+     "out": 138,
+     "cost": 0.006802
+    }
+   }
+  },
+  "b_trigderiv_subtle": {
+   "verifier": {
+    "verdict": {
+     "answer": "2",
+     "work": "곱의 미분법으로 f'(x)=2sin x cos²x−sin³x이다. 따라서 f'(π/3)=2·(√3/2)·(1/2)²−(√3/2)³=√3/4−3√3/8=−√3/8이므로 정답은 2번이다.",
+     "well_posed": true,
+     "issues": []
+    },
+    "usage": {
+     "model": "gpt-6.1-sol",
+     "in": 701,
+     "out": 147,
+     "cost": 0.002872
+    }
+   },
+   "ms": 3912
   }
  },
  "retrieval": {
@@ -878,14 +1577,14 @@
  },
  "metrics": {
   "verify": {
-   "cases": 28,
-   "good": 15,
-   "bad": 13,
+   "cases": 56,
+   "good": 29,
+   "bad": 27,
    "detection_rate": 1.0,
    "false_reject_rate": 0.0,
    "verifier_detection": 1.0,
    "math_check_added": 0.0,
-   "math_check_runs": 15,
+   "math_check_runs": 29,
    "math_check_accuracy": 1.0,
    "by_defect": {
     "missing_condition": {
@@ -900,13 +1599,17 @@
      "cases": 2,
      "detected": 1.0
     },
+    "subtle_wrong_key": {
+     "cases": 14,
+     "detected": 1.0
+    },
     "wrong_key": {
      "cases": 6,
      "detected": 1.0
     }
    },
-   "cost_usd": 0.1605,
-   "avg_ms": 9819
+   "cost_usd": 0.3169,
+   "avg_ms": 9235
   },
   "retrieval": {
    "cases": 6,
