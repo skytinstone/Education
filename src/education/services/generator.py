@@ -311,6 +311,9 @@ def _concept_brief(db: Session, concept_id: str) -> str:
     return course_brief(db, target.course_id) + f"\n개념: {' > '.join(path)}" + (f"\n선수 개념: {', '.join(pre)}" if pre else "")
 
 
+FOREIGN_LANGUAGE_DOMAINS = ("english", "language")  # 외국어 자체를 평가하는 어학 코스 — 지문·보기는 그 언어로 둔다
+
+
 def course_brief(db: Session, course_id: str) -> str:
     """AI 에게 줄 코스 설명 — 시험·과목·수준·교육과정·교재·언어."""
     c = db.get(m.Course, course_id)
@@ -319,7 +322,8 @@ def course_brief(db: Session, course_id: str) -> str:
     parts = [f"시험 {c.exam}" if c.exam else "", f"분야 {c.category}", f"수준 {c.level}" if c.level else "",
              f"교육과정 {c.curriculum}" if c.curriculum else "",
              (f"교재 {c.textbook}" + (f" (ISBN {c.textbook_isbn})" if c.textbook_isbn else "")) if c.textbook else "",
-             "언어 영어" if c.language == "en" else ""]
+             ("원서(영어) 교재 — 문제는 한국어로" if c.domain not in FOREIGN_LANGUAGE_DOMAINS else "언어 영어")
+             if c.language == "en" else ""]
     return f"코스: {c.title} ({' · '.join(p for p in parts if p)})"
 
 
@@ -347,7 +351,7 @@ FORMATS = {
 
 
 def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multiple_choice", choice_count: int = 5,
-         tool_check: bool = False, trace: Trace | None = None) -> Candidate:
+         tool_check: bool = False, trace: Trace | None = None, korean: bool = True) -> Candidate:
     """문제 하나: 생성 → 형식 검사 → 독립 검증 → (수학·물리) 계산 도구 검산. 실패하면 max_attempts 까지 다시 만든다."""
     s = get_settings()
     gen_schema, ver_schema, describe, question_of, agrees = FORMATS[question_type]
@@ -378,7 +382,7 @@ def _one(llm: LLM, prompt: str, max_attempts: int, question_type: str = "multipl
             repair = repair_prompt(problem, last.reason) if s.ai_self_correct else ""
             continue
         t.step("format_check")
-        if issues := guardrails.check_problem(problem):  # 출력 가드레일 (수식 표기 · 보기 중복 · 정답 노출 등)
+        if issues := guardrails.check_problem(problem, korean):  # 출력 가드레일 (수식 표기 · 보기 중복 · 정답 노출 등)
             t.step("policy_check", ok=False, data={"issues": issues})
             last = Candidate(problem, None, f"규칙 위반: {', '.join(issues)}", calls, t)
             repair = repair_prompt(problem, last.reason) if s.ai_self_correct else ""
@@ -529,6 +533,7 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
               + ("\n\n잘 만들어진 기존 문제 (비슷한 요청으로 찾은 것 — 형식·수준·함정의 결만 참고하고 새로 만들 것):\n\n"
                  + "\n\n---\n\n".join(_exemplar_text(e) for e in references) if references else ""))
     tool_check = math_check.enabled(concept.domain)
+    korean = concept.domain not in FOREIGN_LANGUAGE_DOMAINS  # 어학 코스가 아니면 문제·해설은 반드시 한국어
 
     def run_input(qtype: str) -> str:
         return (f"{concept.name} · 난이도 {difficulty} · {qtype}" + (f" · 요청: {request}" if request else "")
@@ -551,7 +556,7 @@ def generate_problems(db: Session, llm: LLM, *, concept_id: str, difficulty: int
     with ThreadPoolExecutor(max_workers=min(count, 4)) as pool:
         candidates = list(pool.map(lambda i: (_one(llm, prompt, s.ai_max_attempts, types[i % len(types)], choice_count, tool_check,
                                                    Trace("generate", prompts_used=GEN_PROMPTS + (["math_check.instructions"] if tool_check else []),
-                                                         user=user, input=run_input(types[i % len(types)]))),
+                                                         user=user, input=run_input(types[i % len(types)])), korean),
                                               types[i % len(types)]), range(count)))
 
     # RAG 중복 확인 — 검증을 통과한 새 문제가 같은 개념의 기존 문제와 의미상 거의 같으면 버린다

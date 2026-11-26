@@ -155,7 +155,7 @@ def reply_full(db: Session, user: m.User, text: str, project: m.Project | None,
 
 def _agent_reply(db: Session, user: m.User, project: m.Project | None, session: m.ChatSession | None, text: str) -> Reply | None:
     """대화 에이전트 (ai/tutor_agent.py). 실패하면 None."""
-    model = get_settings().openai_model_route
+    model = get_settings().openai_model_chat
     run = Trace("agent", prompts_used=["tutor_agent.instructions"], user=user,
                 input=(f"[{project.name}] " if project else "") + text)
     try:

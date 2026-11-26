@@ -595,16 +595,18 @@
 
     const st = Store.state;
     const name = st.user?.name;
-    // 인사: 시험이 7일 안으로 다가오면 응원 문구로 바꾼다
+    // 인사: 시간대에 맞춘 인사 + 이름, 아래 한 줄은 시험까지 남은 기간에 맞춘 질문
     const soon = planProject();
     const left = soon ? daysLeft(soon.examDate) : null;
+    const [hello, slot] = timeGreeting(new Date().getHours());
     const near = left != null && left >= 0 && left <= 7;
-    const l2 = !near ? "오늘은 어떤 것을 해볼까요?" : left === 0 ? "오늘이 바로 시험날이에요" : left === 1 ? "드디어 내일이 시험이에요" : `시험까지 ${left}일, 이제 마무리할 때예요`;
-    const sub = !near ? "문제 요청, 풀이 질문, 사진 첨부까지 — 말하듯 물어보세요"
-      : left === 0 ? "준비한 만큼 충분히 해낼 거예요. 끝까지 응원할게요!" : "새로운 것보다 약점과 오답을 다지는 게 가장 효과적이에요. 끝까지 함께할게요!";
-    $("#greeting").innerHTML = `안녕하세요${name ? `, <span class="nm">${esc(name)}</span>님` : ""}!<br><span class="gl2">${l2}</span>`;
+    const sub = !soon || left == null || left < 0 ? `오늘 ${slot}엔 무엇을 해볼까요? 문제 요청, 풀이 질문, 사진 첨부까지 말하듯 물어보세요`
+      : left === 0 ? "오늘이 바로 시험날이에요. 준비한 만큼 충분히 해낼 거예요!"
+      : left === 1 ? `드디어 내일이 시험이에요. 오늘 ${slot}엔 가볍게 정리해 볼까요?`
+      : near ? `시험까지 ${left === 7 ? "일주일" : `${left}일`}, 오늘 ${slot}엔 무엇을 해볼까요?`
+      : `오늘 ${slot}엔 무엇을 해볼까요?`;
+    $("#greeting").innerHTML = name ? `${hello},<br><span class="nm">${esc(name)}</span>님` : `${hello}!`;
     $("#hero-sub").textContent = sub;
-    $("#hero-sub").classList.toggle("cheer", near);
 
     renderOnboard();
     renderTodo();
@@ -777,18 +779,27 @@
         </a>`).join("") : '<p class="empty">문제를 풀면 개념별 정답률과 약점이 여기에 나타나요</p>'}`;
   }
 
-  // ---------- 첫 화면 추천 칩 + D-day 배지 ----------
+  // 시간대 인사와 그 시간대를 부르는 말 (서비스 시간 = 브라우저 시간)
+  function timeGreeting(h) {
+    if (h >= 5 && h < 11) return ["좋은 아침이에요", "아침"];
+    if (h >= 11 && h < 17) return ["좋은 오후예요", "오후"];
+    if (h >= 17 && h < 22) return ["좋은 저녁이에요", "저녁"];
+    return ["늦은 밤까지 수고 많아요", "밤"];
+  }
+
+  // ---------- 첫 화면 추천 칩 + D-day · 시험 · 연속 학습 칩 ----------
   function renderSuggest() {
     const p = planProject();
     const n = p ? daysLeft(p.examDate) : null;
     const weak = Store.conceptStats().find((s) => s.attempts >= 2 && s.accuracy < 0.8 && concept(s.conceptId));
     const open = Store.openNotes().length;
     const badge = $("#hero-badge");
-    badge.hidden = !(p && n != null && n >= 0);
-    if (!badge.hidden) {
-      badge.textContent = `${p.name} ${ddayLabel(n)}`;
-      badge.href = Store.mode === "api" ? `#/plan/${p.id}` : `#/project/${p.id}`;
-    }
+    const exam = p && n != null && n >= 0;
+    const streak = Store.streak();
+    badge.hidden = !(exam || streak);
+    badge.innerHTML = (exam ? `<span class="hp dd">${ddayLabel(n)}</span><span class="hp">${esc(p.name)}</span>` : "")
+      + (streak ? `<span class="hp">연속 학습 ${streak}일</span>` : "");
+    badge.href = exam ? (Store.mode === "api" ? `#/plan/${p.id}` : `#/project/${p.id}`) : "#/plan";
     const chips = [];
     if (weak) chips.push(["target", `${concept(weak.conceptId).name} 약점 3문제`, `${concept(weak.conceptId).name} 문제 3개 내줘`]);
     if (open) chips.push(["rotate-ccw", `오답 ${open}문제 다시 풀기`, "", "/notes"]);

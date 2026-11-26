@@ -45,6 +45,11 @@ def route(kind, *, request="", reply="", suggestions=()):
     ("비슷한 거 3문제 더", True, None),            # 앞 대화를 가리키면 AI 가 판단
     ("2번 다시 설명해줘", True, None),
     ("치환적분 3문제 내줘", True, "make_problems"),
+    ("치환적분 3문제", False, "make_problems"),
+    ("극한 5문제만 만들어줘", False, "make_problems"),
+    ("고려대학교의 경우, 50문제 정도만 나오니까 확실하게 인지하고 있어야 해!", False, None),  # 정보를 알려 준 말
+    ("시험에 30문제가 나와요", False, None),
+    ("25문항 중에 몇 개 맞았어?", False, None),
 ])
 def test_fast_route(text, history, expected):
     assert intent.fast_route(text, history) == expected
