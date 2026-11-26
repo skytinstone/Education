@@ -68,6 +68,33 @@ def test_check_problem_passes_good_problem():
     assert check_problem(good_problem(stem="다음 중 정답은?")) == []  # 묻는 말은 정답 노출이 아님
 
 
+ENGLISH = ("A rectangle has all four vertices on the ellipse $\\dfrac{x^2}{25}+\\dfrac{y^2}{16}=1$. "
+           "Find the maximum possible perimeter of the rectangle.")
+
+
+def test_check_problem_requires_korean():
+    assert any("한국어" in x for x in check_problem(good_problem(stem=ENGLISH)))
+    assert any("한국어" in x for x in check_problem(good_problem(solution="Let t = x^2, then the integral becomes e minus one.")))
+    # 한국어 문장에 원어를 괄호로 붙이거나 수식이 길어도 통과
+    assert check_problem(good_problem(stem="타원 $\\dfrac{x^2}{25}+\\dfrac{y^2}{16}=1$ 위에 네 꼭짓점이 있는 직사각형의 "
+                                           "둘레의 최댓값(maximum perimeter)을 구하시오.")) == []
+    assert check_problem(good_problem(stem=ENGLISH), korean=False) == []  # 어학 코스는 외국어 지문 허용
+
+
+def test_generator_rejects_english_problem_then_rewrites_in_korean(db):
+    llm = FakeLLM([good_problem(stem=ENGLISH), good_problem()], [verdict("1")])
+    report = generator.generate_problems(db, llm, concept_id=SUBST, difficulty=3, count=1)
+    assert len(report.accepted) == 1 and llm.calls[Verdict] == 1
+    assert db.get(m.Problem, report.accepted[0]).stem == good_problem().stem
+
+
+def test_course_brief_tells_ai_to_write_korean_for_english_textbook(db):
+    course = db.get(m.Course, db.get(m.Concept, SUBST).course_id)
+    course.language = "en"
+    assert "문제는 한국어로" in generator.course_brief(db, course.id)
+    assert "영어 문장으로 된 문제는 만들지 않는다" in generator.GENERATOR_INSTRUCTIONS
+
+
 def test_generator_rejects_policy_violation_then_self_corrects(db):
     llm = FakeLLM([good_problem(stem="$x$ 의 값은? $"), good_problem()], [verdict("1")])
     report = generator.generate_problems(db, llm, concept_id=SUBST, difficulty=3, count=1)

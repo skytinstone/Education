@@ -80,8 +80,18 @@ def _brace_balanced(s: str) -> bool:
     return depth == 0
 
 
-def check_problem(problem) -> list[str]:
-    """생성된 문제의 규칙 위반 (없으면 빈 목록)."""
+_MATH = re.compile(r"\$[^$]*\$")
+
+
+def not_korean(text: str) -> bool:
+    """수식($…$)을 뺀 글이 대부분 외국어(로마자)인지 — 한국어 문장에 원어를 괄호로 덧붙인 정도는 통과."""
+    t = _MATH.sub(" ", text or "")
+    latin, hangul = len(re.findall(r"[A-Za-z]", t)), len(re.findall(r"[가-힣]", t))
+    return latin >= 20 and hangul * 4 < latin
+
+
+def check_problem(problem, korean: bool = True) -> list[str]:
+    """생성된 문제의 규칙 위반 (없으면 빈 목록). korean: 문제·해설을 한국어로 써야 하는지 (어학 코스만 False)."""
     issues: list[str] = []
     stem = problem.stem or ""
     choices = list(getattr(problem, "choices", None) or [])
@@ -106,6 +116,8 @@ def check_problem(problem) -> list[str]:
         issues.append("본문에 정답을 적었어요")
     if any(BANNED.search(t) for t in texts):
         issues.append("부적절한 표현이 있어요")
+    if korean and (not_korean(stem) or not_korean(getattr(problem, "solution", "") or "")):
+        issues.append("문제와 해설을 한국어로 쓰지 않았어요 — 영어 교재·기출이어도 우리말로 옮겨 쓰세요")
     return issues
 
 
