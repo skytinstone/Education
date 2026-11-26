@@ -6150,7 +6150,7 @@
   // 카카오(다음) 우편번호 서비스 — 키 없이 쓰는 주소 검색. 처음 누를 때만 스크립트를 불러온다
   let postcodeReady = null;
   const loadPostcode = () => (postcodeReady ??= new Promise((ok, fail) => {
-    const s = Object.assign(document.createElement("script"), { src: "https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js" });
+    const s = Object.assign(document.createElement("script"), { src: "https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js" });
     s.onload = ok;
     s.onerror = () => { postcodeReady = null; s.remove(); fail(new Error("주소 검색을 불러오지 못했어요. 잠시 후 다시 시도해 주세요")); };
     document.head.append(s);
